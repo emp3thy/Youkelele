@@ -24,6 +24,7 @@ from youkelele.stage import MissingArtifact, Stage, StageContext
 from youkelele.stages.ingest import IngestStage
 from youkelele.stages.grid import GridStage
 from youkelele.stages.harmony import HarmonyStage
+from youkelele.stages.render import RenderStage
 from youkelele.stages.separate import SeparateStage
 
 GENERIC_STAGES: tuple[Stage, ...] = (IngestStage(), SeparateStage(), GridStage(), HarmonyStage())
@@ -43,7 +44,7 @@ class StageFailed(Exception):
 def build_chain(
     profile: InstrumentProfile, generic: Sequence[Stage] = GENERIC_STAGES
 ) -> list[Stage]:
-    return [*generic, *profile.stages]
+    return [*generic, *profile.stages, RenderStage()]
 
 
 def resolve_stage(chain: Sequence[Stage], ref: str) -> int:

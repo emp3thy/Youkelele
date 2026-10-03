@@ -12,6 +12,7 @@ from youkelele.runner import (
     status,
 )
 from youkelele.stage import MissingArtifact
+from youkelele.stages.render import RenderStage
 
 
 @pytest.fixture
@@ -132,8 +133,10 @@ def test_get_profile_unknown_lists_names():
         get_profile("banjo")
 
 
-def test_build_chain_concatenates():
+def test_build_chain_appends_render_after_profile_stages():
     a, b = fake("a"), fake("b")
     profile = get_profile("ukulele")
-    assert build_chain(profile, [a]) == [a]
-    assert build_chain(type(profile)("x", profile.tuning, (b,)), [a]) == [a, b]
+    chain = build_chain(type(profile)("x", profile.tuning, (b,)), [a])
+    assert chain[:2] == [a, b]
+    assert [s.name for s in chain] == ["a", "b", "render"]
+    assert isinstance(chain[-1], RenderStage)
