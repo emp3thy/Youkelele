@@ -76,6 +76,7 @@ Re-run the three songs on their existing run folders from the grid stage (`--fro
 | Chelsea Dagger (`--beat-octave auto`) | Automatic rule keeps 158 bpm (backbeat ratio about 2.1); eight slots; grid fit about 0.55; at most three pages |
 | Summer of '69 | Chord sequence and capo 0 unchanged; at most three pages; pickup bar drawn as a pickup; final bar not stretched |
 | Pour Some Sugar On Me | Capo 4 with A, C, G, F shapes; header shows shapes relative to capo and sounding key; at most three pages |
+| Wet Leg, "mangetout" (`lbc6CcZTp5E`, 213 s), a fresh run from the URL with default settings | The first song no spike or run has seen, so a blind test: the chain completes; the automatic octave decision, key, capo, slots per bar and grid fit are recorded and judged by ear against the record; at most three pages; a reader can follow the chord grid without the audio |
 
 The synthetic end-to-end test keeps every current assertion and adds a page-count ceiling of two.
 
