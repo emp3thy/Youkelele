@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import random
 import sys
 import types
 from pathlib import Path
@@ -80,6 +81,7 @@ def _install_fake_separator(monkeypatch, files_returned, seen):
 
         def separate(self, path, custom_output_names=None):
             seen["custom"] = custom_output_names
+            seen.setdefault("draws", []).append(random.random())  # Demucs draws its shifts here
             for name in files_returned:
                 (self.out / name).write_bytes(b"RIFF")
             return list(files_returned)
@@ -107,6 +109,21 @@ def test_separate_passes_capitalised_custom_output_names(tmp_path, monkeypatch):
     assert seen["init"]["output_format"] == "WAV"
     assert seen["init"]["model_file_dir"] == str(tmp_path / "m")
     assert result == {s: out / f"{s}.wav" for s in STEMS}
+
+
+def test_separate_seeds_demucs_random_shifts_and_restores_the_global_state(tmp_path, monkeypatch):
+    # Demucs (shifts=2) offsets the audio by random.randint; unseeded, the stems
+    # differ run to run and the strum pattern on the end-to-end clip flipped.
+    seen: dict = {}
+    _install_fake_separator(monkeypatch, [f"{s}.wav" for s in STEMS], seen)
+    out = tmp_path / "o"
+    out.mkdir()
+    random.seed(123)
+    expected_next = random.Random(123).random()
+    separate_stems(tmp_path / "in.wav", out, model_dir=tmp_path / "m")
+    assert random.random() == expected_next
+    separate_stems(tmp_path / "in.wav", out, model_dir=tmp_path / "m")
+    assert seen["draws"][0] == seen["draws"][1]
 
 
 def test_separate_falls_back_to_default_filename_form(tmp_path, monkeypatch):

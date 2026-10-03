@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import random
 import re
 from pathlib import Path
 
@@ -10,6 +11,10 @@ from youkelele.paths import cache_dir
 
 STEMS = ("vocals", "drums", "bass", "guitar", "piano", "other")
 MODEL = "htdemucs_6s.yaml"
+# Demucs (shifts=2) offsets the input by random.randint before each pass. Unseeded,
+# the stems differed run to run enough to flip the strum pattern on the
+# end-to-end clip, so the separation runs under a fixed seed.
+SHIFT_SEED = 0
 
 _DEFAULT_NAME = re.compile(r"_\((?P<stem>[^)]+)\)_", re.IGNORECASE)
 
@@ -43,9 +48,14 @@ def separate_stems(
     separator.load_model(MODEL)
     log("separating stems")
     # Keys must be capitalised: the chunked code path matches them case-sensitively.
-    returned = separator.separate(
-        str(wav), custom_output_names={s.capitalize(): s for s in STEMS}
-    )
+    state = random.getstate()
+    random.seed(SHIFT_SEED)
+    try:
+        returned = separator.separate(
+            str(wav), custom_output_names={s.capitalize(): s for s in STEMS}
+        )
+    finally:
+        random.setstate(state)
     result: dict[str, Path] = {}
     for name in returned:
         base = Path(name).name  # separate() returns bare filenames
