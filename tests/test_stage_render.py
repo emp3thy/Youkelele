@@ -25,6 +25,7 @@ C = Shape(frets=[0, 0, 0, 3], fingers=[0, 0, 0, 3], base_fret=1, barres=[])
 G = Shape(frets=[0, 2, 3, 2], fingers=[0, 1, 3, 2], base_fret=1, barres=[])
 AM = Shape(frets=[2, 0, 0, 0], fingers=[2, 0, 0, 0], base_fret=1, barres=[])
 F = Shape(frets=[2, 0, 1, 0], fingers=[2, 0, 1, 0], base_fret=1, barres=[])
+B = Shape(frets=[4, 3, 2, 2], fingers=[3, 2, 1, 1], base_fret=1, barres=[2])
 ISLAND = list("D-DU-UDU")
 UKULELE = Instrument(name="Ukulele", strings=4, tuning=["G4", "C4", "E4", "A4"], capo=0)
 
@@ -109,6 +110,20 @@ def _realistic_120_bar_score() -> Score:
         ],
     )
     bridge[7] = ScoreBar(index=bridge[7].index, chords=[nc])
+    # a passing B in the bridge and a filled (inferred) bar in the intro's short last row
+    bridge[5] = ScoreBar(
+        index=bridge[5].index,
+        chords=[
+            ScoreChord(name="F", diagram=3, start_slot=0, slots=ISLAND[:6]),
+            ScoreChord(name="B", diagram=4, start_slot=6, slots=ISLAND[6:], passing=True),
+        ],
+    )
+    intro = sections[0].bars
+    intro[5] = ScoreBar(
+        index=intro[5].index,
+        chords=[ScoreChord(name="G", diagram=1, start_slot=0, slots=ISLAND, filled=True)],
+    )
+    diagrams.append(ChordDiagram(name="B", shape=B, passing=True))
     assert index == 120
     return Score(
         instrument=UKULELE.model_copy(update={"capo": 2}),
@@ -168,6 +183,19 @@ def test_render_stage_needs_no_alphatex(tmp_path):
     stage = RenderStage(pdf_writer=lambda h, p: p.write_bytes(b"%PDF-fake"))
     stage.run(StageContext(layout, RunOptions(source="x.mp3"), out, lambda m: None, stage))
     assert (out / "sheet.html").is_file()
+
+
+def test_render_stage_sheet_has_blocks_passing_line_filled_note_and_pickup(tmp_path):
+    layout, out = _prepare(tmp_path, _realistic_120_bar_score())
+    stage = RenderStage(pdf_writer=lambda h, p: p.write_bytes(b"%PDF-fake"))
+    stage.run(StageContext(layout, RunOptions(source="x.mp3"), out, lambda m: None, stage))
+    html = (out / "sheet.html").read_text(encoding="utf-8")
+    assert "Passing: B 4322" in html
+    assert "Italic chords were inferred where the recording had no clear chord" in html
+    assert html.count('class="cell filled"') == 1
+    assert html.count('class="grid has-pickup"') == 1
+    assert html.count('class="cell nc pickup"') == 1
+    assert html.count("×4") == 3  # each 16-bar C G Am F verse is one row played four times
 
 
 def test_render_stage_declares_contract():

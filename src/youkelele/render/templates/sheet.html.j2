@@ -18,6 +18,7 @@
   h3.legend-head { font-size: 11pt; margin: 0 0 2px 0; }
   .legend { display: flex; flex-wrap: wrap; gap: 6px 10px; margin: 2mm 0 5mm 0; break-inside: avoid; }
   .legend svg { display: block; }
+  .passing { font-size: 10pt; margin: -3mm 0 5mm 0; }
   .section { margin-bottom: 5mm; }
   .section-head { margin: 0 0 1.5mm 0; break-inside: avoid; }
   .section-head { break-after: avoid }
@@ -33,10 +34,16 @@
   .cell { font-weight: 600; border-radius: 2px; white-space: normal; overflow-wrap: anywhere; }
   .cell.crowded { font-size: 10pt; }
   .cell.nc { color: var(--muted); }
+  .cell.filled { font-style: italic }
   .cell.pickup { grid-column: span 1; font-size: 9pt; }
-  .pickup-label { font-weight: 400; font-style: italic; color: var(--muted); margin-right: 4px; }
+  .cell.pickup { padding: 1mm; }
+  .pickup-label { display: block; font-size: 7pt; font-weight: 400; font-style: italic; color: var(--muted); }
+  .grid.has-pickup .row { grid-template-columns: 0.25fr repeat(4, 1fr) auto; }
   .repeat { font-size: 10pt; align-self: center; }
-  .repeat { grid-column: 5; min-width: 9mm; text-align: right; font-weight: 600; }
+  .repeat { grid-column: -2; min-width: 12mm; box-sizing: border-box; text-align: right; font-weight: 600; }
+  .block { position: relative; break-inside: avoid; }
+  .block.span .repeat { padding-right: 3mm; }
+  .block.span::after { content: ""; position: absolute; right: 0; top: 0; bottom: 1.5mm; width: 1.5mm; border: 1.5px solid var(--ink); border-left: none; }
   .no-print { background: #fef3c7; padding: 6px 10px; margin-bottom: 8px; font-size: 10pt; }
   @page { size: A4; margin: 14mm }
   @media print {
@@ -47,6 +54,8 @@
 </style>
 </head>
 <body>
+{% macro cell_class(cell) %}cell{% if cell.nc %} nc{% endif %}{% if cell.crowded %} crowded{% endif %}{% if cell.filled %} filled{% endif %}{% endmacro %}
+{% macro pickup_cell(cell) %}<div class="{{ cell_class(cell) }} pickup"><span class="pickup-label">pickup</span>{{ cell.text }}</div>{% endmacro %}
 <div class="sheet">
   <div class="no-print">Screen preview. Print this page, or open sheet.pdf, for the A4 layout.</div>
   <header class="sheet-head">
@@ -60,6 +69,7 @@
       <span><b>Tier</b> {{ score.tier }}</span>
       <span><b>Meter</b> {{ score.meter.numerator }}/{{ score.meter.denominator }}</span>
     </div>
+    {% if filled_note is not none %}<div class="note">{{ filled_note }}</div>{% endif %}
     {% if capo_note is not none %}<div class="note">{{ capo_note }}</div>{% endif %}
     {% if sounding_key is not none %}<div class="note">Sounding key: {{ sounding_key }}</div>{% endif %}
     {% if score.strum_source == "mix" %}<div class="note">Strum detected from full mix; directions are a best guess.</div>{% endif %}
@@ -70,6 +80,9 @@
   <div class="legend">
     {% for svg in diagrams %}{{ svg }}{% endfor %}
   </div>
+  {% if passing is not none %}
+  <p class="passing">Passing: {{ passing }}</p>
+  {% endif %}
 
   <div class="sections">
   {% for section in sections %}
@@ -87,17 +100,32 @@
         <div class="strum-box">{{ section.svg }}</div>
         {% endif %}
       </div>
-      <div class="grid">
-      {% for row in section.rows %}
+      {% set grid = section.grid %}
+      <div class="grid{% if grid.pickup is not none %} has-pickup{% endif %}">
+      {% if grid.pickup is not none and not grid.blocks %}
         <div class="row">
-          {% for cell in row.cells %}
-          {% if cell.pickup %}
-          <div class="cell{% if cell.nc %} nc{% endif %}{% if cell.crowded %} crowded{% endif %} pickup"><span class="pickup-label">pickup</span>{{ cell.text }}</div>
-          {% else %}
-          <div class="cell{% if cell.nc %} nc{% endif %}{% if cell.crowded %} crowded{% endif %}">{{ cell.text }}</div>
-          {% endif %}
-          {% endfor %}
-          <div class="repeat">{% if row.repeat > 1 %}×{{ row.repeat }}{% endif %}</div>
+          {{ pickup_cell(grid.pickup) }}
+          <div class="repeat"></div>
+        </div>
+      {% endif %}
+      {% for block in grid.blocks %}
+        {% set first_block = loop.first %}
+        <div class="block{% if block.repeat > 1 and block.rows|length > 1 %} span{% endif %}">
+        {% for row in block.rows %}
+          <div class="row">
+            {% if grid.pickup is not none %}
+            {% if first_block and loop.first %}
+            {{ pickup_cell(grid.pickup) }}
+            {% else %}
+            <div class="lead"></div>
+            {% endif %}
+            {% endif %}
+            {% for cell in row %}
+            <div class="{{ cell_class(cell) }}">{{ cell.text }}</div>
+            {% endfor %}
+            <div class="repeat">{% if loop.last and block.repeat > 1 %}×{{ block.repeat }}{% endif %}</div>
+          </div>
+        {% endfor %}
         </div>
       {% endfor %}
       </div>

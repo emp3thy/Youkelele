@@ -9,7 +9,7 @@ from markupsafe import Markup
 
 from youkelele.render.diagrams import chord_diagram_svg
 from youkelele.music.arrange import _SHARPS
-from youkelele.render.grid import grid_rows
+from youkelele.render.grid import Cell, SectionGrid, fret_notation, section_grid
 from youkelele.render.strum_box import strum_pattern_svg
 from youkelele.schemas import Score
 
@@ -22,6 +22,7 @@ _ENV = Environment(
 )
 
 CAPO_NOTE = "Shapes are relative to the capo"
+FILLED_NOTE = "Italic chords were inferred where the recording had no clear chord"
 
 
 def _capo(capo: int) -> str:
@@ -39,12 +40,24 @@ def _shape_key(key: str, capo: int) -> str:
     return f"{shaped} {mode}".strip()
 
 
+def _shown_cells(grid: SectionGrid) -> list[Cell]:
+    """Every cell the sheet prints for a section: the pickup, then each block's rows once."""
+    lead = [grid.pickup] if grid.pickup is not None else []
+    return lead + [cell for block in grid.blocks for row in block.rows for cell in row]
+
+
 def render_html(score: Score) -> str:
     labels = [p[0].upper() for p in score.instrument.tuning]
     diagrams = [
-        Markup(chord_diagram_svg(d.name, d.shape, string_labels=labels)) for d in score.chord_diagrams
+        Markup(chord_diagram_svg(d.name, d.shape, string_labels=labels))
+        for d in score.chord_diagrams
+        if not d.passing
     ]
+    passing = ", ".join(
+        f"{d.name} {fret_notation(d.shape)}" for d in score.chord_diagrams if d.passing
+    )
     sections = []
+    any_filled = False
     for section in score.sections:
         source = section.inherited_from
         inherited = (
@@ -53,6 +66,8 @@ def render_html(score: Score) -> str:
             else None
         )
         show_box = not (section.uncertain or section.no_instrument)
+        grid = section_grid(section)
+        any_filled = any_filled or any(cell.filled for cell in _shown_cells(grid))
         sections.append(
             {
                 "label": section.label,
@@ -61,7 +76,7 @@ def render_html(score: Score) -> str:
                 "repeat": f"{section.bar_repeat:.0%}",
                 "inherited_from": inherited,
                 "svg": Markup(strum_pattern_svg(section.pattern, score.meter)) if show_box else None,
-                "rows": grid_rows(section),
+                "grid": grid,
             }
         )
     capo = score.instrument.capo
@@ -69,10 +84,12 @@ def render_html(score: Score) -> str:
         score=score,
         capo=_capo(capo),
         capo_note=CAPO_NOTE if capo > 0 else None,
+        filled_note=FILLED_NOTE if any_filled else None,
         key_fact=f"{_shape_key(score.key, capo)} (shapes)" if capo > 0 else score.key,
         sounding_key=score.key if capo > 0 else None,
         tempo=round(score.bpm),
         tuning=" ".join(score.instrument.tuning),
         diagrams=diagrams,
+        passing=passing or None,
         sections=sections,
     )
