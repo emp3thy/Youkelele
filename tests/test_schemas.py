@@ -4,7 +4,7 @@ import pytest
 from pydantic import ValidationError
 
 from youkelele.jsonio import ArtifactError, load_model, save_model
-from youkelele.schemas import Chords, Grid, Key, Meter, Strums
+from youkelele.schemas import Chords, Grid, Key, Meter, SourceInfo, Strums
 
 
 def make_grid(n_bars=8):
@@ -177,3 +177,25 @@ def test_version_1_grid_and_score_bar_without_newer_fields_load(tmp_path):
     (tmp_path / "grid.json").write_text(json.dumps(grid))
     assert len(load_model(tmp_path / "grid.json", Grid).bars) == 8
     assert ScoreBar.model_validate({"index": 0, "chords": []}).pickup is False
+
+
+def test_source_info_without_raw_title_loads(tmp_path):
+    path = tmp_path / "source.json"
+    path.write_text(
+        json.dumps(
+            {
+                "schema": 1,
+                "url": None,
+                "path": "a.mp3",
+                "video_id": None,
+                "title": "T",
+                "artist": None,
+                "duration": 1.0,
+                "sample_rate": 44100,
+                "channels": 2,
+                "fetched_at": "2026-01-01T00:00:00Z",
+            }
+        )
+    )
+    info = load_model(path, SourceInfo)
+    assert info.raw_title is None and info.title == "T"

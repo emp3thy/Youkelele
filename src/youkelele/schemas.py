@@ -33,6 +33,7 @@ class SourceInfo(_Artifact):
     path: str | None
     video_id: str | None
     title: str
+    raw_title: str | None = None
     artist: str | None
     duration: float
     sample_rate: int
