@@ -30,7 +30,11 @@ dependencies = [
 youkelele = "youkelele.cli:main"
 
 [dependency-groups]
-dev = ["pytest", "pytest-cov"]
+dev = [
+    "pypdf>=6.19.0",
+    "pytest",
+    "pytest-cov",
+]
 
 [build-system]
 requires = ["hatchling"]

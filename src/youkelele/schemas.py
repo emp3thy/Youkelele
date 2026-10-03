@@ -214,6 +214,7 @@ class ScoreChord(_Artifact):
 class ScoreBar(_Artifact):
     index: int
     chords: list[ScoreChord]
+    pickup: bool = False
 
 
 class ScoreSection(_Artifact):

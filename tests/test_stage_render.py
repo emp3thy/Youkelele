@@ -1,14 +1,12 @@
 from __future__ import annotations
 
-import json
-import re
 from pathlib import Path
 
 import pytest
 
+from tests.pdfpages import count_pages
 from youkelele.jsonio import save_model
 from youkelele.layout import RunLayout
-from youkelele.music.alphatex import score_to_alphatex
 from youkelele.options import RunOptions
 from youkelele.schemas import (
     ChordDiagram,
@@ -25,7 +23,10 @@ from youkelele.stages.render import RenderStage
 
 C = Shape(frets=[0, 0, 0, 3], fingers=[0, 0, 0, 3], base_fret=1, barres=[])
 G = Shape(frets=[0, 2, 3, 2], fingers=[0, 1, 3, 2], base_fret=1, barres=[])
+AM = Shape(frets=[2, 0, 0, 0], fingers=[2, 0, 0, 0], base_fret=1, barres=[])
+F = Shape(frets=[2, 0, 1, 0], fingers=[2, 0, 1, 0], base_fret=1, barres=[])
 ISLAND = list("D-DU-UDU")
+UKULELE = Instrument(name="Ukulele", strings=4, tuning=["G4", "C4", "E4", "A4"], capo=0)
 
 
 def _two_section_score() -> Score:
@@ -43,7 +44,7 @@ def _two_section_score() -> Score:
     bar3 = ScoreBar(index=2, chords=[ScoreChord(name="N.C.", diagram=-1, start_slot=0, slots=ISLAND)])
     bar4 = ScoreBar(index=3, chords=[ScoreChord(name="C", diagram=0, start_slot=0, slots=ISLAND)])
     return Score(
-        instrument=Instrument(name="Ukulele", strings=4, tuning=["G4", "C4", "E4", "A4"], capo=0),
+        instrument=UKULELE,
         title="Song",
         artist="Band",
         key="C major",
@@ -63,22 +64,82 @@ def _two_section_score() -> Score:
     )
 
 
-def _prepare(tmp_path: Path) -> tuple[RunLayout, Path]:
+# (label, bar count, chord cycle, uncertain); 120 bars in all.
+_PLAN = [
+    ("Intro", 8, "C G", False),
+    ("Verse 1", 16, "C G Am F", False),
+    ("Pre-chorus", 8, "Am F", True),
+    ("Chorus", 12, "F C G", False),
+    ("Verse 2", 16, "C G Am F", False),
+    ("Chorus", 12, "F C G", False),
+    ("Bridge", 8, "Am G F G", False),
+    ("Verse 3", 16, "C G Am F", False),
+    ("Chorus", 12, "F C G", False),
+    ("Outro", 12, "C G", False),
+]
+
+
+def _realistic_120_bar_score() -> Score:
+    """A synthetic song: pickup bar, intro, verses, choruses, one uncertain section, one N.C. bar."""
+    names = ["C", "G", "Am", "F"]
+    diagrams = [ChordDiagram(name=n, shape=s) for n, s in zip(names, (C, G, AM, F), strict=True)]
+    nc = ScoreChord(name="N.C.", diagram=-1, start_slot=0, slots=ISLAND)
+    sections: list[ScoreSection] = []
+    index = 0
+    for label, count, cycle, uncertain in _PLAN:
+        seq = cycle.split()
+        bars: list[ScoreBar] = []
+        for i in range(count):
+            name = seq[i % len(seq)]
+            chord = ScoreChord(name=name, diagram=names.index(name), start_slot=0, slots=ISLAND)
+            bars.append(ScoreBar(index=index, chords=[chord]))
+            index += 1
+        sections.append(
+            ScoreSection(label=label, pattern=ISLAND, uncertain=uncertain, bars=bars,
+                         bar_repeat=0.5 if uncertain else 0.9, no_instrument=False)
+        )
+    sections[0].bars[0] = ScoreBar(index=0, chords=[nc], pickup=True)
+    # a mid-bar change and an N.C. bar in the bridge
+    bridge = sections[6].bars
+    bridge[3] = ScoreBar(
+        index=bridge[3].index,
+        chords=[
+            ScoreChord(name="G", diagram=1, start_slot=0, slots=ISLAND[:4]),
+            ScoreChord(name="F", diagram=3, start_slot=4, slots=ISLAND[4:]),
+        ],
+    )
+    bridge[7] = ScoreBar(index=bridge[7].index, chords=[nc])
+    assert index == 120
+    return Score(
+        instrument=UKULELE.model_copy(update={"capo": 2}),
+        title="Synthetic Song",
+        artist="Test Band",
+        key="D major",
+        bpm=120.0,
+        meter=Meter(numerator=4, denominator=4),
+        tier="easy",
+        slots_per_bar=8,
+        strum_source="other_stem",
+        strums_uncertain=False,
+        chord_diagrams=diagrams,
+        sections=sections,
+    )
+
+
+def _prepare(tmp_path: Path, score: Score | None = None) -> tuple[RunLayout, Path]:
     layout = RunLayout(
         tmp_path / "run",
         ["ingest", "separate", "grid", "harmony", "strums", "arrange", "score", "render"],
     )
-    score = _two_section_score()
     score_json = layout.path("score/score.json")
     score_json.parent.mkdir(parents=True)
-    save_model(score_json, score)
-    layout.path("score/score.alphatex").write_text(score_to_alphatex(score), encoding="utf-8")
+    save_model(score_json, score or _two_section_score())
     out = tmp_path / "out"
     out.mkdir()
     return layout, out
 
 
-def test_render_stage_writes_html_and_calls_pdf_writer(tmp_path):
+def test_render_stage_writes_html_and_pdf_without_assets(tmp_path):
     layout, out = _prepare(tmp_path)
     calls: list[tuple[Path, Path]] = []
 
@@ -94,18 +155,24 @@ def test_render_stage_writes_html_and_calls_pdf_writer(tmp_path):
     assert calls == [(html_path, out / "sheet.pdf")]
     assert (out / "sheet.pdf").read_bytes() == b"%PDF-fake"
     html = html_path.read_text(encoding="utf-8")
-    assert 'data-start-bar="3"' in html
-    match = re.search(r'<script type="application/json" id="tex">(.*?)</script>', html, re.S)
-    assert json.loads(match.group(1)) == layout.path("score/score.alphatex").read_text(encoding="utf-8")
-    assert (out / "assets" / "alphaTab.min.js").is_file()
-    assert (out / "assets" / "font" / "Bravura.woff2").is_file()
-    assert (out / "assets" / "LICENSE").is_file()
-    assert ctx.notes["assets"] == "alphatab 1.8.4"
+    assert ">C / G<" in html and ">N.C.<" in html
+    assert "<script" not in html
+    assert not (out / "assets").exists()
+    assert sorted(p.name for p in out.iterdir()) == ["sheet.html", "sheet.pdf"]
+    assert "assets" not in ctx.notes
+
+
+def test_render_stage_needs_no_alphatex(tmp_path):
+    layout, out = _prepare(tmp_path)
+    assert not layout.path("score/score.alphatex").exists()
+    stage = RenderStage(pdf_writer=lambda h, p: p.write_bytes(b"%PDF-fake"))
+    stage.run(StageContext(layout, RunOptions(source="x.mp3"), out, lambda m: None, stage))
+    assert (out / "sheet.html").is_file()
 
 
 def test_render_stage_declares_contract():
     assert RenderStage.name == "render"
-    assert RenderStage.requires == ("score/score.json", "score/score.alphatex")
+    assert RenderStage.requires == ("score/score.json",)
     assert RenderStage.produces == ("render/sheet.html", "render/sheet.pdf")
 
 
@@ -119,8 +186,23 @@ def test_real_chromium_renders_pdf_from_two_bar_example(tmp_path):
     ctx = StageContext(layout, RunOptions(source="x.mp3"), out, lambda m: None, stage)
     stage.run(ctx)
 
-    pdf_path = out / "sheet.pdf"
-    assert pdf_path.is_file()
-    assert pdf_path.stat().st_size > 10 * 1024
-    assert pdf_path.read_bytes().startswith(b"%PDF")
-    assert not [e for e in errors if "alphatab" in e.lower()], errors
+    data = (out / "sheet.pdf").read_bytes()
+    assert data.startswith(b"%PDF")
+    assert count_pages(data) == 1
+    assert errors == []
+
+
+@pytest.mark.slow
+def test_real_chromium_prints_120_bar_score_in_at_most_three_pages(tmp_path):
+    from youkelele.render import pdf as pdf_module
+
+    layout, out = _prepare(tmp_path, _realistic_120_bar_score())
+    errors: list[str] = []
+    stage = RenderStage(pdf_writer=lambda h, p: pdf_module.html_to_pdf(h, p, console=errors))
+    ctx = StageContext(layout, RunOptions(source="x.mp3"), out, lambda m: None, stage)
+    stage.run(ctx)
+
+    data = (out / "sheet.pdf").read_bytes()
+    assert data.startswith(b"%PDF")
+    assert 1 <= count_pages(data) <= 3
+    assert errors == []

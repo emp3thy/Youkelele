@@ -138,7 +138,9 @@ def build_score(
                 chord_list.append(
                     ScoreChord(name="N.C.", diagram=-1, start_slot=0, slots=list(pattern.slots))
                 )
-            bars.append(ScoreBar(index=bar_idx, chords=chord_list))
+            bars.append(
+                ScoreBar(index=bar_idx, chords=chord_list, pickup=grid.bars[bar_idx].pickup)
+            )
         sections.append(
             ScoreSection(
                 label=section.label, pattern=list(pattern.slots), uncertain=pattern.uncertain,
