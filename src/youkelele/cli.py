@@ -9,6 +9,7 @@ HANDLERS = {
     "run": commands.run_command,
     "stages": commands.stages_command,
     "status": commands.status_command,
+    "setup": commands.setup_command,
 }
 
 
@@ -55,6 +56,7 @@ def build_parser() -> argparse.ArgumentParser:
     status.add_argument("slug")
     _add_instrument(status)
     _add_runs_dir(status)
+    subparsers.add_parser("setup", help="fetch the chord model and ffmpeg")
     return parser
 
 

@@ -70,7 +70,9 @@ def _chromium_state() -> ChromiumState:
 
 
 def _chord_model_present() -> bool:
-    return False
+    from youkelele.vendoring import chord_model_ready
+
+    return chord_model_ready()
 
 
 def default_probes() -> Probes:
