@@ -22,9 +22,10 @@ from youkelele.options import RunOptions
 from youkelele.profiles.base import InstrumentProfile
 from youkelele.stage import MissingArtifact, Stage, StageContext
 from youkelele.stages.ingest import IngestStage
+from youkelele.stages.grid import GridStage
 from youkelele.stages.separate import SeparateStage
 
-GENERIC_STAGES: tuple[Stage, ...] = (IngestStage(), SeparateStage())
+GENERIC_STAGES: tuple[Stage, ...] = (IngestStage(), SeparateStage(), GridStage())
 
 
 class StageFailed(Exception):
