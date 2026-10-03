@@ -62,29 +62,57 @@ def test_choose_capo_moves_eb_bb_cm_ab_to_capo_3(db):
     assert [transpose_label(lab, -3) for lab in EB_LABELS[:4]] == ["C:maj", "G:maj", "A:min", "F:maj"]
 
 
+PSSOM_RUN_LABELS = ["C#:maj"] * 6 + ["B:maj"] * 4 + ["E:maj"] * 3 + ["A:maj"] * 2 + ["F#:maj"]  # the run's label mix by frequency
+PSSOM_SPIKE_LABELS = ["C#:min", "E:maj", "B:maj", "A:maj"]
+CHELSEA_LABELS = ["G:maj"] * 7 + ["D:maj"] * 6 + ["E:min"] * 2 + ["B:min", "C:maj", "A:maj", "A:min", "B:maj"]
+
+
 @pytest.mark.parametrize(
     "labels,capo",
-    [(S69_LABELS, 0), (PSSOM_LABELS, 4), (RIPTIDE_LABELS, 0), (RAINBOW_LABELS, 0), (SEVENTHS_LABELS, 0)],
+    [
+        (S69_LABELS, 0),
+        (PSSOM_RUN_LABELS, 4),
+        (PSSOM_SPIKE_LABELS, 4),
+        (CHELSEA_LABELS, 0),
+        (RIPTIDE_LABELS, 0),
+        (["C:maj", "G:maj", "A:min", "F:maj"], 0),
+    ],
 )
-def test_choose_capo_matches_published_charts(db, labels, capo):
-    assert choose_capo(labels, db) == (capo, -capo)
+def test_choose_capo_matches_published_charts_with_unique_label_mean(db, labels, capo):
+    assert choose_capo(labels, db) == (capo, -capo), [round(score_capo(labels, c, db), 3) for c in range(6)]
 
 
-def test_score_capo_uses_mean_and_penalties(db):
-    assert score_capo(["C:maj"] * 3, 0, db) == pytest.approx(0.4)
-    # C:maj down 3 is A:maj (open 2100, cost 1.3) plus the capo penalty 0.9
-    assert score_capo(["C:maj"] * 3, 3, db) == pytest.approx(1.3 + 0.9)
+@pytest.mark.parametrize("labels", [RAINBOW_LABELS, SEVENTHS_LABELS, PSSOM_LABELS])
+def test_choose_capo_other_charts_unchanged(db, labels):
+    expected = 4 if labels is PSSOM_LABELS else 0
+    assert choose_capo(labels, db) == (expected, -expected)
+
+
+def test_score_capo_is_mean_over_distinct_labels_plus_0_2_per_fret(db):
+    from youkelele.music.arrange import CAPO_FRET_PENALTY
+
+    assert CAPO_FRET_PENALTY == 0.2
+    base = score_capo(["C:maj", "G:maj"], 0, db)
+    # repeated labels do not change the mean
+    assert score_capo(["C:maj"] * 5 + ["G:maj"] * 2 + ["C:maj"], 0, db) == pytest.approx(base)
+    assert score_capo(["C:maj", "N", "G:maj", "X"], 0, db) == pytest.approx(base)
+    # capo 4 adds exactly 0.8 to the cost of the transposed labels (G# and D#), with no extra term above fret 3
+    shifted = score_capo(["C:maj", "G:maj"], 4, db)
+    assert shifted == pytest.approx(score_capo(["G#:maj", "D#:maj"], 0, db) + 0.8)
     # an event with no shape costs 5.0
     assert score_capo(["E:maj(9)"], 0, db) == pytest.approx(5.0)
 
 
-def test_score_capo_extra_penalty_above_capo_3(db):
-    # C down 4 is Ab (cost known from chords-db); compare against shape-only cost
-    from youkelele.music.shapes import harte_to_db, shape_cost
+def test_choose_capo_tie_goes_to_lower_capo(db, monkeypatch):
+    # real shapes make an exact capo 0 / capo 2 tie awkward to build, so equalise the scores directly
+    from youkelele.music import arrange
 
-    root, suffix = harte_to_db("G#:maj")
-    best = min(shape_cost(s) for s in db.shapes(root, suffix))
-    assert score_capo(["C:maj"], 4, db) == pytest.approx(best + 0.3 * 4 + 0.3 * 1)
+    monkeypatch.setattr(arrange, "score_capo", lambda labels, capo, db: 1.0 if capo in (0, 2) else 9.0)
+    assert choose_capo(["C:maj"], db) == (0, 0)
+
+
+def test_s69_margin_at_least_0_3(db):
+    assert score_capo(S69_LABELS, 2, db) - score_capo(S69_LABELS, 0, db) >= 0.3
 
 
 def test_select_voicings_one_shape_per_label_and_canonical_shapes(db):

@@ -14,6 +14,7 @@ from youkelele.schemas import Shape
 _SHARPS = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
 _NO_SHAPE_COST = 5.0
 _MAX_PASSES = 20
+CAPO_FRET_PENALTY = 0.2  # per capo fret; a barre-free chart one fret higher must be clearly easier
 
 
 def transpose_label(label: str, semitones: int) -> str:
@@ -32,12 +33,15 @@ def _best_cost(label: str, db: ShapeDB) -> float | None:
 
 
 def score_capo(labels: Sequence[str], capo: int, db: ShapeDB) -> float:
+    """Mean easiest-shape cost over the distinct labels (frequency ignored) plus a per-fret penalty."""
     costs = []
-    for label in labels:
+    for label in dict.fromkeys(labels):
+        if label in ("N", "X"):
+            continue
         cost = _best_cost(transpose_label(label, -capo), db)
         costs.append(_NO_SHAPE_COST if cost is None else cost)
     mean = sum(costs) / len(costs) if costs else 0.0
-    return mean + 0.3 * capo + 0.3 * max(0, capo - 3)
+    return mean + CAPO_FRET_PENALTY * capo
 
 
 def choose_capo(labels: Sequence[str], db: ShapeDB, max_capo: int = 5) -> tuple[int, int]:
