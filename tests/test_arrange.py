@@ -49,6 +49,8 @@ def test_transpose_label():
     assert transpose_label("A:min/b3", 2) == "B:min/b3"
     assert transpose_label("C", 2) == "D:maj"
     assert transpose_label("N", 3) == "N"
+    assert transpose_label("Eb:maj", 0) == "Eb:maj"
+    assert transpose_label("Eb:maj", -3) == "C:maj"
 
 
 def test_choose_capo_zero_for_c_g_am_f(db):

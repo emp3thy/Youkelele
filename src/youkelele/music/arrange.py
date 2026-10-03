@@ -17,7 +17,7 @@ _MAX_PASSES = 20
 
 
 def transpose_label(label: str, semitones: int) -> str:
-    if label in ("N", "X"):
+    if label in ("N", "X") or semitones % 12 == 0:
         return label
     root, quality, degrees, bass = mir_eval.chord.split(label)
     pitch = mir_eval.chord.pitch_class_to_semitone(root)
