@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 
 from tests.fixtures.make_clip import make_clip
+from tests.pdfpages import count_pages
 from youkelele.cli import main
 from youkelele.jsonio import load_model
 from youkelele.schemas import Chords, Grid, Strums
@@ -15,6 +16,8 @@ def test_end_to_end_on_synthetic_clip(tmp_path: Path):
     assert rc == 0
     run = tmp_path / "runs" / "clip"
     assert (run / "07_render" / "sheet.pdf").stat().st_size > 10_000
+    pdf_bytes = (run / "07_render" / "sheet.pdf").read_bytes()
+    assert count_pages(pdf_bytes) <= 2
     grid = load_model(run / "02_grid" / "grid.json", Grid)
     assert 118 <= grid.bpm <= 122 and grid.octave_decision == "none"
     chords = load_model(run / "03_harmony" / "chords.json", Chords)

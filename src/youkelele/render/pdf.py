@@ -12,7 +12,7 @@ def html_to_pdf(
     *,
     console: list[str] | None = None,
 ) -> None:
-    """Load ``html_path`` from disk, wait for every alphaTab section, print to ``pdf_path``.
+    """Load ``html_path`` from disk, wait for its fonts, print to ``pdf_path``.
 
     ``console``, when given, collects the page's console errors and uncaught exceptions.
     """
@@ -20,9 +20,10 @@ def html_to_pdf(
     from playwright.sync_api import sync_playwright
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(args=["--allow-file-access-from-files"])
+        browser = p.chromium.launch()
         try:
             page = browser.new_page()
+            page.set_default_timeout(timeout_ms)
             if console is not None:
                 page.on(
                     "console",
@@ -30,8 +31,7 @@ def html_to_pdf(
                 )
                 page.on("pageerror", lambda exc: console.append(str(exc)))
             page.goto(Path(html_path).resolve().as_uri())
-            page.wait_for_function("window.__rendered === true", timeout=timeout_ms)
-            page.evaluate("document.fonts.ready")
+            page.evaluate("document.fonts.ready.then(() => true)")
             page.pdf(
                 path=str(pdf_path),
                 format="A4",

@@ -45,6 +45,7 @@ class Bar(_Artifact):
     start: float
     end: float
     beats: list[int]
+    pickup: bool = False
 
 
 class Section(_Artifact):
@@ -67,6 +68,8 @@ class Grid(_Artifact):
     largest_cluster_share: float
     chorus_margin_db: float | None
     labels_low_confidence: bool
+    backbeat_ratio: float | None = None
+    drums_silent: bool = False
 
     @model_validator(mode="after")
     def _check_structure(self) -> Grid:
@@ -211,6 +214,7 @@ class ScoreChord(_Artifact):
 class ScoreBar(_Artifact):
     index: int
     chords: list[ScoreChord]
+    pickup: bool = False
 
 
 class ScoreSection(_Artifact):

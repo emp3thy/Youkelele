@@ -76,3 +76,7 @@ def main(argv: list[str] | None = None) -> int:
         return exc.code if isinstance(exc.code, int) else 1
     handler = HANDLERS.get(args.command)
     return handler(args) if handler else 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

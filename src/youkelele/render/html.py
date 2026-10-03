@@ -1,14 +1,15 @@
-"""Render a Score and its alphaTex into a self-contained sheet page."""
+"""Render a Score into a self-contained chord-grid sheet page (HTML, CSS and inline SVG)."""
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 from markupsafe import Markup
 
 from youkelele.render.diagrams import chord_diagram_svg
+from youkelele.music.arrange import _SHARPS
+from youkelele.render.grid import grid_rows
 from youkelele.render.strum_box import strum_pattern_svg
 from youkelele.schemas import Score
 
@@ -20,26 +21,38 @@ _ENV = Environment(
     lstrip_blocks=True,
 )
 
+CAPO_NOTE = "Shapes are relative to the capo"
+
 
 def _capo(capo: int) -> str:
     return "none" if capo <= 0 else f"fret {capo}"
 
 
-def render_html(score: Score, alphatex: str, assets_rel: str = "assets") -> str:
+def _shape_key(key: str, capo: int) -> str:
+    """The key the capo player's shapes are in: the tonic moved down by the capo, in sharps."""
+    tonic, _, mode = key.partition(" ")
+    flats = ["C", "Db", "D", "Eb", "E", "F", "Gb", "G", "Ab", "A", "Bb", "B"]
+    pitch = _SHARPS.index(tonic) if tonic in _SHARPS else flats.index(tonic) if tonic in flats else None
+    if pitch is None:
+        return key
+    shaped = _SHARPS[(pitch - capo) % 12]
+    return f"{shaped} {mode}".strip()
+
+
+def render_html(score: Score) -> str:
     labels = [p[0].upper() for p in score.instrument.tuning]
     diagrams = [
         Markup(chord_diagram_svg(d.name, d.shape, string_labels=labels)) for d in score.chord_diagrams
     ]
     sections = []
-    start = 1
     for section in score.sections:
-        count = len(section.bars)
         source = section.inherited_from
         inherited = (
             score.sections[source].label
             if source is not None and 0 <= source < len(score.sections)
             else None
         )
+        show_box = not (section.uncertain or section.no_instrument)
         sections.append(
             {
                 "label": section.label,
@@ -47,24 +60,19 @@ def render_html(score: Score, alphatex: str, assets_rel: str = "assets") -> str:
                 "no_instrument": section.no_instrument,
                 "repeat": f"{section.bar_repeat:.0%}",
                 "inherited_from": inherited,
-                "svg": Markup(strum_pattern_svg(section.pattern, score.meter)),
-                "start_bar": start,
-                "bar_count": count,
+                "svg": Markup(strum_pattern_svg(section.pattern, score.meter)) if show_box else None,
+                "rows": grid_rows(section),
             }
         )
-        start += count
+    capo = score.instrument.capo
     return _ENV.get_template("sheet.html.j2").render(
         score=score,
-        capo=_capo(score.instrument.capo),
+        capo=_capo(capo),
+        capo_note=CAPO_NOTE if capo > 0 else None,
+        key_fact=f"{_shape_key(score.key, capo)} (shapes)" if capo > 0 else score.key,
+        sounding_key=score.key if capo > 0 else None,
         tempo=round(score.bpm),
         tuning=" ".join(score.instrument.tuning),
         diagrams=diagrams,
         sections=sections,
-        # The alphaTex carries untrusted title/artist text, so it is embedded as a JSON string in
-        # <script type="application/json">; escaping every "<" as < means no "</script" or
-        # "<!--" can appear inside the block, and JSON.parse restores the exact text.
-        tex_json=Markup(json.dumps(alphatex).replace("<", "\\u003c")),
-        assets_rel=assets_rel,
-        font_directory=Markup(json.dumps(assets_rel + "/font/")),
-        scale=0.75 if score.slots_per_bar == 16 else 0.85,
     )

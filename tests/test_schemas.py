@@ -159,3 +159,21 @@ def test_chords_reject_non_harte_triad(tmp_path):
 def test_chords_accept_harte_labels(tmp_path, label):
     (tmp_path / "chords.json").write_text(json.dumps(_chords_json(label, triad=label)))
     assert load_model(tmp_path / "chords.json", Chords).events[0].label == label
+
+
+def test_bar_pickup_defaults_false_so_version_1_files_load():
+    from youkelele.schemas import Bar
+
+    assert Bar(index=0, start=0, end=1, beats=[0]).pickup is False
+
+
+def test_version_1_grid_and_score_bar_without_newer_fields_load(tmp_path):
+    from youkelele.schemas import ScoreBar
+
+    grid = make_grid()
+    for key in ("backbeat_ratio", "drums_silent"):
+        assert key not in grid
+    assert all("pickup" not in bar for bar in grid["bars"])
+    (tmp_path / "grid.json").write_text(json.dumps(grid))
+    assert len(load_model(tmp_path / "grid.json", Grid).bars) == 8
+    assert ScoreBar.model_validate({"index": 0, "chords": []}).pickup is False

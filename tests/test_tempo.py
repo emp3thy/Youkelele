@@ -121,3 +121,56 @@ def test_build_bars_phase_tie_break_by_chroma_change():
     with_chroma = build_bars(beats, idx, FOUR, duration=32.0, chroma_per_beat=chroma)
     assert with_chroma[0].beats == [0, 1]  # pickup
     assert with_chroma[1].beats == [2, 3, 4, 5]
+
+
+def test_build_bars_marks_leading_partial_bar_as_pickup():
+    bars = build_bars([0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5], [1, 5], Meter(numerator=4, denominator=4), 5.0)
+    assert bars[0].pickup is True and bars[0].beats == [0]
+    assert all(b.pickup is False for b in bars[1:])
+
+
+def test_build_bars_final_bar_ends_one_beat_after_last_beat_not_at_duration():
+    beats = [0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5]  # 8 beats, 0.5 s apart
+    bars = build_bars(beats, [0, 4], Meter(numerator=4, denominator=4), duration=13.5)
+    assert bars[-1].end == pytest.approx(4.0)  # 3.5 + 0.5, not 13.5
+
+
+def test_build_bars_final_bar_never_ends_after_duration():
+    bars = build_bars([0.0, 0.5, 1.0, 1.5], [0], Meter(numerator=4, denominator=4), duration=1.7)
+    assert bars[-1].end == pytest.approx(1.7)
+
+
+def test_decide_octave_auto_keeps_150_with_strong_backbeat():
+    assert decide_octave(150, "auto", backbeat_ratio=2.1) == "none"
+
+
+def test_decide_octave_auto_halves_150_with_weak_backbeat():
+    assert decide_octave(150, "auto", backbeat_ratio=0.57) == "half"
+
+
+def test_decide_octave_auto_halves_150_when_drums_silent():
+    assert decide_octave(150, "auto", backbeat_ratio=None, drums_silent=True) == "half"
+    assert decide_octave(150, "auto", backbeat_ratio=2.1, drums_silent=True) == "half"
+
+
+def test_decide_octave_auto_halves_150_with_no_evidence():
+    assert decide_octave(150, "auto") == "half"
+
+
+def test_decide_octave_never_halves_139_or_outside_band():
+    assert decide_octave(139, "auto", 0.2) == "none"
+    assert decide_octave(200, "auto", 0.2) == "none"
+
+
+def test_decide_octave_overrides_ignore_backbeat():
+    assert decide_octave(150, "none", 0.2) == "none"
+    assert decide_octave(150, "half", 2.5) == "half"
+
+
+def test_decide_octave_boundaries():
+    assert decide_octave(140, "auto", 0.5) == "none"
+    assert decide_octave(140.01, "auto", 0.5) == "half"
+    assert decide_octave(190, "auto", 0.5) == "half"
+    assert decide_octave(190.01, "auto", 0.5) == "none"
+    assert decide_octave(150, "auto", 1.0) == "none"
+    assert decide_octave(150, "auto", 0.999) == "half"

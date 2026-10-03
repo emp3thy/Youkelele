@@ -50,11 +50,25 @@ def bpm_from_beats(beats: Sequence[float]) -> float:
     return 60.0 / float(np.median(np.diff(np.asarray(beats, dtype=float))))
 
 
-def decide_octave(bpm: float, mode: OctaveMode) -> OctaveDecision:
-    """`auto` halves if and only if bpm > 140 and the halved tempo is 60 to 95."""
+def decide_octave(
+    bpm: float,
+    mode: OctaveMode,
+    backbeat_ratio: float | None = None,
+    drums_silent: bool = False,
+) -> OctaveDecision:
+    """`auto` halves iff bpm > 140, the halved tempo is 60 to 95, and the drums do not object.
+
+    A drum backbeat ratio of at least 1 (snare on 2 and 4 at the detected tempo)
+    keeps a genuine fast song. A silent drum stem or a missing ratio is no
+    evidence against halving.
+    """
     if mode != "auto":
         return mode
-    return "half" if bpm > 140 and 60 <= bpm / 2 <= 95 else "none"
+    if not (bpm > 140 and 60 <= bpm / 2 <= 95):
+        return "none"
+    if drums_silent or backbeat_ratio is None or backbeat_ratio < 1.0:
+        return "half"
+    return "none"
 
 
 def downbeat_indices(
@@ -174,8 +188,8 @@ def build_bars(
 
     When two phases tie or nearly tie (after halving) and per-beat chroma
     (12 x beats) is given, the phase with the larger adjacent-bar chroma change
-    wins. Beats before the first full bar form a pickup bar 0; the final bar ends
-    at `duration`; beats at or after `duration` (a downbeat at the exact end of
+    wins. Beats before the first full bar form a pickup bar 0 (flagged `pickup`); the
+    final bar ends one median beat after the last beat, capped at `duration`; beats at or after `duration` (a downbeat at the exact end of
     the audio) are ignored.
     """
     times = [float(b) for b in beats]
@@ -187,8 +201,20 @@ def build_bars(
     phase = _choose_phase(idx, n, n_beats, chroma_per_beat)
     phase = min(phase, n_beats - 1)
     starts = ([0] if phase > 0 else []) + list(range(phase, n_beats, n))
+    if n_beats >= 2:
+        final_end = min(float(duration), times[n_beats - 1] + float(np.median(np.diff(times[:n_beats]))))
+    else:
+        final_end = float(duration)
     bars = []
     for number, (s, e) in enumerate(zip(starts, starts[1:] + [n_beats])):
-        end = times[e] if e < n_beats else float(duration)
-        bars.append(Bar(index=number, start=times[s], end=end, beats=list(range(s, e))))
+        end = times[e] if e < n_beats else final_end
+        bars.append(
+            Bar(
+                index=number,
+                start=times[s],
+                end=end,
+                beats=list(range(s, e)),
+                pickup=number == 0 and phase > 0,
+            )
+        )
     return bars

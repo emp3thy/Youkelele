@@ -43,4 +43,12 @@ Options are saved in `runs/<slug>/manifest.json`. A `--from` run reuses them and
 
 ### Known limitations
 
-- Drum bleed can read as muted strums. On a separated stem, drum bleed can satisfy the centroid and zero-crossing mute rule, so a busy snare shows up as chunked `x` slots in the strum pattern. The end-to-end test clip uses a quiet snare for this reason.
+Version 1.1 (`docs/superpowers/specs/2026-10-03-ukulele-tab-chain-v1-1-design.md`) prints each section as a strum box followed by a chord grid; the slash staff and alphaTab are gone, and the four real songs it was validated on print in two to four pages (`docs/superpowers/specs/2026-10-03-v1-1-validation.md`). What remains:
+
+- Strum patterns are often mostly rests. The slot-wise majority vote keeps only slots struck in most bars, so a section strummed throughout can print as one or two arrows, and the confidence score does not flag it. Lowering the strike threshold, reporting strike density or marking sparse patterns uncertain is a measured spike in section 7 of the version 1.1 spec, not yet built.
+- Drum bleed can read as strums. On a separated stem, snare bleed can satisfy the onset and mute rules, so beats 2 and 4 show up as down strokes or chunked `x` slots. The end-to-end test clip uses a quiet snare for this reason.
+- Section labels are low confidence. The chorus is usually found, but a bridge that clusters with another part is named "verse 2", an instrumental intro can be named after a verse, and a song whose texture changes every two bars is split into many two-bar sections, which lengthens the sheet.
+- Key mode can be wrong when the riff is a power chord: the chord model reads a no-third chord as major.
+- An intro or solo the chord model leaves blank prints as N.C. even when guitar and bass are playing.
+- The header tempo comes from the median beat interval, which can sit two or three bpm off the published tempo.
+- Titles keep the upload's text, for example "Artist - Title (Official Music Video)".

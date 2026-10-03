@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{ score.title }}{% if score.artist %} - {{ score.artist }}{% endif %}</title>
 <style>
-  :root { --ink: #111; --muted: #666; --badge: #b45309; --note: #1d4ed8; }
+  :root { --ink: #111; --muted: #666; --note: #1d4ed8; }
   html, body { margin: 0; padding: 0; background: #fff; color: var(--ink); font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; font-size: 11pt; }
   .sheet { width: 182mm; margin: 0 auto }
   .sheet { padding: 8mm 0; }
@@ -14,21 +14,29 @@
   header .artist { font-size: 13pt; color: var(--muted); margin: 0 0 6px 0; }
   .facts { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 10pt; }
   .facts b { font-weight: 600; }
-  .badge { display: inline-block; border: 1px solid var(--badge); color: var(--badge); border-radius: 3px; padding: 0 5px; font-size: 9pt; vertical-align: middle; }
   .note { color: var(--note); font-size: 9.5pt; margin-top: 4px; }
   h3.legend-head { font-size: 11pt; margin: 0 0 2px 0; }
   .legend { display: flex; flex-wrap: wrap; gap: 6px 10px; margin: 2mm 0 5mm 0; break-inside: avoid; }
   .legend svg { display: block; }
   .section { margin-bottom: 5mm; }
-  .section { break-inside: avoid-page }
-  .section-head { display: flex; align-items: center; gap: 10px; margin: 0 0 2px 0; }
+  .section-head { margin: 0 0 1.5mm 0; break-inside: avoid; }
   .section-head { break-after: avoid }
-  .section-head h2 { font-size: 13pt; margin: 0; }
-  .strum { margin: 2px 0 4px 0; }
-  .strum-label { font-size: 9pt; color: var(--muted); margin-bottom: 2px; }
+  .section-title { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; break-inside: avoid; }
+  .section-title h2 { font-size: 13pt; margin: 0; }
+  .strum-label { font-size: 9pt; color: var(--muted); }
+  .no-instrument { font-size: 9pt; color: var(--muted); font-style: italic; }
+  .strum-box { margin: 2px 0 0 0; break-inside: avoid; }
   .strum-box svg { display: block; }
-  .no-instrument { font-size: 10pt; color: var(--muted); font-style: italic; }
-  .at-crop { overflow: hidden; }
+  .row { display: grid; grid-template-columns: repeat(4, 1fr) auto; break-inside: avoid; }
+  .row { gap: 1.5mm; margin-bottom: 1.5mm; }
+  .cell { border: 1px solid; padding: 2mm; font-size: 12pt; }
+  .cell { font-weight: 600; border-radius: 2px; white-space: normal; overflow-wrap: anywhere; }
+  .cell.crowded { font-size: 10pt; }
+  .cell.nc { color: var(--muted); }
+  .cell.pickup { grid-column: span 1; font-size: 9pt; }
+  .pickup-label { font-weight: 400; font-style: italic; color: var(--muted); margin-right: 4px; }
+  .repeat { font-size: 10pt; align-self: center; }
+  .repeat { grid-column: 5; min-width: 9mm; text-align: right; font-weight: 600; }
   .no-print { background: #fef3c7; padding: 6px 10px; margin-bottom: 8px; font-size: 10pt; }
   @page { size: A4; margin: 14mm }
   @media print {
@@ -45,13 +53,15 @@
     <h1>{{ score.title }}</h1>
     {% if score.artist %}<p class="artist">{{ score.artist }}</p>{% endif %}
     <div class="facts">
-      <span><b>Key</b> {{ score.key }}</span>
+      <span><b>Key</b> {{ key_fact }}</span>
       <span><b>Capo</b> {{ capo }}</span>
       <span><b>Tempo</b> {{ tempo }} bpm</span>
       <span><b>Tuning</b> {{ tuning }}</span>
       <span><b>Tier</b> {{ score.tier }}</span>
       <span><b>Meter</b> {{ score.meter.numerator }}/{{ score.meter.denominator }}</span>
     </div>
+    {% if capo_note is not none %}<div class="note">{{ capo_note }}</div>{% endif %}
+    {% if sounding_key is not none %}<div class="note">Sounding key: {{ sounding_key }}</div>{% endif %}
     {% if score.strum_source == "mix" %}<div class="note">Strum detected from full mix; directions are a best guess.</div>{% endif %}
     {% if score.strums_uncertain %}<div class="note">Strum detection uncertain for this song (onsets fit the beat grid poorly)</div>{% endif %}
   </header>
@@ -65,82 +75,35 @@
   {% for section in sections %}
     <section class="section">
       <div class="section-head">
-        <h2>{{ section.label }}</h2>
-        {% if section.uncertain %}<span class="badge">Strum pattern uncertain</span>{% endif %}
-      </div>
-      <div class="strum">
-      {% if section.no_instrument %}
-        <p class="no-instrument">No strummed instrument detected</p>
-      {% else %}
-        <div class="strum-label">Strum as played, {{ section.repeat }} repeatable{% if section.uncertain %} (uncertain){% endif %}{% if section.inherited_from is not none %}, inherited from {{ section.inherited_from }}{% endif %}</div>
+        <div class="section-title">
+          <h2>{{ section.label }}</h2>
+          {% if section.no_instrument %}
+          <span class="no-instrument">No strummed instrument detected</span>
+          {% else %}
+          <span class="strum-label">Strum as played, {{ section.repeat }} repeatable{% if section.uncertain %} (uncertain){% endif %}{% if section.inherited_from is not none %}, inherited from {{ section.inherited_from }}{% endif %}</span>
+          {% endif %}
+        </div>
+        {% if section.svg is not none %}
         <div class="strum-box">{{ section.svg }}</div>
-      {% endif %}
+        {% endif %}
       </div>
-      <div class="at-crop"><div class="at-section" data-start-bar="{{ section.start_bar }}" data-bar-count="{{ section.bar_count }}"></div></div>
+      <div class="grid">
+      {% for row in section.rows %}
+        <div class="row">
+          {% for cell in row.cells %}
+          {% if cell.pickup %}
+          <div class="cell{% if cell.nc %} nc{% endif %}{% if cell.crowded %} crowded{% endif %} pickup"><span class="pickup-label">pickup</span>{{ cell.text }}</div>
+          {% else %}
+          <div class="cell{% if cell.nc %} nc{% endif %}{% if cell.crowded %} crowded{% endif %}">{{ cell.text }}</div>
+          {% endif %}
+          {% endfor %}
+          <div class="repeat">{% if row.repeat > 1 %}×{{ row.repeat }}{% endif %}</div>
+        </div>
+      {% endfor %}
+      </div>
     </section>
   {% endfor %}
   </div>
 </div>
-
-<script type="application/json" id="tex">{{ tex_json }}</script>
-<script src="{{ assets_rel }}/alphaTab.min.js"></script>
-<script>
-(function () {
-  const tex = JSON.parse(document.getElementById("tex").textContent);
-  const hosts = Array.from(document.querySelectorAll(".at-section"));
-  let pending = hosts.length;
-  window.__rendered = false;
-  // alphaTab always draws a "rendered by alphaTab" partial last; size the
-  // overflow-hidden wrapper so it ends where that partial starts, and hide the
-  // partial itself because its glyphs overhang the top of its box.
-  function cropFooter(host) {
-    const surface = host.querySelector(".at-surface");
-    const last = surface && surface.lastElementChild;
-    if (!last || last.textContent.indexOf("rendered by alphaTab") < 0) return;
-    const top = last.getBoundingClientRect().top - host.getBoundingClientRect().top;
-    last.style.visibility = "hidden";
-    host.parentElement.style.height = Math.ceil(top) + "px";
-  }
-  function finish() {
-    document.fonts.ready.then(function () {
-      hosts.forEach(cropFooter);
-      window.__rendered = true;
-    });
-  }
-  if (pending === 0) finish();
-  hosts.forEach(function (host) {
-    const api = new alphaTab.AlphaTabApi(host, {
-      core: { useWorkers: false, tex: true, fontDirectory: {{ font_directory }}, enableLazyLoading: false },
-      player: { playerMode: 0 },
-      display: {
-        scale: {{ scale }},
-        startBar: Number(host.dataset.startBar),
-        barCount: Number(host.dataset.barCount),
-        layoutMode: "page"
-      },
-      notation: {
-        elements: {
-          effectTempo: false,
-          trackNames: false,
-          scoreTitle: false,
-          scoreArtist: false,
-          chordDiagrams: false,
-          effectMarker: false,
-          effectCapo: false
-        }
-      }
-    });
-    api.error.on(function (e) { console.error("alphaTab error", e && (e.message || e)); });
-    let done = false;
-    api.postRenderFinished.on(function () {
-      if (done) return;
-      done = true;
-      pending -= 1;
-      if (pending === 0) finish();
-    });
-    api.tex(tex);
-  });
-})();
-</script>
 </body>
 </html>

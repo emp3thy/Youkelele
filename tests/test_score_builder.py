@@ -87,6 +87,19 @@ def _chords(score, bar):
     return score.sections[0].bars[bar].chords
 
 
+def test_pickup_flag_is_copied_from_the_grid_bar():
+    grid = _grid(3)
+    grid.bars[0] = grid.bars[0].model_copy(update={"pickup": True})
+    score = build_score(
+        _source(), grid,
+        Chords(key=Key(tonic="C", mode="major", confidence=0.9), events=[]),
+        _strums(),
+        Arrangement(capo=0, transpose=0, tier="easy", chords=[], substitutions=[]),
+        UKULELE_TUNING, "Ukulele",
+    )
+    assert [b.pickup for b in score.sections[0].bars] == [True, False, False]
+
+
 def test_diagrams_unique_in_first_appearance_order():
     score = _score(3, [(0, 1, "C"), (1, 2, "G"), (2, 3, "C")], {"C": C, "G": G})
     assert [d.name for d in score.chord_diagrams] == ["C", "G"]

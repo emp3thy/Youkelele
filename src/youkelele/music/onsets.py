@@ -21,6 +21,7 @@ Source = Literal["guitar_stem", "other_stem", "mix"]
 SOURCE_MIN_RATIO = 0.05  # below this the louder stem is too quiet; use the mix
 SECTION_MIN_RATIO = 0.10  # a section's stem below this share of the mix has no instrument
 ODD_SIXTEENTH_SHARE = 0.25  # more than this share of odd sixteenths selects the sixteenth grid
+SIXTEENTH_MIN_MS = 105.0  # a sixteenth shorter than this is not a plausible strum slot
 GRID_FIT_TOLERANCE = 0.15  # an onset within this share of a slot width fits the grid
 MUTE_CENTROID = 0.85  # muted when centroid < 0.85 x song median ...
 MUTE_ZCR = 0.65  # ... and zero-crossing rate < 0.65 x song median
@@ -87,8 +88,10 @@ def _bar_positions(onsets: Onsets, bars: Sequence[Bar], units: int) -> np.ndarra
     return (times - starts[idx]) / (ends[idx] - starts[idx]) * units
 
 
-def choose_slots_per_bar(onsets: Onsets, bars: Sequence[Bar], meter: Meter) -> int:
+def choose_slots_per_bar(onsets: Onsets, bars: Sequence[Bar], meter: Meter, bpm: float) -> int:
     eighths = meter.numerator * 2
+    if 60000.0 / bpm / 4 < SIXTEENTH_MIN_MS:  # sixteenths faster than a hand can strum
+        return eighths
     pos = _bar_positions(onsets, bars, meter.numerator * 4)
     if len(pos) == 0:
         return eighths

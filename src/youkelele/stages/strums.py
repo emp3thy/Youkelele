@@ -62,7 +62,7 @@ class StrumsStage(Stage):
         source, y, source_ratio = choose_source(guitar, other, mix)
         onsets = self._detect(y, sr)
         bars, meter = grid.bars, grid.meter
-        slots = choose_slots_per_bar(onsets, bars, meter)
+        slots = choose_slots_per_bar(onsets, bars, meter, grid.bpm)
         fit = grid_fit(onsets, bars, slots)
         muted = mute_mask(onsets, enabled=source != "mix")
         classes: list[list[StrikeClass]] = [quantise_bar(onsets, muted, bar, slots) for bar in bars]
