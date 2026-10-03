@@ -4,7 +4,7 @@ import sys
 import pytest
 
 from tests.fakes import make_fake_stage
-from youkelele import commands
+from youkelele import __version__, commands
 from youkelele.cli import main
 from youkelele.manifest import load_manifest
 from youkelele.preflight import Problem
@@ -12,7 +12,7 @@ from youkelele.preflight import Problem
 
 def test_version_flag_prints_version(capsys):
     assert main(["--version"]) == 0
-    assert "0.1.0" in capsys.readouterr().out
+    assert __version__ in capsys.readouterr().out
 
 
 def fake_chain(monkeypatch, **kw):
@@ -209,5 +209,5 @@ def test_setup_reports_vendoring_error_in_one_line(monkeypatch, capsys):
 
 @pytest.mark.parametrize("module", ["youkelele", "youkelele.cli"])
 def test_module_entry_point_runs_main(module):
-    proc = subprocess.run([sys.executable, "-m", module, "--version"], capture_output=True, text=True)
-    assert proc.returncode == 0 and "0.1.0" in proc.stdout
+    proc = subprocess.run([sys.executable, "-m", module, "--version"], capture_output=True, text=True, timeout=60)
+    assert proc.returncode == 0 and __version__ in proc.stdout

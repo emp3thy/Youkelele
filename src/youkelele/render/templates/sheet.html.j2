@@ -30,7 +30,8 @@
   .row { display: grid; grid-template-columns: repeat(4, 1fr) auto; break-inside: avoid; }
   .row { gap: 1.5mm; margin-bottom: 1.5mm; }
   .cell { border: 1px solid; padding: 2mm; font-size: 12pt; }
-  .cell { font-weight: 600; border-radius: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .cell { font-weight: 600; border-radius: 2px; white-space: normal; overflow-wrap: anywhere; }
+  .cell.crowded { font-size: 10pt; }
   .cell.nc { color: var(--muted); }
   .cell.pickup { grid-column: span 1; font-size: 9pt; }
   .pickup-label { font-weight: 400; font-style: italic; color: var(--muted); margin-right: 4px; }
@@ -52,7 +53,7 @@
     <h1>{{ score.title }}</h1>
     {% if score.artist %}<p class="artist">{{ score.artist }}</p>{% endif %}
     <div class="facts">
-      <span><b>Key</b> {{ score.key }}</span>
+      <span><b>Key</b> {{ key_fact }}</span>
       <span><b>Capo</b> {{ capo }}</span>
       <span><b>Tempo</b> {{ tempo }} bpm</span>
       <span><b>Tuning</b> {{ tuning }}</span>
@@ -91,9 +92,9 @@
         <div class="row">
           {% for cell in row.cells %}
           {% if cell.pickup %}
-          <div class="cell{% if cell.nc %} nc{% endif %} pickup"><span class="pickup-label">pickup</span>{{ cell.text }}</div>
+          <div class="cell{% if cell.nc %} nc{% endif %}{% if cell.crowded %} crowded{% endif %} pickup"><span class="pickup-label">pickup</span>{{ cell.text }}</div>
           {% else %}
-          <div class="cell{% if cell.nc %} nc{% endif %}">{{ cell.text }}</div>
+          <div class="cell{% if cell.nc %} nc{% endif %}{% if cell.crowded %} crowded{% endif %}">{{ cell.text }}</div>
           {% endif %}
           {% endfor %}
           <div class="repeat">{% if row.repeat > 1 %}×{{ row.repeat }}{% endif %}</div>

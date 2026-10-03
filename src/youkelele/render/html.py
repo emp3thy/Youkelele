@@ -8,6 +8,7 @@ from jinja2 import Environment, FileSystemLoader, StrictUndefined
 from markupsafe import Markup
 
 from youkelele.render.diagrams import chord_diagram_svg
+from youkelele.music.arrange import _SHARPS
 from youkelele.render.grid import grid_rows
 from youkelele.render.strum_box import strum_pattern_svg
 from youkelele.schemas import Score
@@ -25,6 +26,17 @@ CAPO_NOTE = "Shapes are relative to the capo"
 
 def _capo(capo: int) -> str:
     return "none" if capo <= 0 else f"fret {capo}"
+
+
+def _shape_key(key: str, capo: int) -> str:
+    """The key the capo player's shapes are in: the tonic moved down by the capo, in sharps."""
+    tonic, _, mode = key.partition(" ")
+    flats = ["C", "Db", "D", "Eb", "E", "F", "Gb", "G", "Ab", "A", "Bb", "B"]
+    pitch = _SHARPS.index(tonic) if tonic in _SHARPS else flats.index(tonic) if tonic in flats else None
+    if pitch is None:
+        return key
+    shaped = _SHARPS[(pitch - capo) % 12]
+    return f"{shaped} {mode}".strip()
 
 
 def render_html(score: Score) -> str:
@@ -57,6 +69,7 @@ def render_html(score: Score) -> str:
         score=score,
         capo=_capo(capo),
         capo_note=CAPO_NOTE if capo > 0 else None,
+        key_fact=f"{_shape_key(score.key, capo)} (shapes)" if capo > 0 else score.key,
         sounding_key=score.key if capo > 0 else None,
         tempo=round(score.bpm),
         tuning=" ".join(score.instrument.tuning),

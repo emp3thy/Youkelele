@@ -14,6 +14,7 @@ class Cell:
     text: str
     nc: bool
     pickup: bool
+    crowded: bool = False
 
 
 @dataclass
@@ -27,7 +28,7 @@ def cell_for(bar: ScoreBar) -> Cell:
     names = [c.name for c in sorted(bar.chords, key=lambda c: c.start_slot)]
     if all(n == NC for n in names):
         return Cell(text=NC, nc=True, pickup=bar.pickup)
-    return Cell(text=" / ".join(names), nc=False, pickup=bar.pickup)
+    return Cell(text=" / ".join(names), nc=False, pickup=bar.pickup, crowded=len(names) >= 3)
 
 
 def grid_rows(section: ScoreSection, per_row: int = 4) -> list[Row]:

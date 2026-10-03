@@ -43,6 +43,20 @@ def test_cell_mid_bar_change_joins_names_with_slash():
     assert cell_for(bar).nc is False
 
 
+def test_cell_with_three_or_more_chords_is_crowded_and_cells_wrap():
+    from pathlib import Path
+
+    import youkelele
+
+    assert cell_for(_bar(0, "C", "G", "Am", "F")).crowded is True
+    assert cell_for(_bar(0, "C", "G")).crowded is False
+    template = (Path(youkelele.__file__).parent / "render" / "templates" / "sheet.html.j2").read_text(
+        encoding="utf-8"
+    )
+    assert "text-overflow: ellipsis" not in template
+    assert ".cell.crowded" in template
+
+
 def test_cell_nc_bar():
     cell = cell_for(_bar(3, "N.C."))
     assert cell == Cell(text="N.C.", nc=True, pickup=False)

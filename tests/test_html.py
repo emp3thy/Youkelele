@@ -133,6 +133,22 @@ def test_html_capo_header_notes():
     assert "Sounding key" not in plain
 
 
+def test_html_capo_shows_shape_key_and_sounding_key():
+    score = _two_sections(capo=4).model_copy(update={"key": "C# major"})
+    html = render_html(score)
+    head = html[html.index('<header class="sheet-head">'):html.index("</header>")]
+    assert "A major (shapes)" in head
+    assert "Sounding key: C# major" in head
+
+
+def test_html_no_capo_shows_key_once():
+    score = _two_sections().model_copy(update={"key": "C# major"})
+    head = render_html(score)
+    head = head[head.index('<header class="sheet-head">'):head.index("</header>")]
+    assert head.count("C# major") == 1
+    assert "(shapes)" not in head
+
+
 def test_html_fixed_sheet_width_for_print():
     html = render_html(_two_sections())
     assert ".sheet { width: 182mm; margin: 0 auto }" in html
