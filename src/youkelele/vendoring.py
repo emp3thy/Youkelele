@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+import shutil
 import subprocess
 from collections.abc import Callable
 from pathlib import Path
@@ -31,6 +32,8 @@ PATCH_SITES: dict[str, int] = {
 }
 
 _NP_INT = re.compile(r"\bnp\.int\b")
+
+Runner = Callable[..., "subprocess.CompletedProcess[str]"]
 
 
 class VendoringError(Exception):
@@ -74,13 +77,47 @@ def verify_checkpoints(root: Path) -> None:
             )
 
 
-def ensure_chord_model(log: Callable[[str], None] = print) -> Path:
+def _git(args: list[str], cwd: Path | None, run: Runner) -> str:
+    try:
+        result = run(["git", *args], cwd=cwd, check=True, capture_output=True, text=True)
+    except FileNotFoundError as exc:
+        raise VendoringError("git is not installed or not on PATH; install git and retry") from exc
+    except subprocess.CalledProcessError as exc:
+        detail = (exc.stderr or "").strip()
+        raise VendoringError(f"git {' '.join(args)} failed: {detail}") from exc
+    return result.stdout or ""
+
+
+def _check_commit(root: Path, run: Runner) -> None:
+    head = _git(["rev-parse", "HEAD"], root, run).strip()
+    if head != CHORD_MODEL_COMMIT:
+        raise VendoringError(
+            f"chord model at {root} is at {head or 'an unknown commit'}, "
+            f"expected {CHORD_MODEL_COMMIT}; delete the folder and run youkelele setup"
+        )
+
+
+def _clone(root: Path, run: Runner, log: Callable[[str], None]) -> None:
+    """Clone into a sibling folder and rename, so a partial clone never looks complete."""
+    log(f"cloning {CHORD_MODEL_REPO} into {root}")
+    root.parent.mkdir(parents=True, exist_ok=True)
+    partial = root.with_name(root.name + ".partial")
+    shutil.rmtree(partial, ignore_errors=True)
+    _git(["clone", CHORD_MODEL_REPO, str(partial)], None, run)
+    _git(["checkout", CHORD_MODEL_COMMIT], partial, run)
+    _check_commit(partial, run)
+    shutil.rmtree(root, ignore_errors=True)
+    partial.rename(root)
+
+
+def ensure_chord_model(
+    log: Callable[[str], None] = print, run: Runner = subprocess.run
+) -> Path:
     root = chord_model_dir()
-    if not (root / "chord_recognition.py").exists():
-        log(f"cloning {CHORD_MODEL_REPO} into {root}")
-        root.parent.mkdir(parents=True, exist_ok=True)
-        subprocess.run(["git", "clone", CHORD_MODEL_REPO, str(root)], check=True)
-        subprocess.run(["git", "checkout", CHORD_MODEL_COMMIT], cwd=root, check=True)
+    if (root / "chord_recognition.py").exists():
+        _check_commit(root, run)
+    else:
+        _clone(root, run, log)
     counts = patch_numpy_aliases(root)
     changed = {rel: n for rel, n in counts.items() if n}
     log(f"patched np.int in {sum(changed.values())} places" if changed else "np.int patch already applied")
@@ -89,11 +126,12 @@ def ensure_chord_model(log: Callable[[str], None] = print) -> Path:
     return root
 
 
-def chord_model_ready() -> bool:
+def chord_model_ready(run: Runner = subprocess.run) -> bool:
     root = chord_model_dir()
     if not (root / "chord_recognition.py").exists():
         return False
     try:
+        _check_commit(root, run)
         verify_checkpoints(root)
         text = [(root / rel).read_text(encoding="utf-8") for rel in PATCH_SITES]
     except (VendoringError, OSError):

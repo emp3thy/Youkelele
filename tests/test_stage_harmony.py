@@ -73,3 +73,19 @@ def test_harmony_real_model_on_synthetic_loop(tmp_path):
     chords = load_model(ctx.output("harmony/chords.json"), Chords)
     assert {"C:maj", "G:maj", "A:min", "F:maj"} <= {e.triad for e in chords.events}
     assert [p.name for p in out.rglob("*") if p.is_file()] == ["chords.json"]
+
+
+def test_recognise_chords_failure_includes_stderr(tmp_path, monkeypatch):
+    import subprocess
+
+    from youkelele.models import chords
+
+    def fake_run(argv, **kwargs):
+        return subprocess.CompletedProcess(argv, 3, stdout="", stderr="Traceback\nValueError: bad model\n")
+
+    monkeypatch.setattr(chords.subprocess, "run", fake_run)
+    logged: list[str] = []
+    with pytest.raises(RuntimeError, match="code 3") as info:
+        chords.recognise_chords(tmp_path / "a.wav", tmp_path, logged.append)
+    assert "ValueError: bad model" in str(info.value)
+    assert "ValueError: bad model" in logged

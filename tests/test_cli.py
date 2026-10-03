@@ -77,3 +77,18 @@ def test_run_with_empty_chain_reports_nothing_to_run(tmp_path, capsys, monkeypat
     monkeypatch.setattr(commands, "check_environment", lambda *a, **k: [])
     assert main(["run", "song.wav", "--runs-dir", str(tmp_path)]) == 0
     assert "nothing to run" in capsys.readouterr().out
+
+
+def test_setup_command_runs_ensure_and_ffmpeg(monkeypatch, capsys):
+    from pathlib import Path
+
+    from youkelele import vendoring
+    from youkelele.cli import main
+    from youkelele.models import ffmpeg
+
+    calls = []
+    monkeypatch.setattr(vendoring, "ensure_chord_model", lambda log=print: calls.append("model") or Path("m"))
+    monkeypatch.setattr(ffmpeg, "ffmpeg_paths", lambda: calls.append("ffmpeg") or (Path("ff"), Path("fp")))
+    assert main(["setup"]) == 0
+    assert calls == ["model", "ffmpeg"]
+    assert "ff" in capsys.readouterr().out

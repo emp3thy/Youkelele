@@ -39,9 +39,14 @@ def recognise_chords(
         cwd=chord_model_dir(),
         capture_output=True,
         text=True,
-        check=True,
     )
-    for line in result.stderr.splitlines():
+    stderr_lines = [line for line in result.stderr.splitlines() if line.strip()]
+    for line in stderr_lines:
+        log(line)
+    for line in result.stdout.splitlines()[-5:]:
         if line.strip():
             log(line)
+    if result.returncode != 0:
+        tail = "\n".join(stderr_lines[-20:])
+        raise RuntimeError(f"chord model exited with code {result.returncode}:\n{tail}")
     return parse_lab(out_lab)
