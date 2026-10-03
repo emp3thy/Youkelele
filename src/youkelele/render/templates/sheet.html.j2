@@ -81,11 +81,11 @@
   </div>
 </div>
 
-<script type="text/plain" id="tex">{{ tex }}</script>
+<script type="application/json" id="tex">{{ tex_json }}</script>
 <script src="{{ assets_rel }}/alphaTab.min.js"></script>
 <script>
 (function () {
-  const tex = document.getElementById("tex").textContent;
+  const tex = JSON.parse(document.getElementById("tex").textContent);
   const hosts = Array.from(document.querySelectorAll(".at-section"));
   let pending = hosts.length;
   window.__rendered = false;

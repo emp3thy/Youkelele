@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from playwright.sync_api import sync_playwright
-
 
 def html_to_pdf(
     html_path: Path,
@@ -18,6 +16,9 @@ def html_to_pdf(
 
     ``console``, when given, collects the page's console errors and uncaught exceptions.
     """
+    # Imported here so that importing the chain does not pay for Playwright.
+    from playwright.sync_api import sync_playwright
+
     with sync_playwright() as p:
         browser = p.chromium.launch(args=["--allow-file-access-from-files"])
         try:

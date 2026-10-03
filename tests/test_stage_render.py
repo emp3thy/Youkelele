@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import re
 from pathlib import Path
 
 import pytest
@@ -93,7 +95,8 @@ def test_render_stage_writes_html_and_calls_pdf_writer(tmp_path):
     assert (out / "sheet.pdf").read_bytes() == b"%PDF-fake"
     html = html_path.read_text(encoding="utf-8")
     assert 'data-start-bar="3"' in html
-    assert layout.path("score/score.alphatex").read_text(encoding="utf-8") in html
+    match = re.search(r'<script type="application/json" id="tex">(.*?)</script>', html, re.S)
+    assert json.loads(match.group(1)) == layout.path("score/score.alphatex").read_text(encoding="utf-8")
     assert (out / "assets" / "alphaTab.min.js").is_file()
     assert (out / "assets" / "font" / "Bravura.woff2").is_file()
     assert (out / "assets" / "LICENSE").is_file()

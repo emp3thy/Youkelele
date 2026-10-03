@@ -53,8 +53,10 @@ def render_html(score: Score, alphatex: str, assets_rel: str = "assets") -> str:
         tuning=" ".join(score.instrument.tuning),
         diagrams=diagrams,
         sections=sections,
-        # alphaTex goes into <script type="text/plain"> verbatim: backslashes and quotes must survive.
-        tex=Markup(alphatex),
+        # The alphaTex carries untrusted title/artist text, so it is embedded as a JSON string in
+        # <script type="application/json">; escaping every "<" as < means no "</script" or
+        # "<!--" can appear inside the block, and JSON.parse restores the exact text.
+        tex_json=Markup(json.dumps(alphatex).replace("<", "\\u003c")),
         assets_rel=assets_rel,
         font_directory=Markup(json.dumps(assets_rel + "/font/")),
         scale=0.75 if score.slots_per_bar == 16 else 0.85,

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 
 from youkelele.music.alphatex import score_to_alphatex
@@ -47,6 +48,12 @@ def _score(sections, strum_source="other_stem", slots_per_bar=8):
     )
 
 
+def _embedded_tex(html: str) -> str:
+    match = re.search(r'<script type="application/json" id="tex">(.*?)</script>', html, re.S)
+    assert match is not None
+    return json.loads(match.group(1))
+
+
 def _two_sections(**kwargs):
     return _score([_section("Verse 1", 8, 0), _section("Chorus", 4, 8)], **kwargs)
 
@@ -60,10 +67,9 @@ def test_html_inlines_tex_and_disables_workers():
     assert "tex: true" in html
     assert 'fontDirectory: "assets/font/"' in html
     assert '<script src="assets/alphaTab.min.js"></script>' in html
-    assert '\\chord ("C"' in html
-    match = re.search(r'<script type="text/plain" id="tex">(.*?)</script>', html, re.S)
-    assert match is not None
-    assert match.group(1) == tex
+    assert '\\chord ("C"' in tex
+    assert 'JSON.parse(document.getElementById("tex").textContent)' in html
+    assert _embedded_tex(html) == tex
     # other fields are escaped normally
     assert "Song &amp; Dance" in html
 
@@ -139,3 +145,16 @@ def test_html_has_one_legend_diagram_per_chord():
     html = render_html(_two_sections(), "tex")
     legend = html[html.index('class="legend"'):html.index('class="sections"')]
     assert legend.count("<svg") == 1
+
+
+def test_html_hostile_title_cannot_close_the_tex_block():
+    score = _two_sections().model_copy(
+        update={"title": "My </script><script>alert(1)</script> Song", "artist": "<!-- x"}
+    )
+    tex = score_to_alphatex(score)
+    html = render_html(score, tex)
+    block = html[html.index('<script type="application/json" id="tex">'):]
+    block = block[: block.index("</script>")]
+    assert "</script" not in block and "<!--" not in block
+    assert html.count("<script") == html.count("</script>") == 3
+    assert _embedded_tex(html) == tex
