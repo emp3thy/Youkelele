@@ -1,3 +1,6 @@
+import subprocess
+import sys
+
 import pytest
 
 from tests.fakes import make_fake_stage
@@ -202,3 +205,9 @@ def test_setup_reports_vendoring_error_in_one_line(monkeypatch, capsys):
     assert out.strip().splitlines() == [
         "setup failed: git is not installed or not on PATH; install git and retry"
     ]
+
+
+@pytest.mark.parametrize("module", ["youkelele", "youkelele.cli"])
+def test_module_entry_point_runs_main(module):
+    proc = subprocess.run([sys.executable, "-m", module, "--version"], capture_output=True, text=True)
+    assert proc.returncode == 0 and "0.1.0" in proc.stdout
