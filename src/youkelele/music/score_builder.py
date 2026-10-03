@@ -102,6 +102,12 @@ def build_score(
                         slots=list(pattern.slots[slot:end]),
                     )
                 )
+            if chord_list and chord_list[0].start_slot > 0:
+                lead = chord_list[0].start_slot
+                chord_list.insert(
+                    0,
+                    ScoreChord(name="N.C.", diagram=-1, start_slot=0, slots=list(pattern.slots[:lead])),
+                )
             if not chord_list:
                 chord_list.append(
                     ScoreChord(name="N.C.", diagram=-1, start_slot=0, slots=list(pattern.slots))

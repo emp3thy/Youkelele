@@ -140,3 +140,23 @@ def test_bar_without_chord_gets_nc():
     score = _score(2, [(0, 1, "C"), (1, 2, "N")], {"C": C, "N": None})
     (nc,) = _chords(score, 1)
     assert (nc.name, nc.diagram, nc.start_slot, nc.slots) == ("N.C.", -1, 0, ISLAND)
+
+
+def test_leading_gap_in_bar_is_filled_with_nc():
+    score = _score(1, [(0, 0.5, "N"), (0.5, 1, "C")], {"N": None, "C": C})
+    chords = _chords(score, 0)
+    assert [(c.name, c.diagram, c.start_slot) for c in chords] == [("N.C.", -1, 0), ("C", 0, 4)]
+    assert sum(len(c.slots) for c in chords) == 8
+
+
+def test_every_bar_has_exactly_slots_per_bar_slots():
+    score = _score(
+        4,
+        [(0.5, 1, "C"), (1, 1.4, "N"), (1.4, 2.3, "G"), (2.3, 2.6, "N"), (3.5, 4, "C")],
+        {"C": C, "G": G, "N": None},
+    )
+    for section in score.sections:
+        for bar in section.bars:
+            slots = [s for c in bar.chords for s in c.slots]
+            assert len(slots) == score.slots_per_bar
+            assert bar.chords[0].start_slot == 0

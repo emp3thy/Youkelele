@@ -148,3 +148,14 @@ def test_alphatex_capo_artist_and_quote_escaping():
     assert '\\title "Say \\"Hi\\""' in text
     assert "\\artist" not in text
     assert "\\capo 2" in text
+
+
+def test_alphatex_nc_bar_emits_rests_with_chord_name_on_first_beat():
+    bar = _one_bar("N.C.", -1, ISLAND)
+    text = score_to_alphatex(_score([_section([bar])], []))
+    (beat_line,) = [line for line in text.splitlines() if line.startswith(":8")]
+    expected = (
+        ':8 r{ch "N.C." lyrics "D"} r{lyrics "-"} r{lyrics "D"} r{lyrics "U"} '
+        'r{lyrics "-"} r{lyrics "U"} r{lyrics "D"} r{lyrics "U"} |'
+    )
+    assert beat_line == expected
