@@ -6,6 +6,8 @@ import re
 from collections.abc import Sequence
 from pathlib import Path
 
+DEFAULT_RUNS_DIR = "runs"
+
 _YOUTUBE_ID = re.compile(r"(?:[?&]v=|youtu\.be/|shorts/)([A-Za-z0-9_-]{11})")
 
 

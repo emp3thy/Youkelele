@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Literal
 
 from youkelele import __version__
-from youkelele.layout import RunLayout, slug_for
+from youkelele.layout import DEFAULT_RUNS_DIR, RunLayout, slug_for
 from youkelele.manifest import (
     Manifest,
     StageRecord,
@@ -75,6 +75,22 @@ def check_requirements(
     return missing
 
 
+def _quote(text: str) -> str:
+    """Double-quote an argument so a pasted command survives "&" and spaces in any shell."""
+    return '"' + text.replace('"', '\\"') + '"'
+
+
+def resume_command(
+    source: str, number: int, runs_dir: str | Path = DEFAULT_RUNS_DIR, instrument: str = "ukulele"
+) -> str:
+    parts = ["youkelele run", _quote(source), f"--from {number}"]
+    if Path(runs_dir) != Path(DEFAULT_RUNS_DIR):
+        parts.append(f"--runs-dir {_quote(str(runs_dir))}")
+    if instrument != "ukulele":
+        parts.append(f"--instrument {instrument}")
+    return " ".join(parts)
+
+
 def _move_into_place(tmp: Path, final: Path) -> None:
     if final.exists():
         shutil.rmtree(final)
@@ -91,6 +107,9 @@ def run_chain(
     start: int = 0,
     end: int | None = None,
     log: Callable[[str], None] = print,
+    *,
+    runs_dir: str | Path = DEFAULT_RUNS_DIR,
+    instrument: str | None = None,
 ) -> Manifest:
     run_dir = Path(run_dir)
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -140,7 +159,9 @@ def run_chain(
                 stage.name,
                 number,
                 exc,
-                f"youkelele run {options.source} --from {number}",
+                resume_command(
+                    options.source, number, runs_dir, instrument or options.instrument
+                ),
             ) from exc
         _move_into_place(tmp, layout.folder(stage.name))
         manifest.stages[stage.name] = StageRecord(

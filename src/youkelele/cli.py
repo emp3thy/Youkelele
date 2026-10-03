@@ -3,6 +3,8 @@
 import argparse
 
 from youkelele import __version__, commands
+from youkelele.layout import DEFAULT_RUNS_DIR
+from youkelele.profiles import PROFILES
 
 SUBCOMMANDS = ("run", "stages", "status", "setup", "evaluate")
 HANDLERS = {
@@ -14,12 +16,12 @@ HANDLERS = {
 }
 
 
-def _add_instrument(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--instrument", default="ukulele")
+def _add_instrument(parser: argparse.ArgumentParser, default: str | None = "ukulele") -> None:
+    parser.add_argument("--instrument", choices=sorted(PROFILES), default=default)
 
 
 def _add_runs_dir(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--runs-dir", default="runs")
+    parser.add_argument("--runs-dir", default=DEFAULT_RUNS_DIR)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -35,17 +37,15 @@ def build_parser() -> argparse.ArgumentParser:
 
     run = subparsers.add_parser("run", help="run the chain for a source")
     run.add_argument("source")
-    _add_instrument(run)
-    run.add_argument("--tier", choices=("easy", "full"), default="easy")
-    run.add_argument(
-        "--beat-octave", choices=("auto", "none", "half", "double"), default="auto"
-    )
-    run.add_argument("--sections-k", type=int, default=None)
-    run.add_argument("--meter", default="4/4")
-    run.add_argument("--separator", choices=("demucs", "roformer-sw"), default="demucs")
-    run.add_argument(
-        "--chord-model", choices=("cnn-lstm", "chordmini"), default="cnn-lstm"
-    )
+    # Option flags default to None meaning "not given": a resumed run keeps the options saved
+    # in the manifest and overlays only the flags given explicitly (commands.run_command).
+    _add_instrument(run, default=None)
+    run.add_argument("--tier", choices=("easy", "full"), default=None)
+    run.add_argument("--beat-octave", choices=("auto", "none", "half", "double"), default=None)
+    run.add_argument("--sections-k", default=None, help="a whole number of sections, or auto")
+    run.add_argument("--meter", default=None, help="N/D, such as 4/4")
+    run.add_argument("--separator", choices=("demucs", "roformer-sw"), default=None)
+    run.add_argument("--chord-model", choices=("cnn-lstm", "chordmini"), default=None)
     run.add_argument("--from", dest="start", default=None)
     run.add_argument("--to", dest="end", default=None)
     _add_runs_dir(run)

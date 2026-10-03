@@ -140,3 +140,20 @@ def test_build_chain_appends_render_after_profile_stages():
     assert chain[:2] == [a, b]
     assert [s.name for s in chain] == ["a", "b", "render"]
     assert isinstance(chain[-1], RenderStage)
+
+
+def test_resume_command_names_non_default_runs_dir_and_instrument(tmp_path):
+    chain = [fake("a", (), ("a/a.txt",), fail=True)]
+    opts = RunOptions(source='my "song".wav')
+    with pytest.raises(StageFailed) as e:
+        run_chain(tmp_path, chain, opts, log=quiet, runs_dir="out", instrument="guitar")
+    assert e.value.resume_command == (
+        'youkelele run "my \\"song\\".wav" --from 0 --runs-dir "out" --instrument guitar'
+    )
+
+
+def test_resume_command_omits_defaults(tmp_path):
+    chain = [fake("a", (), ("a/a.txt",), fail=True)]
+    with pytest.raises(StageFailed) as e:
+        run_chain(tmp_path, chain, RunOptions(source="song.wav"), log=quiet)
+    assert e.value.resume_command == 'youkelele run "song.wav" --from 0'

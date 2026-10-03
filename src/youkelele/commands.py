@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import argparse
+import re
 from pathlib import Path
 
+from youkelele.jsonio import ArtifactError
 from youkelele.layout import slug_for
+from youkelele.manifest import MANIFEST_NAME, load_manifest
 from youkelele.options import RunOptions
 from youkelele.preflight import check_environment
 from youkelele.profiles import get_profile
@@ -17,18 +20,45 @@ def _chain(instrument: str) -> list[Stage]:
     return build_chain(get_profile(instrument))
 
 
+_METER = re.compile(r"^([0-9]+)/([0-9]+)$")
+_CHOICE_FLAGS = ("instrument", "tier", "beat_octave", "separator", "chord_model")
+
+
+def _option_overrides(args: argparse.Namespace) -> dict[str, object] | str:
+    """The option flags given explicitly, or a one-line error for an invalid value."""
+    overrides: dict[str, object] = {
+        name: getattr(args, name) for name in _CHOICE_FLAGS if getattr(args, name) is not None
+    }
+    if args.meter is not None:
+        match = _METER.match(args.meter.strip())
+        if not match or int(match.group(1)) < 1 or int(match.group(2)) < 1:
+            return f"invalid --meter {args.meter!r}: expected N/D with positive whole numbers, such as 4/4"
+        overrides["meter"] = f"{int(match.group(1))}/{int(match.group(2))}"
+    if args.sections_k is not None:
+        text = args.sections_k.strip()
+        if text == "auto":
+            overrides["sections_k"] = None
+        elif text.isdecimal() and int(text) >= 1:
+            overrides["sections_k"] = int(text)
+        else:
+            return f"invalid --sections-k {args.sections_k!r}: expected a whole number of at least 1, or auto"
+    return overrides
+
+
 def run_command(args: argparse.Namespace) -> int:
-    options = RunOptions(
-        source=args.source,
-        instrument=args.instrument,
-        tier=args.tier,
-        beat_octave=args.beat_octave,
-        sections_k=args.sections_k,
-        meter=args.meter,
-        separator=args.separator,
-        chord_model=args.chord_model,
-    )
-    run_dir = Path(args.runs_dir) / slug_for(args.source)
+    overrides = _option_overrides(args)
+    if isinstance(overrides, str):
+        print(overrides)
+        return 2
+    slug = slug_for(args.source)
+    run_dir = Path(args.runs_dir) / slug
+    try:
+        manifest = load_manifest(run_dir)
+    except ArtifactError as exc:
+        print(f"cannot read the saved run: {exc}")
+        return 1
+    saved = manifest.options.model_dump() if manifest is not None else {}
+    options = RunOptions.model_validate({**saved, **overrides, "source": args.source})
     chain = _chain(options.instrument)
     try:
         start = resolve_stage(chain, args.start) if args.start is not None else 0
@@ -46,8 +76,13 @@ def run_command(args: argparse.Namespace) -> int:
     if not chain:
         print("nothing to run: no stages are registered")
         return 0
+    if args.start is None and (run_dir / MANIFEST_NAME).exists():
+        print(f"Existing run {slug} will be overwritten from stage 0")
     try:
-        run_chain(run_dir, chain, options, start, end, log=print)
+        run_chain(
+            run_dir, chain, options, start, end, log=print,
+            runs_dir=args.runs_dir, instrument=options.instrument,
+        )
     except StageFailed as exc:
         print(f"stage {exc.stage} ({exc.number:02d}) failed: {exc.cause}")
         print(f"resume with: {exc.resume_command}")
