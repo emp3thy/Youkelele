@@ -27,26 +27,36 @@
 
 ## Confidence Summary
 
-Every task carries a `**Confidence:**` percentage: how sure we are that we have enough information to complete it reliably to a high standard. Tasks at or above 85% rest on verified facts from the assumption-check reports. The weak points, and what would raise them before or during implementation:
+Every task carries a `**Confidence:**` percentage: how sure we are that we have enough information to complete it reliably to a high standard. The owner's rule is that nothing below 90% is a final state. Nine tasks started below that line; each was raised by investigation or by a spike run on this machine, and every number below is backed by a report in `docs/superpowers/specs/` (`2026-10-03-assumption-checks-*.md`, `2026-10-03-spike-*.md`).
 
-| Task | Confidence | What would raise it |
+| Task | Confidence | Evidence |
 |---|---|---|
-| 10 Strums | 65% | Run onset detection on the real guitar stems of the two target songs once Tasks 6 to 8 exist, inspect the bar slot vectors by eye against the UkuTabs and Ultimate Guitar patterns, and tune the three thresholds before writing the Viterbi tests. A half-day spike. |
-| 14 End to end | 70% | Generate the synthetic clip early (it has no dependencies) and run Beat This! and the chord model on it during Tasks 8 and 9; adjust the clip, not the assertion, if they disagree. |
-| 8 Grid | 75% | Try the Laplacian segmentation on the two target songs' audio once Task 6 exists and compare boundaries with the Hooktheory section list in the research notes. |
-| 9 Harmony | 80% | Do the pinned clone and hash computation as the very first step of the task; everything after is verified. |
-| 11 Arrange | 80% | Print the chosen shapes for the two target songs and have a ukulele player read them; adjust `shape_cost` weights from that. |
-| 13 Render | 80% | Render one real sheet to PDF and check page breaks and diagram legibility by eye before writing the SVG tests in stone. |
+| 1 Scaffold | 95% | Verified dependency resolution and imports on Python 3.12 |
+| 2 Schemas | 95% | Pure pydantic |
+| 3 Stage contract | 92% | Pure Python |
+| 4 Runner | 90% | Pure Python; the atomic-move and stale-hash logic is the only novel code |
+| 5 Preflight | 95% | static-ffmpeg install folder and marker file verified |
+| 6 Ingest | 95% | Two real downloads through the library API with pip Deno and ffmpeg |
+| 7 Separate | 95% | Custom output names proven; 0.5x real time measured |
+| 8 Grid | 90% | Tempo octave and bar phase 5 of 5, choruses 5 of 5, on five real songs; two grid defects found and fixed |
+| 9 Harmony | 92% | Pinned commit and hashes; subprocess path proven on full songs |
+| 10 Strums | 90% | As-played output defined with the owner after a 0 of 14 result against textbook patterns; every threshold measured on five songs |
+| 11 Arrange | 92% | Capo and shapes match published charts on seven chord sets, four blind |
+| 12 Score | 92% | Fourteen alphaTex cases rendered; two syntax assumptions corrected |
+| 13 Render | 90% | 64-bar prototype printed to six clean A4 pages |
+| 14 End to end | 93% | Whole chain except render exercised on the synthetic clip |
+| 15 Evaluate | 90% | mir_eval metrics, standard formats |
 
-Tasks 10 and 14 are the only ones where the plan's tests could all pass while the product is still poor. Treat their confidence as a signal to look at real output, not just green tests.
+Two honest limits remain inside the 90% ratings and are handled by design: the tempo-octave rule is a threshold that would halve a genuine 141 to 190 bpm song (`--beat-octave none` and the printed bar length cover it), and sections sharing one chord progression cannot be separated from audio features (the editable `grid.json` covers it). The strum stage promises the strike grid as played with a repeatability score, not a textbook pattern name; that is a product decision recorded in the spec.
 
 ## Review Focus
 
 1. **Unreachable or private YouTube video.** A person pastes a URL that yt-dlp cannot fetch. Expected: three retries with backoff, then a one-line failure naming the URL and the yt-dlp error, no run folder left half-made. Test added to Task 6.
 2. **Hand-edited `grid.json` whose sections no longer cover every bar.** A person deletes a section while fixing labels. Expected: the next stage refuses with the file name and the field path, not an index error deep in strums. Test added to Task 2.
-3. **Guitar stem is near-silent** (keyboard-driven song, or separation failed on the guitar). Expected: strum onsets come from the full mix, `strums.json` says `"source": "mix"`, and the sheet header says so. Test added to Task 10.
-4. **Chord label with no shape in chords-db** (for example `E:aug7`, or an inversion such as `A:min/b3`). Expected: inversion dropped, unknown quality reduced to its triad, substitution recorded, never a crash. Test added to Task 11.
-5. **Song in 3/4 given with `--meter 3/4`.** Expected: six or twelve slots per bar, only 3/4 patterns in the vocabulary, `\ts 3 4` in the alphaTex, and the strum box drawn with three beats. Tests added to Tasks 10 and 12.
+3. **Neither the guitar nor the other stem carries the strummed instrument** (keyboard-driven song, or separation failed). Expected: strum onsets come from the full mix with the mute rule off, `strums.json` says `"source": "mix"`, and the sheet header says so. Test added to Task 10.
+4. **Chord label with no shape in chords-db** (for example `E:maj(9)`, or an inversion such as `A:min/b3`). Expected: inversion dropped, unknown quality reduced to its triad, substitution recorded, never a crash. Test added to Task 11.
+5. **Song in 3/4 given with `--meter 3/4`.** Expected: six or twelve slots per bar, `\ts 3 4` in the alphaTex, and the strum box drawn with three beats. Tests added to Tasks 10 and 12.
+6. **Beat tracker returns the doubled tempo** (slow songs; measured on two of five). Expected: the auto octave rule halves it, bars come out regular even when the doubling switches on and off mid-song, and the printed bar length makes a wrong decision obvious. Tests added to Task 8.
 
 ---
 
@@ -110,12 +120,12 @@ git commit -m "feat: scaffold youkelele package and CLI entry point"
   - `SourceInfo(url: str | None, path: str | None, video_id: str | None, title: str, artist: str | None, duration: float, sample_rate: int, channels: int, fetched_at: datetime)`
   - `Bar(index: int, start: float, end: float, beats: list[int])`
   - `Section(label: str, start_bar: int, end_bar: int, confidence: float)` where `end_bar` is exclusive.
-  - `Grid(bpm: float, meter: Meter, beats: list[float], downbeats: list[int], bars: list[Bar], sections: list[Section])` with validators: beats strictly increasing; every downbeat index in range; bars indexed 0..n-1 in order; sections in order, contiguous, first `start_bar == 0`, last `end_bar == len(bars)`.
+  - `Grid(bpm: float, meter: Meter, beats: list[float], downbeats: list[int], bars: list[Bar], sections: list[Section], octave_decision: Literal["none", "half", "double"], bar_loudness_db: list[float], sections_k: int, largest_cluster_share: float, chorus_margin_db: float | None, labels_low_confidence: bool)` with validators: beats strictly increasing; every downbeat index in range; bars indexed 0..n-1 in order; `len(bar_loudness_db) == len(bars)`; sections in order, contiguous, first `start_bar == 0`, last `end_bar == len(bars)`.
   - `Key(tonic: str, mode: Literal["major", "minor"], confidence: float)`
   - `ChordEvent(bar: int, beat: int, start: float, end: float, label: str, triad: str, confidence: float)`
   - `Chords(key: Key, events: list[ChordEvent])`
-  - `SectionPattern(section: int, slots: list[Slot], confidence: float, uncertain: bool)`
-  - `Strums(slots_per_bar: int, source: Literal["guitar_stem", "mix"], patterns: list[SectionPattern], bar_onsets: list[list[Slot]])` with validator: every slot list has length `slots_per_bar`.
+  - `SectionPattern(section: int, slots: list[Slot], confidence: float, bar_repeat: float, uncertain: bool, no_instrument: bool, inherited_from: int | None)`
+  - `Strums(slots_per_bar: int, source: Literal["guitar_stem", "other_stem", "mix"], source_ratio: float, grid_fit: float, uncertain: bool, patterns: list[SectionPattern], bar_onsets: list[list[Slot]])` with validator: every slot list has length `slots_per_bar`.
   - `Shape(frets: list[int], fingers: list[int], base_fret: int, barres: list[int])` (frets in diagram order left to right, G C E A for ukulele, -1 muted).
   - `ArrangedChord(event: int, name: str, shape: Shape)`
   - `Substitution(event: int, original: str, chosen: str, reason: str)`
@@ -125,7 +135,8 @@ git commit -m "feat: scaffold youkelele package and CLI entry point"
   - `ScoreChord(name: str, diagram: int, start_slot: int, slots: list[Slot])`
   - `ScoreBar(index: int, chords: list[ScoreChord])`
   - `ScoreSection(label: str, pattern: list[Slot], uncertain: bool, bars: list[ScoreBar])`
-  - `Score(instrument: Instrument, title: str, artist: str | None, key: str, bpm: float, meter: Meter, tier: str, slots_per_bar: int, strum_source: Literal["guitar_stem", "mix"], chord_diagrams: list[ChordDiagram], sections: list[ScoreSection])`
+  - `ScoreSection` also carries `bar_repeat: float` and `no_instrument: bool`.
+  - `Score(instrument: Instrument, title: str, artist: str | None, key: str, bpm: float, meter: Meter, tier: str, slots_per_bar: int, strum_source: Literal["guitar_stem", "other_stem", "mix"], strums_uncertain: bool, chord_diagrams: list[ChordDiagram], sections: list[ScoreSection])`
 - Produces, in `jsonio.py`: `load_model(path: Path, model: type[T]) -> T` and `save_model(path: Path, obj: BaseModel) -> None`; both raise `ArtifactError(path: Path, detail: str)` whose `str()` is `"<path>: <field.path>: <message>"` for validation failures.
 
 - [ ] **Step 1: Write the failing tests**
@@ -182,7 +193,7 @@ git commit -m "feat: add validated artifact schemas and JSON IO"
 - Create: `src/youkelele/options.py`, `src/youkelele/stage.py`, `src/youkelele/layout.py`, `src/youkelele/manifest.py`, `src/youkelele/paths.py`, `tests/test_layout.py`, `tests/test_manifest.py`
 
 **Interfaces:**
-- `options.py`: `RunOptions(BaseModel)` with `source: str`, `instrument: str = "ukulele"`, `tier: Literal["easy","full"] = "easy"`, `beat_octave: Literal["none","half","double"] = "none"`, `meter: str = "4/4"`, `separator: Literal["demucs","roformer-sw"] = "demucs"`, `chord_model: Literal["cnn-lstm","chordmini"] = "cnn-lstm"`.
+- `options.py`: `RunOptions(BaseModel)` with `source: str`, `instrument: str = "ukulele"`, `tier: Literal["easy","full"] = "easy"`, `beat_octave: Literal["auto","none","half","double"] = "auto"`, `sections_k: int | None = None`, `meter: str = "4/4"`, `separator: Literal["demucs","roformer-sw"] = "demucs"`, `chord_model: Literal["cnn-lstm","chordmini"] = "cnn-lstm"`.
 - `paths.py`: `cache_dir() -> Path` returning `$YOUKELELE_CACHE` or `~/.youkelele`; `package_data(*parts) -> Path` resolving inside `src/youkelele/data`; `vendor_dir(*parts) -> Path` resolving inside `src/youkelele/vendor`.
 - `stage.py`:
   - `class Stage(ABC)`: class attributes `name: ClassVar[str]`, `requires: ClassVar[tuple[str, ...]]`, `produces: ClassVar[tuple[str, ...]]`; abstract `run(self, ctx: StageContext) -> None`.
@@ -424,7 +435,7 @@ git commit -m "feat: add separate stage using audio-separator with Demucs htdemu
 
 ### Task 8: Grid stage (beats, tempo, bars, sections)
 
-**Confidence:** 75%. Beat This! is verified, but the Laplacian segmentation on bar-synchronous features and the heuristic section labeller are our own design with no ground truth yet; the synthetic ABAB test and the `k` heuristic may need tuning on real songs.
+**Confidence:** 90%. Three spike rounds (models report Spike D, audio round two Spike 3, grid round three) measured every rule below on five real songs: tempo octave and bar phase right on 5 of 5, modal-phase bars, iterative cluster split, bar-weighted loudness labeller right on 5 of 5 choruses, plus two grid defects found and fixed (mid-song octave switching, a dropped beat flipping the bar phase). Two limits remain and are handled by design rather than by more rules: the octave threshold would halve a genuine 141 to 190 bpm song, which `--beat-octave none` and the printed bar length cover; and sections that share one chord progression are not separable from audio features, which the editable `grid.json` covers.
 
 **Files:**
 - Create: `src/youkelele/models/beats.py`, `src/youkelele/music/__init__.py`, `src/youkelele/music/tempo.py`, `src/youkelele/music/sections.py`, `src/youkelele/stages/grid.py`, `tests/test_tempo.py`, `tests/test_sections.py`, `tests/test_stage_grid.py`
@@ -432,24 +443,38 @@ git commit -m "feat: add separate stage using audio-separator with Demucs htdemu
 
 **Interfaces:**
 - `models/beats.py`: `@dataclass BeatResult(beats: list[float], downbeats: list[float])`; `detect_beats(wav: Path) -> BeatResult` using `beat_this.inference.Audio2Beats(checkpoint_path="final0", device="cpu", dbn=False)` on audio read with `soundfile` (mono mix, native rate passed as `sr`); `CHECKPOINT = "final0"`.
-- `music/tempo.py`: `bpm_from_beats(beats: Sequence[float]) -> float` (60 / median interval); `apply_beat_octave(beats, downbeats, mode: Literal["none","half","double"]) -> tuple[list[float], list[float]]` (half keeps every other beat starting from the first downbeat; double inserts midpoints); `downbeat_indices(beats, downbeats, tol=0.07) -> list[int]`; `build_bars(beats: Sequence[float], downbeat_idx: Sequence[int], meter: Meter, duration: float) -> list[Bar]` (a bar spans one downbeat to the next; a leading partial bar before the first downbeat becomes bar 0 if it holds at least one beat; the final bar ends at `duration`).
-- `music/sections.py`: `beat_sync_features(y: np.ndarray, sr: int, beats: Sequence[float]) -> np.ndarray` (CQT chroma + MFCC stacked, synced to beats with `librosa.util.sync`); `segment_boundaries(features: np.ndarray, bars: Sequence[Bar], k: int | None = None) -> list[int]` (Laplacian method from the librosa tutorial on bar-synchronous features: recurrence_matrix(width=3, mode="affinity", sym=True) -> timelag_filter(median) -> laplacian -> eigh -> KMeans with k chosen as `max(3, min(8, round(n_bars / 8)))` when None; boundaries at cluster changes, snapped to bar starts, minimum section length 2 bars); `label_sections(boundaries: Sequence[int], cluster_ids: Sequence[int], n_bars: int) -> list[Section]` using: first segment "intro" if it is not the most repeated cluster; the most frequent cluster "chorus"; the second "verse"; a cluster that occurs once in the middle "bridge"; a last segment that is a new cluster "outro"; others "verse 2", "verse 3" and so on; confidence 0.5 for every heuristic label.
-- `stages/grid.py`: `class GridStage(Stage)` with `name="grid"`, `requires=("ingest/audio.wav",)`, `produces=("grid/grid.json",)`; constructor `GridStage(detector=detect_beats)`; applies `options.beat_octave`, `Meter.parse(options.meter)`, writes `Grid`.
+- `music/tempo.py` (rules measured in the grid round-three report):
+  - `fill_gaps(beats: Sequence[float], factor: float = 1.6) -> list[float]`: for each interval greater than `factor` times the median of the surrounding 17 intervals, insert `round(gap / median) - 1` evenly spaced beats (a dropped beat otherwise flips the bar phase for the rest of the song).
+  - `bpm_from_beats(beats) -> float` = 60 / median interval, after gap filling.
+  - `decide_octave(bpm: float, mode: Literal["auto","none","half","double"]) -> Literal["none","half","double"]`: `auto` returns `half` if and only if `bpm > 140 and 60 <= bpm / 2 <= 95`, else `none`; other modes pass through. Do not use `librosa.feature.tempo`, onset autocorrelation or phase share for this decision (measured worse on 2 to 4 of 5 songs). `librosa.beat.tempo` no longer exists in librosa 1.0.
+  - `normalise_octave(beats, downbeat_idx, target_period: float, tol: float = 0.75) -> tuple[list[float], list[int]]`: halving as a local pass that drops every beat closer than `tol * target_period` to the last kept beat, starting on the beat whose index parity equals the modal downbeat parity; this also repairs mid-song octave switching (Over the Rainbow). `double` inserts midpoints.
+  - `downbeat_indices(beats, downbeats, tol=0.07) -> list[int]`; `modal_phase(downbeat_idx, numerator) -> tuple[int, float]` (phase and share).
+  - `build_bars(beats, downbeat_idx, meter, duration, chroma_per_beat: np.ndarray | None = None) -> list[Bar]`: bar starts on the modal downbeat phase; when two phases tie or nearly tie after halving, resolve by chroma change, keeping the phase whose adjacent-bar mean-chroma distance (`1 - cosine`) is larger; a leading partial bar before the first full bar becomes bar 0 if it holds at least one beat; the final bar ends at `duration`; a downbeat at the exact end of the audio is tolerated.
+- `music/sections.py`: `bar_features(y, sr, bars) -> tuple[np.ndarray, list[float]]` (CQT chroma with 36 bins per octave + 20 MFCC, synced to beats with `librosa.util.sync`, then averaged per bar; plus per-bar RMS in dB); `segment_bars(features: np.ndarray, k: int | None = None) -> tuple[list[int], int, float]` (Laplacian method from the librosa tutorial: recurrence_matrix(width=3, mode="affinity", sym=True) -> timelag_filter(median) -> laplacian -> eigh -> KMeans; when `k` is None start at 3 and increment while the largest cluster covers more than 60% of bars, cap 6; returns cluster id per bar, the k used and the largest share; never silhouette, which picks 3 on every song); `boundaries_from_clusters(cluster_ids, min_bars: int = 2) -> list[int]` (a segment shorter than `min_bars` loses its end boundary and merges forward; then adjacent equal clusters merge; minimum is in bars, not seconds); `label_sections(boundaries, cluster_ids, bar_loudness_db) -> tuple[list[Section], float | None]` with cluster loudness as the BAR-WEIGHTED mean dB over all bars of the cluster, in this order: a cluster covering more than 60% of bars is `verse`; `chorus` is the loudest cluster among those occurring at least twice and not already verse (fallback: most bars); `verse` if unset is the remaining recurring cluster with most bars; a once-only cluster is `intro` if first, `outro` if last, else `bridge`, `bridge 2`; other recurring clusters `verse 2`, `verse 3`; returns the chorus margin in dB (chorus minus the next recurring cluster); confidence per label 0.5, lowered to 0.3 when the margin is under 1.5 dB.
+- `stages/grid.py`: `class GridStage(Stage)` with `name="grid"`, `requires=("ingest/audio.wav",)`, `produces=("grid/grid.json",)`; constructor `GridStage(detector=detect_beats)`; order: detect, `fill_gaps`, `bpm_from_beats`, `decide_octave`, `normalise_octave` or double, `build_bars`, `bar_features`, `segment_bars` (with `options.sections_k`), `boundaries_from_clusters`, `label_sections`; writes `Grid` including `octave_decision`, `sections_k`, `largest_cluster_share`, `chorus_margin_db`, `labels_low_confidence`; logs the median bar length in seconds and the octave decision so a wrong octave is visible at a glance.
 
 - [ ] **Step 1: Write the failing tests**
 
 ```python
 # tests/test_tempo.py
 def test_bpm_from_regular_beats(): assert bpm_from_beats([0, 0.5, 1.0, 1.5]) == pytest.approx(120)
-def test_half_octave_keeps_downbeat_aligned_beats(): ...   # beats at 0.25 s spacing, downbeats every 8 -> every other beat from first downbeat, downbeats preserved
+def test_fill_gaps_inserts_one_dropped_beat(): ...         # 0.5 s grid with one 1.0 s gap -> one beat inserted at the midpoint
+def test_decide_octave_auto_halves_150_keeps_139_and_85(): assert decide_octave(150, "auto") == "half"; assert decide_octave(139, "auto") == "none"; assert decide_octave(85, "auto") == "none"
+def test_normalise_octave_repairs_half_doubled_list(): ... # beats doubled for the first half only -> regular bars, max/median bar length < 1.1
+def test_normalise_octave_starts_on_modal_downbeat_parity(): ...
 def test_double_octave_inserts_midpoints(): ...
-def test_build_bars_handles_pickup_and_tail(): ...         # beats 0.5..., first downbeat at 1.5 -> bar 0 is [0.5,1.5) pickup; last bar ends at duration
+def test_build_bars_handles_pickup_tail_and_end_downbeat(): ...  # pickup bar 0; last bar ends at duration; a downbeat at exactly duration does not add a bar
+def test_build_bars_phase_tie_break_by_chroma_change(): ...     # two phases tie on downbeats; chroma changes only on one -> that one wins
 # tests/test_sections.py
-def test_segment_boundaries_recovers_abab_structure(): ... # synthetic features: 32 bars, pattern A(8) B(8) A(8) B(8) with noise -> boundaries [8,16,24] within +-1
-def test_label_sections_names_most_repeated_cluster_chorus(): ...
+def test_segment_bars_recovers_abab_structure(): ...       # synthetic features: 32 bars A(8) B(8) A(8) B(8) with noise -> boundaries [8,16,24] within +-1
+def test_segment_bars_splits_80_percent_cluster(): ...     # one cluster holds 80% at k=3 -> k becomes 4 and share drops below 0.6
+def test_boundaries_min_two_bars_merges_forward(): ...
+def test_label_sections_chorus_is_loudest_recurring_bar_weighted(): ...  # loud recurring cluster with a quiet 3-bar fade tail still wins
+def test_label_sections_order_intro_bridge_outro(): ...
 def test_sections_cover_all_bars_contiguously(): ...       # output validates as Grid sections
 # tests/test_stage_grid.py
-def test_grid_stage_writes_valid_grid_with_fake_detector(tmp_path): ...  # click track 120 bpm fixture; fake detector; bpm approx 120; meter from options "3/4" -> numerator 3
+def test_grid_stage_writes_valid_grid_with_fake_detector(tmp_path): ...  # click track 120 bpm fixture; fake detector; bpm approx 120; meter from options "3/4" -> numerator 3; octave_decision "none"
+def test_grid_stage_sections_k_override(tmp_path): ...
 def test_grid_stage_real_beat_this_on_click_track(tmp_path): ...        # slow; 20 s click at 120 bpm -> bpm within 118..122
 ```
 
@@ -458,7 +483,7 @@ def test_grid_stage_real_beat_this_on_click_track(tmp_path): ...        # slow; 
 Run: `uv run pytest tests/test_tempo.py tests/test_sections.py tests/test_stage_grid.py -v -m "not slow"`
 Expected: FAIL with `ImportError`.
 
-- [ ] **Step 3: Implement the four modules; append `GridStage()` to `GENERIC_STAGES`.**
+- [ ] **Step 3: Implement the four modules; append `GridStage()` to `GENERIC_STAGES`; add `--sections-k` to the CLI.**
 
 - [ ] **Step 4: Run tests**
 
@@ -532,18 +557,17 @@ git commit -m "feat: add harmony stage with vendored Chord-CNN-LSTM, triad reduc
 
 ---
 
-### Task 10: Strums stage (onsets, slots, vocabulary, Viterbi)
+### Task 10: Strums stage (onsets, slots, as-played pattern per section)
 
-**Confidence:** 65%. The slot quantisation, direction rule, emission function and thresholds (mute flatness 0.3, usable-stem RMS ratio 0.05, uncertainty floor 0.45) are our own design with no measurement on real audio; the fake-driven tests will pass, but real-world pattern accuracy is unknown until the two target songs are run and the thresholds tuned.
+**Confidence:** 90%. Two spike rounds ran the strum algorithm on five real songs and the synthetic clip. The decisive finding: the records do not play the beginner patterns that chord sites publish (0 of 14 sections matched on three ukulele-led songs), so the owner chose an "as played" output with no pattern vocabulary. Everything below is measured: the stem routing rule (Demucs puts ukulele in `other`, ratios 0.18 to 0.55 against 0.03 to 0.13 for `guitar`), the 0.05 and 0.10 ratio thresholds (6 to 8 times margin), the 25% slot rule (right on both grids), the mute rule and its failure on mixes (kick drums read as chunks), the 0.6 grid-fit threshold (separates the two irregular songs from the regular ones exactly) and the 0.45 floor. What the stage promises is the strike grid as played with a repeatability score; the synthetic clip recovers `D-DU-UDU` at 0.917 from the mix.
 
 **Files:**
-- Create: `src/youkelele/data/strum_patterns.json`, `src/youkelele/music/onsets.py`, `src/youkelele/music/strum_vocab.py`, `src/youkelele/stages/strums.py`, `tests/test_onsets.py`, `tests/test_strum_vocab.py`, `tests/test_stage_strums.py`
+- Create: `src/youkelele/music/onsets.py`, `src/youkelele/music/as_played.py`, `src/youkelele/stages/strums.py`, `tests/test_onsets.py`, `tests/test_as_played.py`, `tests/test_stage_strums.py`
 
 **Interfaces:**
-- `data/strum_patterns.json`: `{"sources": [three URLs from the rendering check report, B4], "patterns": [{"meter": "4/4", "slots": "D-DU-UDU", "name": "island strum"}, ...]}` containing the 37 4/4 eight-slot rows of the B4 table, the 16-slot `D-DU-UDU-UDU-UD-` (marked `"span_bars": 2`, excluded in version one by the loader), the 3/4 patterns `D-DUD-` and `D-DUDU`, and the 6/8 patterns `D--D-U` and `D-UD-U`. Names only where the table gives one. No prose copied.
-- `music/onsets.py`: `@dataclass Onsets(times: np.ndarray, flatness: np.ndarray)`; `detect_onsets(y: np.ndarray, sr: int) -> Onsets` (`librosa.onset.onset_detect(units="time", backtrack=False)` on spectral flux, with `librosa.feature.spectral_flatness` sampled at each onset frame); `stem_is_usable(stem: np.ndarray, mix: np.ndarray) -> bool` (RMS ratio stem/mix >= 0.05); `choose_slots_per_bar(onsets: Onsets, bars: Sequence[Bar], meter: Meter) -> int` (returns `meter.numerator * 2`, or `* 4` if more than 25% of onsets are nearer a sixteenth position than an eighth position); `quantise_bar(onsets: Onsets, bar: Bar, slots_per_bar: int, mute_threshold: float = 0.3) -> list[Slot]` (nearest slot per onset within half a slot; `x` if flatness > threshold else direction by `direction_for_slot`); `direction_for_slot(i: int, slots_per_bar: int, meter: Meter) -> Literal["D","U"]` (`D` when `i % (slots_per_bar // meter.numerator) == 0` or, for sixteenths, on the eighth positions; `U` otherwise).
-- `music/strum_vocab.py`: `@dataclass Pattern(slots: tuple[Slot, ...], name: str | None, meter: str)`; `load_vocabulary(meter: Meter, slots_per_bar: int) -> list[Pattern]` (filters by meter; expands an 8-slot pattern to 16 slots by inserting `-` when `slots_per_bar == 16`; raises `ValueError` if empty); `emission(observed: Sequence[Slot], pattern: Pattern) -> float` (share of slots where both are strikes with equal direction, both rests, or both mutes; strike-vs-rest mismatch 0; `x` vs `D`/`U` counts 0.5); `decode_section(bars: Sequence[Sequence[Slot]], vocab: Sequence[Pattern], switch_penalty: float = 0.35) -> tuple[Pattern, float]` (Viterbi over bars maximising sum of log emissions minus penalty per switch; the section pattern is the mode of the decoded path; confidence = mean emission of that pattern over the bars that chose it times the share of bars that chose it); `UNCERTAIN_BELOW = 0.45`; `all_down(slots_per_bar, meter) -> Pattern`.
-- `stages/strums.py`: `class StrumsStage(Stage)` with `name="strums"`, `requires=("separate/stems/guitar.wav", "ingest/audio.wav", "grid/grid.json")`, `produces=("strums/strums.json",)`; constructor `StrumsStage(onset_detector=detect_onsets)`. Uses the guitar stem if `stem_is_usable`, else the mix; writes `Strums` with `source` set accordingly and `uncertain=True` plus `all_down` where confidence `< UNCERTAIN_BELOW`.
+- `music/onsets.py`: `StrikeClass = Literal["S", "-", "x"]`; `@dataclass Onsets(times: np.ndarray, centroid: np.ndarray, zcr: np.ndarray)` (`librosa.onset.onset_detect(units="time", backtrack=False)` with library defaults, which measured best; spectral centroid and zero-crossing rate sampled at each onset frame; spectral flatness is NOT used, it never fires on stems); `detect_onsets(y: np.ndarray, sr: int) -> Onsets`; `rms_ratio(part: np.ndarray, mix: np.ndarray) -> float`; `choose_source(guitar: np.ndarray, other: np.ndarray, mix: np.ndarray) -> tuple[Literal["guitar_stem","other_stem","mix"], np.ndarray, float]` (the louder of guitar and other by RMS ratio; the mix when that ratio is below 0.05); `section_has_instrument(stem_section: np.ndarray, mix_section: np.ndarray) -> bool` (ratio >= 0.10); `choose_slots_per_bar(onsets: Onsets, bars: Sequence[Bar], meter: Meter) -> int` (`meter.numerator * 2`, or `* 4` if more than 25% of onsets are nearer an odd sixteenth than an eighth position); `grid_fit(onsets, bars, slots_per_bar) -> float` (share of onsets within 15% of a slot); `mute_mask(onsets: Onsets, enabled: bool) -> np.ndarray[bool]` (centroid < 0.85 x song median AND zcr < 0.65 x song median; `enabled` is False when the source is the mix); `quantise_bar(onsets, muted: np.ndarray[bool], bar: Bar, slots_per_bar: int) -> list[StrikeClass]` (nearest slot within half a slot; `x` if muted else `S`); `direction_for_slot(i: int, slots_per_bar: int, meter: Meter) -> Literal["D","U"]` (`D` on eighth positions, `U` on off-eighths and odd sixteenths); `render_directions(classes: Sequence[StrikeClass], slots_per_bar, meter) -> list[Slot]` (`S` becomes `D` or `U` by position; `x` and `-` unchanged).
+- `music/as_played.py`: `jaccard(a: Sequence[StrikeClass], b: Sequence[StrikeClass]) -> float` over strike positions (`x` counts as a strike with weight 0.5 when matched against `S`); `majority_vector(bars: Sequence[Sequence[StrikeClass]]) -> list[StrikeClass]` (a slot is `S` if struck in more than half the bars, `x` if more than half of those strikes were muted, else `-`); `bar_repeat(bars) -> float` (mean Jaccard between consecutive bars); `section_summary(bars, slots_per_bar, meter) -> tuple[list[Slot], float, float]` returning the rendered majority vector, `confidence` (mean Jaccard of each bar against the majority vector) and `bar_repeat`; `UNCERTAIN_BELOW = 0.45`; `MIN_SECTION_BARS = 4`; `STAGE_UNCERTAIN_GRID_FIT = 0.6`.
+- `stages/strums.py`: `class StrumsStage(Stage)` with `name="strums"`, `requires=("separate/stems/guitar.wav", "separate/stems/other.wav", "ingest/audio.wav", "grid/grid.json")`, `produces=("strums/strums.json",)`; constructor `StrumsStage(onset_detector=detect_onsets)`. Per run: `choose_source`, onsets, `choose_slots_per_bar`, `grid_fit`, `mute_mask` (disabled on mix), per-bar classes; per section: `no_instrument=True` and an all-rest pattern when `section_has_instrument` is False; sections shorter than `MIN_SECTION_BARS` take the longer neighbour's pattern with `inherited_from` set and `uncertain=True`; otherwise `section_summary`, with `uncertain = confidence < UNCERTAIN_BELOW`. Stage-level `uncertain = grid_fit < STAGE_UNCERTAIN_GRID_FIT`. Writes `Strums` with `source`, `source_ratio`, `grid_fit`, `uncertain`, `patterns`, `bar_onsets` (rendered per-bar vectors, kept for inspection and hand correction).
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -551,38 +575,48 @@ git commit -m "feat: add harmony stage with vendored Chord-CNN-LSTM, triad reduc
 # tests/test_onsets.py
 def test_direction_for_slot_eighths_4_4(): assert [direction_for_slot(i, 8, m44) for i in range(8)] == list("DUDUDUDU")
 def test_direction_for_slot_sixteenths_marks_eighths_down(): ...  # 16 slots: D at even indices
-def test_quantise_bar_island_strum(): ...     # onsets at slots 0,2,3,5,6,7 of a 2 s bar -> "D-DU-UDU"
-def test_quantise_bar_marks_flat_onset_muted(): ...
+def test_quantise_bar_island_strum(): ...     # onsets at slots 0,2,3,5,6,7 of a 2 s bar, none muted -> "S-SS-SSS"; rendered "D-DU-UDU"
+def test_quantise_bar_marks_muted_onset_x(): ...
+def test_mute_mask_disabled_on_mix_returns_all_false(): ...
+def test_mute_mask_relative_thresholds(): ...  # centroid and zcr both below their relative thresholds -> True; one above -> False
+def test_choose_source_prefers_louder_of_guitar_and_other(): ...  # other ratio 0.5, guitar 0.1 -> "other_stem"
+def test_choose_source_falls_back_to_mix_below_0_05(): ...
 def test_choose_slots_per_bar_prefers_8_for_eighth_grid_and_6_for_3_4(): ...
-def test_stem_is_usable_false_for_silence(): ...
-# tests/test_strum_vocab.py
-def test_load_vocabulary_4_4_has_at_least_30_patterns(): ...
-def test_load_vocabulary_3_4_returns_only_six_slot_patterns(): ...
-def test_decode_section_recovers_pattern_with_one_noisy_bar(): ...  # 8 bars of island strum, one bar random -> island strum, confidence > 0.7
-def test_decode_section_low_confidence_on_random_bars(): ...        # confidence < UNCERTAIN_BELOW
+def test_choose_slots_per_bar_picks_16_when_odd_sixteenths_exceed_25_percent(): ...
+def test_grid_fit_is_share_within_15_percent(): ...
+# tests/test_as_played.py
+def test_majority_vector_ignores_one_noisy_bar(): ...   # 8 bars "S-SS-SSS", one random -> "S-SS-SSS", confidence > 0.8
+def test_majority_vector_marks_slot_muted_when_most_strikes_muted(): ...
+def test_bar_repeat_one_for_identical_bars_low_for_random(): ...
+def test_section_summary_confidence_below_floor_on_random_bars(): ...  # < UNCERTAIN_BELOW
+def test_repeated_vector_absent_from_any_textbook_pattern_is_returned_as_is(): ...  # "-SSSS-S--SSSS-S-" over 16 slots comes back unchanged
 # tests/test_stage_strums.py
-def test_strums_stage_uses_mix_when_stem_silent(tmp_path): ...   # silent guitar stem, mix with onsets -> source == "mix"
-def test_strums_stage_one_pattern_per_section_and_valid_schema(tmp_path): ...  # fake onset detector returning island-strum onsets; grid with 2 sections -> 2 patterns, slots_per_bar 8
+def test_strums_stage_uses_other_stem_when_louder(tmp_path): ...   # source == "other_stem"
+def test_strums_stage_uses_mix_when_both_stems_silent_and_emits_no_x(tmp_path): ...  # source == "mix"; no "x" anywhere
+def test_strums_stage_flags_no_instrument_section(tmp_path): ...
+def test_strums_stage_short_section_inherits_and_is_uncertain(tmp_path): ...
+def test_strums_stage_one_pattern_per_section_and_valid_schema(tmp_path): ...  # fake detector with island-strum onsets; grid with 2 sections -> 2 patterns, slots_per_bar 8, grid_fit 1.0
 def test_strums_stage_3_4_meter_gives_six_slots(tmp_path): ...
+def test_strums_stage_marks_stage_uncertain_on_poor_grid_fit(tmp_path): ...
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `uv run pytest tests/test_onsets.py tests/test_strum_vocab.py tests/test_stage_strums.py -v`
-Expected: FAIL with `ImportError` / `FileNotFoundError` for the data file.
+Run: `uv run pytest tests/test_onsets.py tests/test_as_played.py tests/test_stage_strums.py -v`
+Expected: FAIL with `ImportError`.
 
-- [ ] **Step 3: Implement the data file, the two music modules and the stage.**
+- [ ] **Step 3: Implement the two music modules and the stage.**
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `uv run pytest tests/test_onsets.py tests/test_strum_vocab.py tests/test_stage_strums.py -v`
+Run: `uv run pytest tests/test_onsets.py tests/test_as_played.py tests/test_stage_strums.py -v`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/youkelele/data/strum_patterns.json src/youkelele/music/onsets.py src/youkelele/music/strum_vocab.py src/youkelele/stages/strums.py tests/test_onsets.py tests/test_strum_vocab.py tests/test_stage_strums.py
-git commit -m "feat: add strums stage with onset quantisation and pattern Viterbi"
+git add src/youkelele/music/onsets.py src/youkelele/music/as_played.py src/youkelele/stages/strums.py tests/test_onsets.py tests/test_as_played.py tests/test_stage_strums.py
+git commit -m "feat: add strums stage with as-played section patterns"
 ```
 
 ---
@@ -707,7 +741,7 @@ git commit -m "feat: add score stage building score.json and alphaTex"
 **Interfaces:**
 - Vendored alphaTab: files from the `@coderline/alphatab@1.8.4` npm tarball `dist/` as listed; `LICENSE` is the package's MPL-2.0 text.
 - `render/diagrams.py`: `chord_diagram_svg(name: str, shape: Shape, string_labels: Sequence[str] = ("G","C","E","A"), frets_shown: int = 4) -> str` producing a standalone `<svg>` 80x100 px: title, four vertical strings, nut as a thick line when `base_fret == 1` else a `<text>` fret number at the left of row one, dots with finger numbers from `fingers` (0 means no number), a barre rectangle across the strings covered for each entry in `barres`, `x` above muted strings and `o` above open ones.
-- `render/strum_box.py`: `strum_pattern_svg(slots: Sequence[Slot], meter: Meter) -> str`: one column per slot, beat numbers `1 & 2 &` above (`1 e & a` for sixteenths), a down arrow for `D`, an up arrow for `U`, a crossed arrow for `x`, nothing for `-`; width 28 px per slot.
+- `render/strum_box.py`: `strum_pattern_svg(slots: Sequence[Slot], meter: Meter) -> str`: one column per slot, beat numbers `1 & 2 &` above (`1 e & a` for sixteenths), a down arrow for `D`, an up arrow for `U`, a crossed arrow for `x`, nothing for `-`; width 28 px per slot. The template labels every box "Strum as played" with the repeatability score as a percentage, adds "(uncertain)" when the section is uncertain, "inherited from <section>" when inherited, and replaces the box with "No strummed instrument detected" for `no_instrument` sections.
 - `render/html.py`: `render_html(score: Score, alphatex: str, assets_rel: str = "assets") -> str` rendering `templates/sheet.html.j2` with: header fields; a "Strum pattern uncertain" badge per uncertain section and a "Strum detected from full mix" note when `strum_source == "mix"`; the diagram legend; per section a heading, the strum box and a `<div class="at-section" data-start-bar="..." data-bar-count="...">`; the whole-song alphaTex inlined RAW (not HTML-escaped) in a `<script type="text/plain" id="tex">`; ONE `AlphaTabApi` per section, each with `{core: {useWorkers: false, tex: true, fontDirectory: assets_rel + "/font/"}, player: {playerMode: 0}, display: {scale: 0.85 (0.75 when slots_per_bar == 16), startBar: <section first bar, 1-based>, barCount: <bars in section>, layoutMode: "page"}, notation: {elements: {effectTempo: false, trackNames: false, scoreTitle: false, chordDiagrams: false, effectMarker: false, effectCapo: false}}}`; `window.__rendered = true` only when every section has fired `postRenderFinished` and `document.fonts.ready` resolved. Layout CSS: `.sheet { width: 182mm; margin: 0 auto }` on screen and `html, body { width: 182mm }` under `@media print`, because alphaTab does not reflow during `page.pdf()` and a fluid page prints shrunk. Print CSS: `@page { size: A4; margin: 14mm }`, `.section-head { break-after: avoid }`, `.section { break-inside: avoid-page }`, `.no-print { display: none }`; crop alphaTab's hard-coded "rendered by alphaTab" footer with an `overflow: hidden` wrapper. Fonts for text: system sans-serif stack, no external stylesheets.
 - `render/pdf.py`: `html_to_pdf(html_path: Path, pdf_path: Path, timeout_ms: int = 60000) -> None` using `playwright.sync_api`, `chromium.launch(args=["--allow-file-access-from-files"])`, `page.goto(html_path.as_uri())`, `page.wait_for_function("window.__rendered === true")`, `page.evaluate("document.fonts.ready")`, `page.pdf(path=..., format="A4", print_background=True, prefer_css_page_size=True)`.
 - `stages/render.py`: `class RenderStage(Stage)` with `name="render"`, `requires=("score/score.json", "score/score.alphatex")`, `produces=("render/sheet.html", "render/sheet.pdf")`; constructor `RenderStage(pdf_writer=html_to_pdf)`; copies the vendored alphaTab folder to `07_render/assets/` so the HTML is self-contained.
@@ -755,7 +789,7 @@ git commit -m "feat: add render stage with chord diagrams, strum boxes, alphaTab
 
 ### Task 14: Ukulele profile wiring and end-to-end run
 
-**Confidence:** 70%. The wiring is trivial, but the end-to-end assertion depends on the synthetic clip being musical enough for Beat This! and the chord model to recover 120 bpm and C-G-Am-F; the chord model did recognise a sine-tone loop in verification, beat tracking on a plucked envelope has not been tried.
+**Confidence:** 93%. Spikes (models Spike C, audio round two Spike 2): the clip below gives Beat This! exactly 120 bpm with every downbeat on a bar start, the chord model the four expected triads, Demucs routes the plucked chords to the `other` stem (ratio 0.61), and the strum stage recovers `D-DU-UDU` at 0.917 from the mix and 0.71 to 0.82 from `other`. The render stage is proven separately in Task 13; only the single combined run is new.
 
 **Files:**
 - Modify: `src/youkelele/profiles/ukulele.py`, `tests/test_cli.py`
@@ -763,7 +797,7 @@ git commit -m "feat: add render stage with chord diagrams, strum boxes, alphaTab
 
 **Interfaces:**
 - `ukulele_profile()` returns `InstrumentProfile("ukulele", UKULELE_TUNING, (StrumsStage(), ArrangeStage(), ScoreStage(UKULELE_TUNING, "Ukulele")))`.
-- `tests/fixtures/make_clip.py`: `make_clip(path: Path, seconds: int = 30) -> None` synthesising a 120 bpm C-G-Am-F loop with an island-strum onset envelope (plucked-string style decaying sines summed per chord, a strike per `D`/`U` slot) so the real chain has something musically sensible to find. Not committed as audio; generated into `tests/fixtures/generated/`.
+- `tests/fixtures/make_clip.py`: `make_clip(path: Path, seconds: int = 30) -> None`, taken from the models spike's `make_clip.py` (Karplus-Strong gCEA voicings C 0003, G 0232, Am 2000, F 2010, 10 ms string stagger, island strum `D-DU-UDU`, two bars per chord, 0.6 s decay, snare-like noise burst on beats 2 and 4) with ONE change from the round-two spike: the kick plays on beat 1 only, because a kick on beat 3 lands on the island strum's rest and reads as a strike. 44.1 kHz stereo 16-bit. Not committed as audio; generated into `tests/fixtures/generated/`.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -781,8 +815,14 @@ def test_end_to_end_on_synthetic_clip(tmp_path):
     assert rc == 0
     run = tmp_path / "runs" / "clip"
     assert (run / "07_render" / "sheet.pdf").stat().st_size > 10_000
+    grid = load_model(run / "02_grid" / "grid.json", Grid)
+    assert 118 <= grid.bpm <= 122 and grid.octave_decision == "none"
     chords = load_model(run / "03_harmony" / "chords.json", Chords)
     assert {"C:maj", "G:maj", "A:min", "F:maj"} <= {e.triad for e in chords.events}
+    strums = load_model(run / "04_strums" / "strums.json", Strums)
+    assert strums.source in ("other_stem", "mix")          # Demucs routes plucked ukulele to "other"
+    main_section = max(strums.patterns, key=lambda p: p.confidence)
+    assert "".join(main_section.slots) == "D-DU-UDU" and main_section.confidence >= 0.7
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
