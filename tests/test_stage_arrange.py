@@ -3,7 +3,7 @@
 from youkelele.jsonio import load_model, save_model
 from youkelele.layout import RunLayout
 from youkelele.options import RunOptions
-from youkelele.schemas import Arrangement, ChordEvent, Chords, Key
+from youkelele.schemas import Arrangement, Bar, ChordEvent, Chords, Grid, Key, Meter, Section
 from youkelele.stage import StageContext
 from youkelele.stages.arrange import ArrangeStage
 
@@ -14,7 +14,35 @@ def _event(i: int, label: str) -> ChordEvent:
     )
 
 
-def _run(tmp_path, labels, tier="easy"):
+def _grid(bar_seconds: float = 2.0, n_bars: int = 8, pickup: bool = False) -> Grid:
+    bars = [
+        Bar(index=i, start=i * bar_seconds, end=(i + 1) * bar_seconds, beats=[])
+        for i in range(n_bars)
+    ]
+    if pickup:  # a short first bar: only the full bars should set the bar length
+        bars[0] = bars[0].model_copy(update={"end": bars[0].start + 0.5, "pickup": True})
+    beats = [i * bar_seconds / 4 for i in range(n_bars * 4 + 1)]
+    return Grid(
+        bpm=120.0, meter=Meter(numerator=4, denominator=4), beats=beats, downbeats=[0],
+        bars=bars, sections=[Section(label="A", start_bar=0, end_bar=n_bars, confidence=1.0)],
+        octave_decision="none", bar_loudness_db=[0.0] * n_bars, sections_k=1,
+        largest_cluster_share=1.0, chorus_margin_db=None, labels_low_confidence=False,
+    )
+
+
+def _events(labels, durations):
+    if durations is None:
+        return [_event(i, lab) for i, lab in enumerate(labels)]
+    events, t = [], 0.0
+    for i, (lab, seconds) in enumerate(zip(labels, durations)):
+        events.append(
+            ChordEvent(bar=i, beat=0, start=t, end=t + seconds, label=lab, triad=lab, confidence=0.9)
+        )
+        t += seconds
+    return events
+
+
+def _run(tmp_path, labels, tier="easy", durations=None, grid=None):
     layout = RunLayout(tmp_path / "run", ["ingest", "separate", "grid", "harmony", "arrange"])
     chords_path = layout.path("harmony/chords.json")
     chords_path.parent.mkdir(parents=True)
@@ -22,12 +50,12 @@ def _run(tmp_path, labels, tier="easy"):
         chords_path,
         Chords(
             key=Key(tonic="C", mode="major", confidence=0.9),
-            events=[_event(i, lab) for i, lab in enumerate(labels)],
+            events=_events(labels, durations),
         ),
     )
     grid_path = layout.path("grid/grid.json")
     grid_path.parent.mkdir(parents=True)
-    grid_path.write_text("{}", encoding="utf-8")  # declared input; this stage does not read it
+    save_model(grid_path, grid or _grid())
     out = tmp_path / "out"
     out.mkdir()
     stage = ArrangeStage()
@@ -78,3 +106,39 @@ def test_arrange_stage_never_crashes_on_inversion_or_unknown(tmp_path):
     reasons = {s.event: s.reason for s in arr.substitutions}
     assert reasons[2] == "no shape in chords-db for maj(9)"
     assert reasons[3] == "no shape; left blank"
+
+
+def test_arrange_stage_flags_passing_chords(tmp_path):
+    _, arr = _run(
+        tmp_path, ["C:maj", "G:maj", "A:min", "F:maj"], tier="full", durations=[60.0, 60.0, 40.0, 0.9]
+    )
+    assert [c.name for c in arr.chords] == ["C", "G", "Am", "F"]
+    assert [c.passing for c in arr.chords] == [False, False, False, True]
+
+
+def test_arrange_stage_passing_follows_the_capo_transposition(tmp_path):
+    _, arr = _run(
+        tmp_path, ["D#:maj", "A#:maj", "C:min", "G#:maj"], durations=[60.0, 60.0, 40.0, 0.9]
+    )
+    assert arr.capo == 3
+    assert [c.passing for c in arr.chords] == [False, False, False, True]
+    assert [c.passing for c in arr.no_capo_alternative] == [False, False, False, True]
+
+
+def test_arrange_stage_passing_judged_after_tier_simplification(tmp_path):
+    # G:7 is rare on its own, but easy tier plays it as G, which is common: it keeps its diagram
+    _, arr = _run(
+        tmp_path, ["C:maj", "G:maj", "A:min", "G:7"], tier="easy", durations=[60.0, 60.0, 40.0, 0.9]
+    )
+    assert [c.passing for c in arr.chords] == [False, False, False, False]
+
+
+def test_arrange_stage_passing_uses_full_bar_median_not_pickup(tmp_path):
+    # one 0.5 s pickup and one 2 s bar: bar length is 2 s, so a 1.6 s chord is within a bar and
+    # passing; counting the pickup would give a 1.25 s median and wrongly keep its diagram
+    grid = _grid(bar_seconds=2.0, n_bars=2, pickup=True)
+    _, arr = _run(
+        tmp_path, ["C:maj", "G:maj", "A:min", "F:maj"], tier="full",
+        durations=[60.0, 60.0, 40.0, 1.6], grid=grid,
+    )
+    assert [c.passing for c in arr.chords] == [False, False, False, True]

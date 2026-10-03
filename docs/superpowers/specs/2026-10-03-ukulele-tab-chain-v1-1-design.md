@@ -2,6 +2,8 @@
 
 Date: 2026-10-03. Status: approved in conversation, awaiting written review. Amends `2026-10-03-ukulele-tab-chain-design.md` (version 1). Evidence: `2026-10-03-real-run-lessons.md`, the analysis of the first three real-song runs.
 
+> Version 1.2 amends this spec: `2026-10-03-ukulele-tab-chain-v1-2-design.md` sets a four-bar minimum section, takes the header tempo from the mean beat interval, cleans titles, fills no-chord bars from the harmonic stems, marks passing chords, aligns section starts to the chord-change phrase and collapses repeating row blocks; where the two disagree, version 1.2 wins, and its validation on five real songs is in `2026-10-03-v1-2-validation.md`.
+
 ## 1. Purpose
 
 Version 1 produced correct chord content on real songs but sheets of ten to fifteen pages that a player cannot use: a slash staff drew every bar, bars within a section differ only by chord name, and most strum patterns were mainly rests. Version 1.1 makes the sheet short and readable, and applies four stage-rule changes each backed by a measurement across the songs run so far. The chain, its stages, its editable intermediate files and its resume workflow are unchanged.

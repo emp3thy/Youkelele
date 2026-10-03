@@ -12,6 +12,7 @@ from youkelele.models.ffmpeg import probe_duration, to_wav
 from youkelele.models.ytdl import DownloadResult, download_audio
 from youkelele.schemas import SourceInfo
 from youkelele.stage import Stage, StageContext
+from youkelele.titles import clean_artist, clean_title
 
 
 class IngestStage(Stage):
@@ -42,8 +43,10 @@ class IngestStage(Stage):
                 info = result.info
                 stem = result.audio_path.stem
                 video_id = info.get("id")
-                title = info.get("title") or stem
-                artist = info.get("artist") or info.get("uploader")
+                raw_title = info.get("title") or stem
+                raw_artist = info.get("artist") or info.get("uploader")
+                artist = clean_artist(raw_artist)
+                title = clean_title(raw_title, raw_artist)
                 url, path = source, None
             finally:
                 shutil.rmtree(work, ignore_errors=True)
@@ -51,13 +54,14 @@ class IngestStage(Stage):
             src = Path(source)
             ctx.log("converting local file")
             self._converter(src, wav)
-            video_id, title, artist = None, src.stem, None
+            video_id, raw_title, title, artist = None, src.stem, src.stem, None
             url, path = None, str(src)
         record = SourceInfo(
             url=url,
             path=path,
             video_id=video_id,
             title=title,
+            raw_title=raw_title,
             artist=artist,
             duration=self._prober(wav),
             sample_rate=44100,

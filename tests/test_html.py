@@ -163,6 +163,8 @@ def test_html_fixed_sheet_width_for_print():
     assert ".cell.nc { color: var(--muted); }" in html
     assert ".cell.pickup { grid-column: span 1; font-size: 9pt; }" in html
     assert ".repeat { font-size: 10pt; align-self: center; }" in html
+    # a fixed border-box width keeps bracketed block rows as wide as every other row
+    assert ".repeat { grid-column: -2; min-width: 12mm; box-sizing: border-box;" in html
 
 
 def test_html_no_instrument_section_replaces_strum_box():
@@ -208,3 +210,102 @@ def test_html_names_the_section_a_pattern_was_inherited_from():
     html = render_html(score)
     assert html.count("inherited from") == 1
     assert "inherited from Verse" in _section_html(html, "Pre-chorus")
+
+
+B = Shape(frets=[4, 3, 2, 2], fingers=[3, 2, 1, 1], base_fret=1, barres=[2])
+FILLED_NOTE = "Italic chords were inferred where the recording had no clear chord"
+
+
+def _bars(names: list[str], start: int = 0, filled: bool = False) -> list[ScoreBar]:
+    return [
+        ScoreBar(
+            index=start + i,
+            chords=[ScoreChord(name=n, diagram=0, start_slot=0, slots=ISLAND, filled=filled)],
+        )
+        for i, n in enumerate(names)
+    ]
+
+
+def _plain_section(label: str, bars: list[ScoreBar]) -> ScoreSection:
+    return ScoreSection(
+        label=label, pattern=ISLAND, uncertain=False, bars=bars, bar_repeat=1.0, no_instrument=False
+    )
+
+
+def test_passing_chord_omitted_from_legend_and_listed():
+    score = _two_sections().model_copy(
+        update={
+            "chord_diagrams": [
+                ChordDiagram(name="C", shape=C),
+                ChordDiagram(name="G", shape=G),
+                ChordDiagram(name="B", shape=B, passing=True),
+            ]
+        }
+    )
+    html = render_html(score)
+    legend = html[html.index('class="legend"'):html.index("Passing:")]
+    assert legend.count("<svg") == 2
+    assert ">B<" not in legend
+    assert "Passing: B 4322" in html
+    assert html.index('class="legend"') < html.index("Passing: B 4322") < html.index('class="sections"')
+    assert "Passing:" not in render_html(_two_sections())
+
+
+def test_passing_line_lists_every_passing_chord():
+    e7 = Shape(frets=[1, 2, 0, 2], fingers=[1, 2, 0, 3], base_fret=1, barres=[])
+    score = _two_sections().model_copy(
+        update={
+            "chord_diagrams": [
+                ChordDiagram(name="C", shape=C),
+                ChordDiagram(name="B", shape=B, passing=True),
+                ChordDiagram(name="E7", shape=e7, passing=True),
+            ]
+        }
+    )
+    assert "Passing: B 4322, E7 1202" in render_html(score)
+
+
+def test_filled_cell_italic_and_header_note():
+    bars = _bars(["C", "G"]) + _bars(["G"], start=2, filled=True)
+    html = render_html(_score([_plain_section("Verse", bars)]))
+    assert ".cell.filled { font-style: italic }" in html
+    assert re.findall(r'<div class="cell filled">([^<]*)</div>', html) == ["G"]
+    assert re.findall(r'<div class="cell">([^<]*)</div>', html) == ["C", "G"]
+    head = html[html.index('<header class="sheet-head">'):html.index("</header>")]
+    assert FILLED_NOTE in head
+    assert FILLED_NOTE not in render_html(_two_sections())
+
+
+def test_block_repeat_marker_printed_once():
+    names = (["G"] * 4 + ["D"] * 4) * 5
+    html = render_html(_score([_plain_section("Chorus", _bars(names))]))
+    body = _section_html(html, "Chorus")
+    assert body.count("×5") == 1
+    assert body.count("×") == 1
+    assert body.count('class="row"') == 2
+    assert body.count('class="cell"') == 8
+    # the marker sits on the block's last row, after the D cells
+    rows = body.split('class="row"')[1:]
+    assert "×5" in rows[1] and "×" not in rows[0]
+    assert re.findall(r'<div class="cell">([^<]*)</div>', rows[1]) == ["D"] * 4
+
+
+def test_pickup_is_narrow_leading_cell_not_its_own_row():
+    pickup = ScoreBar(
+        index=0, pickup=True, chords=[ScoreChord(name="N.C.", diagram=-1, start_slot=0, slots=ISLAND)]
+    )
+    bars = [pickup] + _bars(["C", "G", "C", "G", "C", "G", "C", "G", "F"], start=1)
+    verse = _plain_section("Verse", _bars(["C"] * 4, start=10))
+    html = render_html(_score([_plain_section("Intro", bars), verse]))
+    assert "grid-template-columns: 0.25fr repeat(4, 1fr) auto" in html
+    intro = _section_html(html, "Intro")
+    assert 'class="grid has-pickup"' in intro
+    rows = intro.split('class="row"')[1:]
+    assert len(rows) == 2  # [pickup] C G C G (x2), then F; the pickup has no row of its own
+    assert 'class="cell nc pickup"' in rows[0]
+    assert re.findall(r'<div class="cell">([^<]*)</div>', rows[0]) == ["C", "G", "C", "G"]
+    assert "×2" in rows[0]
+    # later rows carry an empty leading track so the columns line up
+    assert 'class="lead"' in rows[1] and "pickup" not in rows[1]
+    verse_html = _section_html(html, "Verse")
+    assert "has-pickup" not in verse_html and 'class="lead"' not in verse_html

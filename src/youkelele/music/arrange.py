@@ -9,11 +9,13 @@ import mir_eval.chord
 
 from youkelele.music.shapes import ShapeDB, harte_to_db, shape_cost
 from youkelele.music.triads import to_triad
-from youkelele.schemas import Shape
+from youkelele.schemas import ChordEvent, Shape
 
 _SHARPS = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
 _NO_SHAPE_COST = 5.0
 _MAX_PASSES = 20
+PASSING_SHARE = 0.02  # a label under this share of the sounding time may be a passing chord
+MIN_DIAGRAM_CHORDS = 3  # never mark so many passing that fewer than this many chords keep a diagram
 CAPO_FRET_PENALTY = 0.2  # per capo fret; a barre-free chart one fret higher must be clearly easier
 
 
@@ -91,6 +93,31 @@ def select_voicings(labels: Sequence[str], db: ShapeDB) -> dict[str, Shape]:
         if not changed:
             break
     return choice
+
+
+def passing_labels(events: Sequence[ChordEvent], bar_seconds: float) -> set[str]:
+    """Labels that are rare (under PASSING_SHARE of the non-N time) and never held longer than a bar.
+
+    If that would leave fewer than MIN_DIAGRAM_CHORDS labels with a diagram, the most-used
+    passing labels are unmarked until enough remain (or none are passing).
+    """
+    totals: dict[str, float] = {}
+    longest: dict[str, float] = {}
+    for event in events:
+        if event.label in ("N", "X"):
+            continue
+        duration = event.end - event.start
+        totals[event.label] = totals.get(event.label, 0.0) + duration
+        longest[event.label] = max(longest.get(event.label, 0.0), duration)
+    whole = sum(totals.values())
+    passing = [
+        label for label, total in totals.items()
+        if total < PASSING_SHARE * whole and longest[label] <= bar_seconds
+    ]
+    passing.sort(key=lambda label: totals[label], reverse=True)  # most used first
+    while passing and len(totals) - len(passing) < MIN_DIAGRAM_CHORDS:
+        passing.pop(0)
+    return set(passing)
 
 
 def simplify_for_tier(label: str, tier: str, db: ShapeDB) -> tuple[str, str | None]:

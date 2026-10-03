@@ -33,6 +33,7 @@ class SourceInfo(_Artifact):
     path: str | None
     video_id: str | None
     title: str
+    raw_title: str | None = None
     artist: str | None
     duration: float
     sample_rate: int
@@ -110,6 +111,7 @@ class ChordEvent(_Artifact):
     label: str
     triad: str
     confidence: float
+    filled: bool = False  # inferred from the harmonic stems for a bar the recogniser left N
 
     @field_validator("label", "triad")
     @classmethod
@@ -174,6 +176,7 @@ class ArrangedChord(_Artifact):
     event: int
     name: str
     shape: Shape
+    passing: bool = False  # rare and short: named in the grid, no full diagram
 
 
 class Substitution(_Artifact):
@@ -202,6 +205,7 @@ class Instrument(_Artifact):
 class ChordDiagram(_Artifact):
     name: str
     shape: Shape
+    passing: bool = False  # every use of this chord is a passing chord
 
 
 class ScoreChord(_Artifact):
@@ -209,6 +213,8 @@ class ScoreChord(_Artifact):
     diagram: int
     start_slot: int
     slots: list[Slot]
+    filled: bool = False  # copied from the chord event
+    passing: bool = False  # copied from the arranged chord
 
 
 class ScoreBar(_Artifact):
@@ -225,6 +231,7 @@ class ScoreSection(_Artifact):
     bar_repeat: float
     no_instrument: bool
     inherited_from: int | None = None
+    shifted: int = 0  # bars the start moved from grid.json to sit in phase with the chords
 
 
 class Score(_Artifact):

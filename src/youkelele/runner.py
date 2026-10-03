@@ -188,7 +188,9 @@ def status(
         if record is None:
             result.append((stage.name, "missing"))
             continue
-        fresh = True
+        # an input the stage now requires but the record never hashed (an older version's
+        # output) cannot be shown fresh
+        fresh = all(key in record.input_hashes for key in stage.requires)
         for key, recorded in record.input_hashes.items():
             path = layout.path(key)
             if not path.exists() or hash_file(path) != recorded:

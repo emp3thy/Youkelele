@@ -174,3 +174,63 @@ def test_simplify_left_blank_when_nothing_found(db):
 def test_display_names_for_full_tier_sevenths(db):
     names = [display_name_for(lab, db) for lab in ("C:maj7", "A:min7", "D:min7", "G:7")]
     assert names == ["Cmaj7", "Am7", "Dm7", "G7"]
+
+
+def _ev(label: str, seconds: float, start: float = 0.0):
+    from youkelele.schemas import ChordEvent
+
+    return ChordEvent(
+        bar=0, beat=0, start=start, end=start + seconds, label=label, triad=label, confidence=0.9
+    )
+
+
+def _timeline(spec):
+    events, t = [], 0.0
+    for label, seconds in spec:
+        events.append(_ev(label, seconds, t))
+        t += seconds
+    return events
+
+
+def test_passing_label_is_rare_and_short():
+    from youkelele.music.arrange import passing_labels
+
+    events = _timeline([("C:maj", 60.0), ("G:maj", 60.0), ("A:min", 40.0), ("B:maj", 0.9)])
+    assert passing_labels(events, 2.0) == {"B:maj"}
+
+
+def test_long_single_event_is_not_passing():
+    from youkelele.music.arrange import passing_labels
+
+    events = _timeline([("C:maj", 60.0), ("G:maj", 60.0), ("A:min", 40.0), ("B:maj", 3.0)])
+    assert passing_labels(events, 2.0) == set()  # 3 s is 1.8% of the total, but it outlasts a bar
+
+
+def test_common_label_is_not_passing():
+    from youkelele.music.arrange import passing_labels
+
+    events = _timeline(
+        [("C:maj", 60.0), ("G:maj", 60.0), ("A:min", 40.0)] + [("F:maj", 1.5)] * 10
+    )
+    assert passing_labels(events, 2.0) == set()  # every F is short, but 15 s is about 8% of the song
+
+
+def test_never_fewer_than_three_diagram_chords():
+    from youkelele.music.arrange import MIN_DIAGRAM_CHORDS, passing_labels
+
+    events = _timeline(
+        [("C:maj", 50.0), ("G:maj", 50.0), ("A:min", 1.0), ("F:maj", 0.9), ("B:maj", 0.8)]
+    )
+    assert MIN_DIAGRAM_CHORDS == 3
+    assert passing_labels(events, 2.0) == {"F:maj", "B:maj"}  # most used rare label keeps its diagram
+
+
+def test_passing_ignores_blank_events_and_counts_filled_ones():
+    from youkelele.music.arrange import passing_labels
+
+    events = _timeline(
+        [("C:maj", 60.0), ("G:maj", 60.0), ("A:min", 40.0), ("N", 500.0), ("X", 500.0), ("B:maj", 0.9)]
+    )
+    assert passing_labels(events, 2.0) == {"B:maj"}
+    filled = events[-1].model_copy(update={"filled": True})
+    assert passing_labels(events[:-1] + [filled], 2.0) == {"B:maj"}

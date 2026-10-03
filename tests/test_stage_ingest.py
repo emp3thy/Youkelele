@@ -42,7 +42,7 @@ def test_ingest_local_file_writes_wav_and_source(tmp_path):
     stage.run(ctx)
     assert sorted(p.name for p in ctx.out_dir.iterdir()) == ["audio.wav", "source.json"]
     info = load_model(ctx.out_dir / "source.json", SourceInfo)
-    assert info.title == "My Song"
+    assert info.title == "My Song" and info.raw_title == "My Song"
     assert info.path == str(src)
     assert info.url is None and info.artist is None and info.video_id is None
     assert (info.duration, info.sample_rate, info.channels) == (12.5, 44100, 2)
@@ -65,6 +65,37 @@ def test_ingest_url_uses_downloader_and_info(tmp_path):
     info = load_model(ctx.out_dir / "source.json", SourceInfo)
     assert (info.video_id, info.title, info.artist) == ("abc", "T", "A")
     assert info.url == "https://youtu.be/abc" and info.path is None
+
+
+def test_ingest_url_stores_raw_and_clean_title(tmp_path):
+    def downloader(url, out_dir):
+        audio = out_dir / "source.webm"
+        audio.write_bytes(b"x")
+        return DownloadResult(
+            audio, {"id": "abc", "title": "X - Y (Official Video)", "artist": "X"}
+        )
+
+    stage = IngestStage(downloader=downloader, converter=_copy, prober=lambda _p: 3.0)
+    ctx = _ctx(tmp_path, "https://youtu.be/abc", stage)
+    stage.run(ctx)
+    info = load_model(ctx.out_dir / "source.json", SourceInfo)
+    assert info.raw_title == "X - Y (Official Video)"
+    assert (info.title, info.artist) == ("Y", "X")
+
+
+def test_ingest_url_title_cases_capitalised_artist(tmp_path):
+    def downloader(url, out_dir):
+        audio = out_dir / "source.webm"
+        audio.write_bytes(b"x")
+        return DownloadResult(
+            audio, {"id": "abc", "title": "DEF LEPPARD - Song", "uploader": "DEF LEPPARD"}
+        )
+
+    stage = IngestStage(downloader=downloader, converter=_copy, prober=lambda _p: 3.0)
+    ctx = _ctx(tmp_path, "https://youtu.be/abc", stage)
+    stage.run(ctx)
+    info = load_model(ctx.out_dir / "source.json", SourceInfo)
+    assert (info.title, info.artist) == ("Song", "Def Leppard")
 
 
 def test_download_retries_three_times_then_raises(monkeypatch, tmp_path):

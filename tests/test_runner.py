@@ -118,6 +118,15 @@ def test_status_reports_stale_after_input_edit(tmp_path, opts):
     assert status(tmp_path, chain)[1] == ("b", "stale")
 
 
+def test_status_is_stale_when_a_required_input_was_never_recorded(tmp_path, opts):
+    old = [fake("a", (), ("a/a.txt", "a/x.txt")), fake("b", ("a/a.txt",), ("b/b.txt",))]
+    run_chain(tmp_path, old, opts, log=quiet)
+    assert status(tmp_path, old) == [("a", "done"), ("b", "done")]
+    # the same stage now also requires a/x.txt, which its recorded run never hashed
+    new = [old[0], fake("b", ("a/a.txt", "a/x.txt"), ("b/b.txt",))]
+    assert status(tmp_path, new) == [("a", "done"), ("b", "stale")]
+
+
 def test_resolve_stage_by_name_and_number():
     chain = two_stages()
     assert resolve_stage(chain, "b") == 1
