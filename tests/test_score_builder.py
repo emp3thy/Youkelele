@@ -224,3 +224,165 @@ def test_inherited_from_is_copied_into_the_score_section():
     strums = strums.model_copy(update={"patterns": [strums.patterns[0], inherited]})
     score = _build(_split(_grid(2)), strums)
     assert [s.inherited_from for s in score.sections] == [None, 0]
+
+
+CALYPSO = list("D-D-DUDU")
+
+
+def _two_section_strums() -> Strums:
+    verse = SectionPattern(
+        section=0, slots=list(ISLAND), confidence=0.8, bar_repeat=0.9, uncertain=False,
+        no_instrument=False, inherited_from=None,
+    )
+    chorus = SectionPattern(
+        section=1, slots=list(CALYPSO), confidence=0.7, bar_repeat=0.8, uncertain=True,
+        no_instrument=False, inherited_from=0,
+    )
+    return Strums(
+        slots_per_bar=8, source="other_stem", source_ratio=0.6, grid_fit=0.9,
+        uncertain=False, patterns=[verse, chorus], bar_onsets=[],
+    )
+
+
+def _mid_phrase_score():
+    """24 bars, Verse 0-8 and Chorus 8-24; chords change every two bars from bar 9."""
+    bounds = [0, 2, 4, 6, 9, 11, 13, 15, 17, 19, 21, 23, 24]
+    labels = ["D", "A"] * 6
+    evs = [
+        ChordEvent(bar=a, beat=0, start=a * BAR, end=b * BAR, label=lab, triad=lab, confidence=0.9)
+        for a, b, lab in zip(bounds, bounds[1:], labels)
+    ]
+    arranged = [
+        ArrangedChord(event=i, name=ev.label, shape=C if ev.label == "D" else G)
+        for i, ev in enumerate(evs)
+    ]
+    grid = _grid(24).model_copy(
+        update={
+            "sections": [
+                Section(label="Verse", start_bar=0, end_bar=8, confidence=0.5),
+                Section(label="Chorus", start_bar=8, end_bar=24, confidence=0.5),
+            ]
+        }
+    )
+    return build_score(
+        _source(), grid,
+        Chords(key=Key(tonic="D", mode="major", confidence=0.9), events=evs),
+        _two_section_strums(),
+        Arrangement(capo=0, transpose=0, tier="easy", chords=arranged, substitutions=[]),
+        UKULELE_TUNING, "Ukulele",
+    )
+
+
+def _build_events(n_bars, evs, arranged):
+    return build_score(
+        _source(), _grid(n_bars),
+        Chords(key=Key(tonic="C", mode="major", confidence=0.9), events=evs),
+        _strums(),
+        Arrangement(capo=0, transpose=0, tier="easy", chords=arranged, substitutions=[]),
+        UKULELE_TUNING, "Ukulele",
+    )
+
+
+def _ev(start, end, label, filled=False):
+    return ChordEvent(
+        bar=int(start), beat=0, start=start * BAR, end=end * BAR, label=label, triad=label,
+        confidence=0.9, filled=filled,
+    )
+
+
+def test_score_copies_filled_and_passing_flags():
+    evs = [_ev(0, 1, "C"), _ev(1, 2, "G", filled=True), _ev(2, 2.5, "F"), _ev(2.5, 3, "C")]
+    arranged = [
+        ArrangedChord(event=0, name="C", shape=C),
+        ArrangedChord(event=1, name="G", shape=G),
+        ArrangedChord(event=2, name="F", shape=F, passing=True),
+        ArrangedChord(event=3, name="C", shape=C),
+    ]
+    score = _build_events(3, evs, arranged)
+    flags = [
+        [(c.name, c.filled, c.passing) for c in bar.chords] for bar in score.sections[0].bars
+    ]
+    assert flags == [
+        [("C", False, False)],
+        [("G", True, False)],
+        [("F", False, True), ("C", False, False)],
+    ]
+
+
+def test_passing_diagram_flagged():
+    evs = [_ev(0, 1, "C"), _ev(1, 1.5, "F"), _ev(1.5, 2, "G")]
+    arranged = [
+        ArrangedChord(event=0, name="C", shape=C),
+        ArrangedChord(event=1, name="F", shape=F, passing=True),
+        ArrangedChord(event=2, name="G", shape=G),
+    ]
+    score = _build_events(2, evs, arranged)
+    assert [(d.name, d.passing) for d in score.chord_diagrams] == [
+        ("C", False), ("F", True), ("G", False),
+    ]
+    passing_cell = _chords(score, 1)[0]
+    assert passing_cell.passing is True
+    assert score.chord_diagrams[passing_cell.diagram].name == "F"
+
+
+def test_diagram_used_both_passing_and_full_is_not_passing():
+    evs = [_ev(0, 0.5, "F"), _ev(0.5, 1, "C"), _ev(1, 2, "F")]
+    arranged = [
+        ArrangedChord(event=0, name="F", shape=F, passing=True),
+        ArrangedChord(event=1, name="C", shape=C),
+        ArrangedChord(event=2, name="F", shape=F),
+    ]
+    score = _build_events(2, evs, arranged)
+    assert [(d.name, d.passing) for d in score.chord_diagrams] == [("F", False), ("C", False)]
+
+
+def test_score_sections_use_aligned_starts_and_record_shift():
+    score = _mid_phrase_score()
+    verse, chorus = score.sections
+    assert (verse.label, verse.bars[0].index, verse.bars[-1].index, verse.shifted) == (
+        "Verse", 0, 8, 0,
+    )
+    assert (chorus.label, chorus.bars[0].index, chorus.bars[-1].index, chorus.shifted) == (
+        "Chorus", 9, 23, 1,
+    )
+    assert [b.chords[0].name for b in chorus.bars[:4]] == ["D", "D", "A", "A"]
+    # section fields still come from the grid section's own pattern
+    assert verse.pattern == ISLAND and chorus.pattern == CALYPSO
+    assert (chorus.uncertain, chorus.bar_repeat, chorus.inherited_from) == (True, 0.8, 0)
+    assert verse.bars[-1].chords[0].slots == ISLAND  # bar 8 now plays the verse pattern
+
+
+def test_in_phase_sections_are_not_shifted():
+    score = _score(3, [(0, 1, "C"), (1, 2, "G"), (2, 3, "C")], {"C": C, "G": G})
+    assert [s.shifted for s in score.sections] == [0]
+
+
+def test_every_bar_still_has_slots_per_bar_slots_after_alignment():
+    score = _mid_phrase_score()
+    indices = [bar.index for section in score.sections for bar in section.bars]
+    assert indices == list(range(24))
+    for section in score.sections:
+        for bar in section.bars:
+            slots = [s for c in bar.chords for s in c.slots]
+            assert len(slots) == score.slots_per_bar
+            assert slots == section.pattern
+            assert bar.chords[0].start_slot == 0
+
+
+def test_score_json_without_new_fields_still_loads():
+    score = _mid_phrase_score()
+    data = score.model_dump(by_alias=True)
+    for section in data["sections"]:
+        del section["shifted"]
+        for bar in section["bars"]:
+            for chord in bar["chords"]:
+                del chord["filled"], chord["passing"]
+    for diagram in data["chord_diagrams"]:
+        del diagram["passing"]
+    loaded = type(score).model_validate(data)
+    assert loaded.schema_version == 1
+    assert [s.shifted for s in loaded.sections] == [0, 0]
+    assert not any(
+        c.filled or c.passing for s in loaded.sections for b in s.bars for c in b.chords
+    )
+    assert not any(d.passing for d in loaded.chord_diagrams)

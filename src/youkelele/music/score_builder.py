@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from youkelele.music.phrase import NO_CHORD, aligned_starts, bar_change_bars
 from youkelele.schemas import (
     ArrangedChord,
     Arrangement,
@@ -88,6 +89,20 @@ def _bar_starts(
     return result
 
 
+def _bar_ends(starts: list[dict[int, ArrangedChord]]) -> list[tuple[str, str]]:
+    """(first chord, last chord) per bar as placed in the score, for phrase alignment.
+
+    Passing chords are ignored unless they are all the bar holds; a bar with no chord
+    is ("N", "N"), so a change into or out of silence counts as a change.
+    """
+    ends: list[tuple[str, str]] = []
+    for slot_map in starts:
+        placed = [slot_map[slot] for slot in sorted(slot_map)]
+        names = [a.name for a in placed if not a.passing] or [a.name for a in placed]
+        ends.append((names[0], names[-1]) if names else (NO_CHORD, NO_CHORD))
+    return ends
+
+
 def build_score(
     source: SourceInfo,
     grid: Grid,
@@ -107,15 +122,21 @@ def build_score(
     def diagram_index(a: ArrangedChord) -> int:
         for i, d in enumerate(diagrams):
             if d.name == a.name and d.shape == a.shape:
+                d.passing = d.passing and a.passing  # one full use makes a full diagram
                 return i
-        diagrams.append(ChordDiagram(name=a.name, shape=a.shape))
+        diagrams.append(ChordDiagram(name=a.name, shape=a.shape, passing=a.passing))
         return len(diagrams) - 1
 
+    # rows follow the chord-change phrase; grid.json and the section count are unchanged
+    aligned = aligned_starts(
+        [(s.start_bar, s.end_bar) for s in grid.sections], bar_change_bars(_bar_ends(starts))
+    )
+
     sections: list[ScoreSection] = []
-    for k, section in enumerate(grid.sections):
+    for k, (section, (start_bar, end_bar, shifted)) in enumerate(zip(grid.sections, aligned)):
         pattern = strums.patterns[k]
         bars: list[ScoreBar] = []
-        for bar_idx in range(section.start_bar, section.end_bar):
+        for bar_idx in range(start_bar, end_bar):
             slot_map = starts[bar_idx]
             ordered = sorted(slot_map)
             chord_list: list[ScoreChord] = []
@@ -126,6 +147,7 @@ def build_score(
                     ScoreChord(
                         name=a.name, diagram=diagram_index(a), start_slot=slot,
                         slots=list(pattern.slots[slot:end]),
+                        filled=chords.events[a.event].filled, passing=a.passing,
                     )
                 )
             if chord_list and chord_list[0].start_slot > 0:
@@ -145,7 +167,7 @@ def build_score(
             ScoreSection(
                 label=section.label, pattern=list(pattern.slots), uncertain=pattern.uncertain,
                 bars=bars, bar_repeat=pattern.bar_repeat, no_instrument=pattern.no_instrument,
-                inherited_from=pattern.inherited_from,
+                inherited_from=pattern.inherited_from, shifted=shifted,
             )
         )
 

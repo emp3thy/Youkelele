@@ -205,6 +205,7 @@ class Instrument(_Artifact):
 class ChordDiagram(_Artifact):
     name: str
     shape: Shape
+    passing: bool = False  # every use of this chord is a passing chord
 
 
 class ScoreChord(_Artifact):
@@ -212,6 +213,8 @@ class ScoreChord(_Artifact):
     diagram: int
     start_slot: int
     slots: list[Slot]
+    filled: bool = False  # copied from the chord event
+    passing: bool = False  # copied from the arranged chord
 
 
 class ScoreBar(_Artifact):
@@ -228,6 +231,7 @@ class ScoreSection(_Artifact):
     bar_repeat: float
     no_instrument: bool
     inherited_from: int | None = None
+    shifted: int = 0  # bars the start moved from grid.json to sit in phase with the chords
 
 
 class Score(_Artifact):
