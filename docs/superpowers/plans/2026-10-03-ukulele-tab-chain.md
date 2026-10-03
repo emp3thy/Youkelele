@@ -25,6 +25,21 @@
 - UK spelling in user-facing text. No em-dashes in generated output.
 - Commit after every task with the message style shown and the trailer `Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>`.
 
+## Confidence Summary
+
+Every task carries a `**Confidence:**` percentage: how sure we are that we have enough information to complete it reliably to a high standard. Tasks at or above 85% rest on verified facts from the assumption-check reports. The weak points, and what would raise them before or during implementation:
+
+| Task | Confidence | What would raise it |
+|---|---|---|
+| 10 Strums | 65% | Run onset detection on the real guitar stems of the two target songs once Tasks 6 to 8 exist, inspect the bar slot vectors by eye against the UkuTabs and Ultimate Guitar patterns, and tune the three thresholds before writing the Viterbi tests. A half-day spike. |
+| 14 End to end | 70% | Generate the synthetic clip early (it has no dependencies) and run Beat This! and the chord model on it during Tasks 8 and 9; adjust the clip, not the assertion, if they disagree. |
+| 8 Grid | 75% | Try the Laplacian segmentation on the two target songs' audio once Task 6 exists and compare boundaries with the Hooktheory section list in the research notes. |
+| 9 Harmony | 80% | Do the pinned clone and hash computation as the very first step of the task; everything after is verified. |
+| 11 Arrange | 80% | Print the chosen shapes for the two target songs and have a ukulele player read them; adjust `shape_cost` weights from that. |
+| 13 Render | 80% | Render one real sheet to PDF and check page breaks and diagram legibility by eye before writing the SVG tests in stone. |
+
+Tasks 10 and 14 are the only ones where the plan's tests could all pass while the product is still poor. Treat their confidence as a signal to look at real output, not just green tests.
+
 ## Review Focus
 
 1. **Unreachable or private YouTube video.** A person pastes a URL that yt-dlp cannot fetch. Expected: three retries with backoff, then a one-line failure naming the URL and the yt-dlp error, no run folder left half-made. Test added to Task 6.
@@ -36,6 +51,8 @@
 ---
 
 ### Task 1: Project scaffold and CLI entry point
+
+**Confidence:** 95%
 
 **Files:**
 - Create: `pyproject.toml`, `.python-version`, `src/youkelele/__init__.py`, `src/youkelele/cli.py`, `tests/__init__.py`, `tests/test_cli.py`
@@ -80,6 +97,8 @@ git commit -m "feat: scaffold youkelele package and CLI entry point"
 ---
 
 ### Task 2: Artifact schemas
+
+**Confidence:** 95%
 
 **Files:**
 - Create: `src/youkelele/schemas.py`, `src/youkelele/jsonio.py`, `tests/test_schemas.py`
@@ -157,6 +176,8 @@ git commit -m "feat: add validated artifact schemas and JSON IO"
 
 ### Task 3: Stage contract, run layout, manifest and options
 
+**Confidence:** 92%
+
 **Files:**
 - Create: `src/youkelele/options.py`, `src/youkelele/stage.py`, `src/youkelele/layout.py`, `src/youkelele/manifest.py`, `src/youkelele/paths.py`, `tests/test_layout.py`, `tests/test_manifest.py`
 
@@ -211,6 +232,8 @@ git commit -m "feat: add stage contract, run layout, manifest and options"
 ---
 
 ### Task 4: Runner and instrument profile registry
+
+**Confidence:** 90%
 
 **Files:**
 - Create: `src/youkelele/runner.py`, `src/youkelele/profiles/__init__.py`, `src/youkelele/profiles/base.py`, `src/youkelele/profiles/ukulele.py`, `tests/test_runner.py`, `tests/fakes.py`
@@ -270,6 +293,8 @@ git commit -m "feat: add chain runner with resume, atomic outputs and profile re
 
 ### Task 5: Preflight and CLI commands `run`, `stages`, `status`
 
+**Confidence:** 88%. The static-ffmpeg API for locating already-downloaded binaries without triggering a download was not verified; the implementer may need to check the package's install directory directly.
+
 **Files:**
 - Create: `src/youkelele/preflight.py`, `tests/test_preflight.py`
 - Modify: `src/youkelele/cli.py`, `tests/test_cli.py`
@@ -310,6 +335,8 @@ git commit -m "feat: add preflight checks and run/stages/status commands"
 ---
 
 ### Task 6: Ingest stage
+
+**Confidence:** 85%. Only the yt-dlp command-line form of the Deno and ffmpeg options was verified; the exact option names in the `YoutubeDL` Python options dictionary need checking against yt-dlp 2026.08.19, and YouTube extraction changes often.
 
 **Files:**
 - Create: `src/youkelele/models/__init__.py`, `src/youkelele/models/ytdl.py`, `src/youkelele/models/ffmpeg.py`, `src/youkelele/stages/__init__.py`, `src/youkelele/stages/ingest.py`, `tests/test_stage_ingest.py`, `tests/audio_fixtures.py`
@@ -354,6 +381,8 @@ git commit -m "feat: add ingest stage with yt-dlp and ffmpeg adapters"
 
 ### Task 7: Separate stage
 
+**Confidence:** 85%. The real model run was verified on this machine, but the output filename pattern used for stem mapping was observed once and audio-separator's `custom_output_names` behaviour is untested.
+
 **Files:**
 - Create: `src/youkelele/models/separator.py`, `src/youkelele/stages/separate.py`, `tests/test_stage_separate.py`
 - Modify: `src/youkelele/runner.py` (append `SeparateStage()`)
@@ -393,6 +422,8 @@ git commit -m "feat: add separate stage using audio-separator with Demucs htdemu
 ---
 
 ### Task 8: Grid stage (beats, tempo, bars, sections)
+
+**Confidence:** 75%. Beat This! is verified, but the Laplacian segmentation on bar-synchronous features and the heuristic section labeller are our own design with no ground truth yet; the synthetic ABAB test and the `k` heuristic may need tuning on real songs.
 
 **Files:**
 - Create: `src/youkelele/models/beats.py`, `src/youkelele/music/__init__.py`, `src/youkelele/music/tempo.py`, `src/youkelele/music/sections.py`, `src/youkelele/stages/grid.py`, `tests/test_tempo.py`, `tests/test_sections.py`, `tests/test_stage_grid.py`
@@ -443,6 +474,8 @@ git commit -m "feat: add grid stage with Beat This!, tempo octave, bars and Lapl
 ---
 
 ### Task 9: Chord model vendoring, harmony stage, triads and key
+
+**Confidence:** 80%. The model, the NumPy patch and the triad table are verified; the pinned-commit clone and hash verification plumbing on Windows, and the subprocess integration, are new code with no prior run.
 
 **Files:**
 - Create: `src/youkelele/vendoring.py`, `src/youkelele/models/chords.py`, `src/youkelele/music/triads.py`, `src/youkelele/music/key.py`, `src/youkelele/music/snap.py`, `src/youkelele/stages/harmony.py`, `tests/test_triads.py`, `tests/test_key.py`, `tests/test_snap.py`, `tests/test_stage_harmony.py`, `tests/test_vendoring.py`
@@ -500,6 +533,8 @@ git commit -m "feat: add harmony stage with vendored Chord-CNN-LSTM, triad reduc
 
 ### Task 10: Strums stage (onsets, slots, vocabulary, Viterbi)
 
+**Confidence:** 65%. The slot quantisation, direction rule, emission function and thresholds (mute flatness 0.3, usable-stem RMS ratio 0.05, uncertainty floor 0.45) are our own design with no measurement on real audio; the fake-driven tests will pass, but real-world pattern accuracy is unknown until the two target songs are run and the thresholds tuned.
+
 **Files:**
 - Create: `src/youkelele/data/strum_patterns.json`, `src/youkelele/music/onsets.py`, `src/youkelele/music/strum_vocab.py`, `src/youkelele/stages/strums.py`, `tests/test_onsets.py`, `tests/test_strum_vocab.py`, `tests/test_stage_strums.py`
 
@@ -553,6 +588,8 @@ git commit -m "feat: add strums stage with onset quantisation and pattern Viterb
 
 ### Task 11: Arrange stage (chords-db shapes, capo chooser, voicing Viterbi, tiers)
 
+**Confidence:** 80%. chords-db and the Harte mapping are verified; the `shape_cost` weights and the capo and movement penalties are untested heuristics that may need adjusting once real sheets are read by a player.
+
 **Files:**
 - Create: `src/youkelele/data/chords-db/ukulele.json`, `src/youkelele/data/chords-db/LICENSE`, `src/youkelele/music/shapes.py`, `src/youkelele/music/arrange.py`, `src/youkelele/stages/arrange.py`, `tests/test_shapes.py`, `tests/test_arrange.py`, `tests/test_stage_arrange.py`
 
@@ -605,6 +642,8 @@ git commit -m "feat: add arrange stage with chords-db shapes, capo chooser and v
 
 ### Task 12: Score stage (score.json and alphaTex)
 
+**Confidence:** 85%. The alphaTex syntax is verified by rendering; mid-bar chord changes that do not land on a slot boundary and very short chords are edge cases the verified example did not cover.
+
 **Files:**
 - Create: `src/youkelele/music/score_builder.py`, `src/youkelele/music/alphatex.py`, `src/youkelele/stages/score.py`, `tests/test_score_builder.py`, `tests/test_alphatex.py`, `tests/test_stage_score.py`
 
@@ -650,6 +689,8 @@ git commit -m "feat: add score stage building score.json and alphaTex"
 ---
 
 ### Task 13: Render stage (diagrams, strum boxes, HTML template, PDF)
+
+**Confidence:** 80%. The alphaTab and Playwright path is verified; the hand-rolled diagram and strum-box SVG and the print-CSS page-break behaviour in Chromium's PDF output are untested and will need a visual pass.
 
 **Files:**
 - Create: `src/youkelele/vendor/alphatab/alphaTab.min.js`, `src/youkelele/vendor/alphatab/font/Bravura.woff2`, `src/youkelele/vendor/alphatab/font/Bravura.woff`, `src/youkelele/vendor/alphatab/Bravura-OFL.txt`, `src/youkelele/vendor/alphatab/LICENSE`, `src/youkelele/render/__init__.py`, `src/youkelele/render/diagrams.py`, `src/youkelele/render/strum_box.py`, `src/youkelele/render/html.py`, `src/youkelele/render/templates/sheet.html.j2`, `src/youkelele/render/pdf.py`, `src/youkelele/stages/render.py`, `tests/test_diagrams.py`, `tests/test_strum_box.py`, `tests/test_html.py`, `tests/test_stage_render.py`
@@ -704,6 +745,8 @@ git commit -m "feat: add render stage with chord diagrams, strum boxes, alphaTab
 
 ### Task 14: Ukulele profile wiring and end-to-end run
 
+**Confidence:** 70%. The wiring is trivial, but the end-to-end assertion depends on the synthetic clip being musical enough for Beat This! and the chord model to recover 120 bpm and C-G-Am-F; the chord model did recognise a sine-tone loop in verification, beat tracking on a plucked envelope has not been tried.
+
 **Files:**
 - Modify: `src/youkelele/profiles/ukulele.py`, `tests/test_cli.py`
 - Create: `tests/test_end_to_end.py`, `tests/fixtures/make_clip.py`
@@ -754,6 +797,8 @@ git commit -m "feat: wire the ukulele profile and add the end-to-end run"
 ---
 
 ### Task 15: Accuracy report (`evaluate` command) and ground-truth fixture format
+
+**Confidence:** 90%
 
 **Files:**
 - Create: `src/youkelele/evaluate.py`, `tests/test_evaluate.py`, `tests/fixtures/ground_truth/README.md`, `tests/fixtures/ground_truth/example/beats.txt`, `tests/fixtures/ground_truth/example/chords.lab`
