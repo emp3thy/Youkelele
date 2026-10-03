@@ -1,7 +1,16 @@
+# Python
 __pycache__/
 *.pyc
 .venv/
+
+# Audio
 *.wav
 *.mp3
 *.m4a
 *.webm
+
+# Pipeline run folders
+runs/
+
+# Playwright MCP scratch dumps
+.playwright-mcp/
