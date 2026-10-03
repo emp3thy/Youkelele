@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import re
 import shutil
+import stat
 import subprocess
 from collections.abc import Callable
 from pathlib import Path
@@ -97,16 +99,35 @@ def _check_commit(root: Path, run: Runner) -> None:
         )
 
 
+def _rmtree_force(path: Path) -> None:
+    """Remove a tree including read-only files (git pack files on Windows)."""
+
+    def _retry(func, failing, exc):
+        os.chmod(failing, stat.S_IWRITE)
+        func(failing)
+
+    if not path.exists():
+        return
+    try:
+        shutil.rmtree(path, onexc=_retry)
+    except OSError as exc:
+        raise VendoringError(f"could not remove {path}: {exc}") from exc
+
+
 def _clone(root: Path, run: Runner, log: Callable[[str], None]) -> None:
     """Clone into a sibling folder and rename, so a partial clone never looks complete."""
     log(f"cloning {CHORD_MODEL_REPO} into {root}")
     root.parent.mkdir(parents=True, exist_ok=True)
     partial = root.with_name(root.name + ".partial")
-    shutil.rmtree(partial, ignore_errors=True)
-    _git(["clone", CHORD_MODEL_REPO, str(partial)], None, run)
-    _git(["checkout", CHORD_MODEL_COMMIT], partial, run)
-    _check_commit(partial, run)
-    shutil.rmtree(root, ignore_errors=True)
+    _rmtree_force(partial)
+    try:
+        _git(["clone", CHORD_MODEL_REPO, str(partial)], None, run)
+        _git(["checkout", CHORD_MODEL_COMMIT], partial, run)
+        _check_commit(partial, run)
+    except BaseException:
+        _rmtree_force(partial)
+        raise
+    _rmtree_force(root)
     partial.rename(root)
 
 

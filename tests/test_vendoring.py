@@ -108,3 +108,27 @@ def test_failed_checkout_leaves_no_complete_looking_clone(fake_cache):
 def test_missing_git_raises_vendoring_error(fake_cache):
     with pytest.raises(vendoring.VendoringError, match="git is not installed"):
         vendoring.ensure_chord_model(log=lambda m: None, run=_Runner(missing=True))
+
+
+def test_stale_read_only_partial_is_removed_before_clone(fake_cache):
+    import os
+    import stat
+
+    partial = vendoring.chord_model_dir().with_name("chord_cnn_lstm.partial")
+    (partial / ".git" / "objects").mkdir(parents=True)
+    pack = partial / ".git" / "objects" / "x.pack"
+    pack.write_text("data")
+    os.chmod(pack, stat.S_IREAD)
+    root = vendoring.ensure_chord_model(log=lambda m: None, run=_Runner())
+    assert (root / "chord_recognition.py").exists()
+    assert not partial.exists()
+
+
+def test_failed_checkout_removes_partial_immediately(fake_cache):
+    partial = vendoring.chord_model_dir().with_name("chord_cnn_lstm.partial")
+    with pytest.raises(vendoring.VendoringError):
+        vendoring.ensure_chord_model(log=lambda m: None, run=_Runner(fail_on="checkout"))
+    assert not partial.exists()
+    with pytest.raises(vendoring.VendoringError):
+        vendoring.ensure_chord_model(log=lambda m: None, run=_Runner(head="abc"))
+    assert not partial.exists()
