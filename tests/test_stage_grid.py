@@ -143,3 +143,24 @@ def test_grid_stage_halves_when_drums_stem_silent(tmp_path):
     assert grid.octave_decision == "half"
     assert grid.drums_silent is True
     assert "drums silent" in "\n".join(messages)
+
+
+def test_grid_stage_backbeat_uses_modal_downbeat_phase(tmp_path):
+    def detect(wav: Path) -> BeatResult:
+        beats = [round(i * 0.4, 6) for i in range(60)]
+        downbeats = [beats[i] for i in range(0, 60, 4)]
+        downbeats[0] = beats[1]  # first detected downbeat is one beat off
+        return BeatResult(beats=beats, downbeats=downbeats)
+
+    stage = GridStage(detector=detect)
+    ctx, _ = _ctx(
+        tmp_path,
+        stage,
+        RunOptions(source="x.mp3"),
+        lambda p: write_click_track(p, 24.0, 150),
+        hit_beats=(1, 3),
+    )
+    stage.run(ctx)
+    grid = load_model(ctx.output("grid/grid.json"), Grid)
+    assert grid.backbeat_ratio is not None and grid.backbeat_ratio > 1
+    assert grid.octave_decision == "none"

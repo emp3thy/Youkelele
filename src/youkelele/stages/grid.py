@@ -26,6 +26,7 @@ from youkelele.music.tempo import (
     double_beats,
     downbeat_indices,
     fill_gaps,
+    modal_phase,
     normalise_octave,
 )
 from youkelele.schemas import Grid, Meter
@@ -66,7 +67,7 @@ class GridStage(Stage):
         drums = drums_signal.mean(axis=1)
         silent = is_drums_silent(drums)
         db_idx = downbeat_indices(beats, downbeats)
-        first_downbeat = db_idx[0] if db_idx else 0  # bar phase: first detected downbeat is beat 0
+        first_downbeat, _ = modal_phase(db_idx, meter.numerator)  # bar phase: modal downbeat phase
         ratio = None if silent else measure_backbeat(drums, drums_sr, beats[first_downbeat:], meter.numerator)
         ctx.log("  drums silent" if silent else _backbeat_text(ratio))
         octave = decide_octave(
