@@ -82,3 +82,20 @@ def setup_command(args: argparse.Namespace) -> int:
     ffmpeg, ffprobe = ffmpeg_paths()
     print(f"ffmpeg ready at {ffmpeg}")
     return 0
+
+
+def evaluate_command(args: argparse.Namespace) -> int:
+    from youkelele.evaluate import evaluate_run, format_report
+    from youkelele.jsonio import ArtifactError
+
+    run_dir = Path(args.runs_dir) / args.slug
+    if not run_dir.is_dir():
+        print(f"no run folder at {run_dir}")
+        return 1
+    try:
+        report = evaluate_run(run_dir, Path(args.truth))
+    except ArtifactError as exc:
+        print(f"cannot evaluate: {exc}")
+        return 1
+    print(format_report(report))
+    return 0

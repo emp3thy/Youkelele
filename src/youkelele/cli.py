@@ -10,6 +10,7 @@ HANDLERS = {
     "stages": commands.stages_command,
     "status": commands.status_command,
     "setup": commands.setup_command,
+    "evaluate": commands.evaluate_command,
 }
 
 
@@ -57,6 +58,13 @@ def build_parser() -> argparse.ArgumentParser:
     _add_instrument(status)
     _add_runs_dir(status)
     subparsers.add_parser("setup", help="fetch the chord model and ffmpeg")
+
+    evaluate = subparsers.add_parser(
+        "evaluate", help="score a run against ground-truth annotations"
+    )
+    evaluate.add_argument("slug")
+    evaluate.add_argument("--truth", required=True)
+    _add_runs_dir(evaluate)
     return parser
 
 

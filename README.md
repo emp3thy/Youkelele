@@ -15,3 +15,19 @@ Research and design notes for a pipeline that takes a YouTube music video (or au
 ## Tool
 
 The `youkelele` command-line tool lives in `src/youkelele`. It turns a YouTube URL into a ukulele chord-and-strum sheet through a chain of file-based stages. See `docs/superpowers/specs/2026-10-03-ukulele-tab-chain-design.md` for the design spec and stage layout. Run `uv sync`, then `uv run youkelele --version`.
+
+### Usage
+
+- `youkelele setup` fetches the chord model and ffmpeg once.
+- `youkelele run <url-or-path>` runs the whole chain; each stage writes a numbered folder under `runs/<slug>/`.
+- Resume with `--from <stage>` (and stop early with `--to <stage>`), for example `youkelele run <url-or-path> --from harmony`.
+- To correct a stage, edit its JSON (for example `02_grid/grid.json`) and re-run from the next stage with `--from`.
+- `youkelele stages` lists the stages; `youkelele status <slug>` shows which have run and which are stale.
+- `youkelele evaluate <slug> --truth <dir>` prints beat, downbeat and chord accuracy against `beats.txt` and `chords.lab` in `<dir>`; the formats are in `tests/fixtures/ground_truth/README.md`.
+
+Options for `run`:
+
+- `--tier easy|full` chooses the arrangement tier (default `easy`).
+- `--beat-octave auto|none|half|double` forces or auto-detects the beat tempo octave.
+- `--sections-k N` sets the number of song sections instead of choosing it automatically.
+- `--meter 4/4` sets the time signature (default `4/4`).
