@@ -72,6 +72,8 @@ def test_run_returns_2_and_prints_fix_when_preflight_fails(tmp_path, capsys, mon
     assert "ffmpeg missing\n  fix: youkelele setup" in out
 
 
-def test_run_with_empty_chain_reports_nothing_to_run(tmp_path, capsys):
+def test_run_with_empty_chain_reports_nothing_to_run(tmp_path, capsys, monkeypatch):
+    monkeypatch.setattr(commands, "_chain", lambda instrument: [])
+    monkeypatch.setattr(commands, "check_environment", lambda *a, **k: [])
     assert main(["run", "song.wav", "--runs-dir", str(tmp_path)]) == 0
     assert "nothing to run" in capsys.readouterr().out

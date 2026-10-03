@@ -21,8 +21,9 @@ from youkelele.manifest import (
 from youkelele.options import RunOptions
 from youkelele.profiles.base import InstrumentProfile
 from youkelele.stage import MissingArtifact, Stage, StageContext
+from youkelele.stages.ingest import IngestStage
 
-GENERIC_STAGES: tuple[Stage, ...] = ()
+GENERIC_STAGES: tuple[Stage, ...] = (IngestStage(),)
 
 
 class StageFailed(Exception):
