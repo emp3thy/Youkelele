@@ -2,6 +2,8 @@
 
 Date: 2026-10-03. Status: approved in conversation, awaiting written review.
 
+> Version 1.1 amends this spec: `2026-10-03-ukulele-tab-chain-v1-1-design.md` replaces the slash-staff sheet with a chord grid (section 3 there supersedes the render and score layout here) and changes four stage rules: the strum slot cap at 140 bpm, the drum backbeat test in the automatic tempo-octave rule, the last-bar end and pickup flag in the grid, and the capo score. Where the two disagree, version 1.1 wins. Its validation on four real songs is in `2026-10-03-v1-1-validation.md`.
+
 ## 1. Purpose
 
 A command-line tool that takes a YouTube URL or a local audio file and produces readable, printable ukulele tablature: chords with diagrams, one strumming pattern per section, and section labels, aligned to a beat grid. It runs as a chain of numbered stages that each read the previous stages' files from a run folder and write their own. A run can start at any stage, and a person can hand-edit a stage's output and re-run from the next stage.
