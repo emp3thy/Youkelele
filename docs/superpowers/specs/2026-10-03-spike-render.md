@@ -8,7 +8,7 @@ Scratch files (scratchpad `spike_render/`, not committed): `spike1_arrange.py`, 
 
 | Task | Before | After | Why |
 |---|---|---|---|
-| 11 Arrange | 80% | 88% | The two real songs exposed two heuristic bugs (capo penalty not normalised; voicing Viterbi inconsistent). Both fixed and re-run with the exact weights below; shape choices now match the published UkuTabs/e-chords charts. Still untested on a real detected chord stream with noise. |
+| 11 Arrange | 80% | 92% (see follow-up) | The two real songs exposed two heuristic bugs (capo penalty not normalised; voicing Viterbi inconsistent). Both fixed and re-run with the exact weights below; shape choices now match the published UkuTabs/e-chords charts. Still untested on a real detected chord stream with noise. |
 | 12 Score / alphaTex | 85% | 92% | Every edge case renders; the one wrong assumption (the `\lyrics` line) is replaced by a verified per-beat form; absolute-fret rule for `firstfret` and the barre syntax are confirmed; the chord-change slot rule is defined and rendered. |
 | 13 Render | 80% | 90% | Prototype printed to a 6-page A4 PDF with clean section breaks, legible diagrams and arrows; the reflow question is answered (fix the width). Open: real-world sheets with very long sections, and a one-bar-per-line cost for 16-slot bars. |
 
@@ -216,3 +216,30 @@ SVG approach (both generators are about 40 lines of string building, no library)
 - `pwvenv` (Python 3.13) has Playwright 1.63.0 and launches Chromium 153 (`chromium-1243`) without `playwright install`; `pymupdf` 1.28.2 was installed there for page rasterisation. `venv_ytdlp` was not modified.
 - Do not `html.escape` alphaTex inside `<script type="text/plain">`: script content is not entity-decoded, so `&quot;` reaches the parser verbatim and `\tuning (...) { label "gCEA" }` fails with "no overload matched arguments". Only `</script` needs escaping.
 - Git Bash heredocs mangled `\\t` in Python source (`\\ts` became a tab); generate alphaTex with Python files, not shell heredocs.
+
+---
+
+## Spike 1 follow-up: revised scorer on seven chord sets
+
+Run: `spike_render/spike1_followup.py` (output `spike1_followup.txt`). Final weights, unchanged after this run: `shape_cost` = 1.5 barre + 0.4 per fretted string + 0.6*(base_fret-1) + 0.5*span + **0.4 per distinct finger above 3**; `score_capo` = **mean** best shape_cost per chord event (5.0 for a label without a shape) **+ 0.3*capo + 0.3 per fret above 3**; voicings = **one shape per label for the whole song**, cost*count **+ 0.1*movement** over adjacent pairs. The four new sets were not used for tuning.
+
+| Set | capo 0 | 1 | 2 | 3 | 4 | 5 | chosen | expected |
+|---|---|---|---|---|---|---|---|---|
+| Summer of '69 (D A Bm G F Bb C) | **1.79** | 3.99 | 2.13 | 3.96 | 4.33 | 3.81 | 0 | 0 |
+| Pour Some Sugar (C#m F# B E A) | 3.05 | 2.89 | 2.87 | 4.73 | **2.44** | 5.46 | 4 | 4 |
+| Eb Bb Cm Ab | 2.75 | 2.38 | 4.53 | **1.85** | 4.83 | 4.55 | 3 | 3 |
+| Riptide (Am G C F) | **0.95** | 3.62 | 3.05 | 2.62 | 4.62 | 3.48 | 0 | 0 |
+| I'm Yours (B F# G#m E) | 3.33 | 2.75 | **2.32** | 4.03 | 2.87 | 5.90 | 2 | 2 or 4 |
+| Over the Rainbow (C Em Am F G E E7 D7) | **1.27** | 3.54 | 3.02 | 2.96 | 4.48 | 3.77 | 0 | 0 |
+| Sevenths, full tier (Cmaj7 Am7 Dm7 G7 E7 Fmaj7) | **1.90** | 3.32 | 4.00 | 3.62 | 4.37 | 3.70 | 0 | 0 |
+
+Shapes chosen (G C E A, absolute frets, cost in brackets):
+
+- Riptide, capo 0: Am 2000 [0.4], G 0232 [1.7], C 0003 [0.4], F 2010 [1.3]. Exactly the expected set.
+- I'm Yours, capo 2: A 2100 [1.3], E 1402 [2.7], F#m 2120 [1.7], D 2220 [1.2] (mean 1.72). The alternative capo 4 set G 0232, D 2220, Em 0432, C 0003 (mean 1.37) loses only because of the 0.3 surcharge above fret 3; both are published charts, and the no-capo set is barre-heavy as expected: B 4322 barre [4.1], F# 3121 [3.5], G#m 4342 [3.0], E 4442 [3.0] (mean 3.33). A player who dislikes E would pick capo 4; the scorer's preference for the lower capo is defensible, and the sheet's "no-capo alternative" line covers it.
+- Over the Rainbow, capo 0: C 0003, Em 0432 [2.2], F 2010, E 1402 [2.7], Am 2000, G 0232, E7 1202 [1.7], D7 2223 barre [3.6]. These are the shapes on every published chart of the song; chords-db has no first-position D7 other than 2223 (no "Hawaiian" 2020), which is a dictionary gap, not a weight issue.
+- Sevenths, capo 0: Cmaj7 0002 [0.4], Am7 0000 [0.0], Dm7 2213 barre [4.1], G7 0212 [1.7], E7 1202 [1.7], Fmaj7 2413 [3.1]. All first position; Dm7 2213 and Fmaj7 2413 are the standard uke shapes and the only first-position entries in chords-db.
+
+Side effect of the finger term worth noting: E now resolves to 1402 (three fingers) instead of 4442 (four fingers, 3.0 after the term); both are taught, and 1402 avoids the four-finger cram, which is what beginner charts recommend.
+
+Verdict: seven out of seven capo choices agree with published ukulele charts, and every chosen shape is the canonical first-position shape. No weight was changed after the four blind sets. **Task 11 confidence: 92%** (up from 88%); the remaining risk is noisy detected labels (spurious short chords inflating the mean) rather than the heuristics themselves, which Task 14's end-to-end run will show.
