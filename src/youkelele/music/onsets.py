@@ -113,10 +113,17 @@ def mute_mask(onsets: Onsets, enabled: bool) -> np.ndarray:
 
 
 def quantise_bar(onsets: Onsets, muted: np.ndarray, bar: Bar, slots_per_bar: int) -> list[StrikeClass]:
-    """Each onset to its nearest slot (within half a slot); the first onset in a slot wins.
+    """Each onset to its nearest slot (within half a slot); a strike beats a mute, else the first wins.
 
     The bar's window is shifted back by half a slot, so an onset just before the
     next downbeat counts as that bar's slot 0, not this bar's last slot.
+
+    A struck onset overrides a muted one in the same slot: on the synthetic
+    end-to-end clip the separated stem carries a quiet, dull pre-echo 25 to 50 ms
+    before real strums (Demucs, unseeded random shifts, so it varies run to run);
+    the mute rule marks it x and, taken first, it hid the strike and flipped the
+    section pattern from D-DU-UDU to D-xU-xDU. A slot holds one stroke, and a
+    real chuck has no strike after it within the slot.
     """
     width = (bar.end - bar.start) / slots_per_bar
     classes: list[StrikeClass] = ["-"] * slots_per_bar
@@ -125,7 +132,7 @@ def quantise_bar(onsets: Onsets, muted: np.ndarray, bar: Bar, slots_per_bar: int
             continue
         j = int(np.floor((t - bar.start) / width + 0.5))
         j = min(max(j, 0), slots_per_bar - 1)  # floating point can land one past either edge
-        if classes[j] == "-":
+        if classes[j] == "-" or (classes[j] == "x" and not m):
             classes[j] = "x" if m else "S"
     return classes
 

@@ -78,6 +78,21 @@ def test_quantise_bar_first_onset_in_a_slot_wins():
     assert "".join(quantise_bar(onsets, muted, _bars(1)[0], 8)) == "S-------"
 
 
+def test_quantise_bar_a_strike_overrides_an_earlier_muted_onset_in_the_same_slot():
+    # Measured on the synthetic end-to-end clip: Demucs leaves a quiet, dull
+    # pre-echo 25 to 50 ms before a real strum in the other stem; the mute rule
+    # marks it x and, as the first onset in the slot, it hid the strike.
+    onsets = _onsets([0.0, 0.476, 0.511, 1.219, 1.265])
+    muted = np.array([False, True, False, True, False])
+    assert "".join(quantise_bar(onsets, muted, _bars(1)[0], 8)) == "S-S--S--"
+
+
+def test_quantise_bar_keeps_a_lone_muted_onset_x():
+    onsets = _onsets([0.0, 0.5, 0.52])
+    muted = np.array([False, True, True])
+    assert "".join(quantise_bar(onsets, muted, _bars(1)[0], 8)) == "S-x-----"
+
+
 def test_quantise_bar_snaps_early_downbeat_to_the_next_bar():
     # an onset slightly before bar 1's downbeat is bar 1 slot 0, not bar 0 slot 8
     onsets = _onsets([0.0, 1.98, 2.5])
