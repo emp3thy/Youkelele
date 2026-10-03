@@ -3,10 +3,15 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
+import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
 from youkelele.options import RunOptions
+
+ChromiumState = Literal["present", "missing", "failed"]
 
 _NOT_IMPLEMENTED = "not implemented in this version; use the default"
 
@@ -21,7 +26,7 @@ class Problem:
 class Probes:
     ffmpeg_dir: Callable[[], Path | None]
     deno_bin: Callable[[], Path | None]
-    chromium_present: Callable[[], bool]
+    chromium_state: Callable[[], ChromiumState]
     chord_model_present: Callable[[], bool]
 
 
@@ -40,14 +45,28 @@ def _deno_bin() -> Path | None:
     return path if path.exists() else None
 
 
-def _chromium_present() -> bool:
-    try:
-        from playwright.sync_api import sync_playwright
+_CHROMIUM_SCRIPT = """
+from playwright.sync_api import sync_playwright
+with sync_playwright() as p:
+    print(p.chromium.executable_path)
+"""
 
-        with sync_playwright() as p:
-            return Path(p.chromium.executable_path).exists()
-    except Exception:
-        return False
+
+def _chromium_state() -> ChromiumState:
+    """Look up Chromium in a child process so a wedged driver cannot hang us."""
+    try:
+        result = subprocess.run(
+            [sys.executable, "-c", _CHROMIUM_SCRIPT],
+            timeout=30,
+            capture_output=True,
+            text=True,
+        )
+    except (subprocess.TimeoutExpired, OSError):
+        return "failed"
+    lines = result.stdout.strip().splitlines()
+    if result.returncode != 0 or not lines:
+        return "failed"
+    return "present" if Path(lines[-1]).exists() else "missing"
 
 
 def _chord_model_present() -> bool:
@@ -55,7 +74,7 @@ def _chord_model_present() -> bool:
 
 
 def default_probes() -> Probes:
-    return Probes(_ffmpeg_dir, _deno_bin, _chromium_present, _chord_model_present)
+    return Probes(_ffmpeg_dir, _deno_bin, _chromium_state, _chord_model_present)
 
 
 def check_environment(
@@ -78,10 +97,19 @@ def check_environment(
         and probes.deno_bin() is None
     ):
         problems.append(Problem("Deno is not installed", "uv sync"))
-    if "render" in stages and not probes.chromium_present():
-        problems.append(
-            Problem("Chromium is not installed", "uv run playwright install chromium")
-        )
+    if "render" in stages:
+        state = probes.chromium_state()
+        if state == "missing":
+            problems.append(
+                Problem("Chromium is not installed", "uv run playwright install chromium")
+            )
+        elif state == "failed":
+            problems.append(
+                Problem(
+                    "Playwright could not start",
+                    "uv sync, then uv run playwright install chromium",
+                )
+            )
     if "harmony" in stages and not probes.chord_model_present():
         problems.append(Problem("chord model is not installed", "youkelele setup"))
     return problems

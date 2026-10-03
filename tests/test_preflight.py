@@ -4,11 +4,11 @@ from youkelele.options import RunOptions
 from youkelele.preflight import Probes, check_environment
 
 
-def make_probes(ffmpeg=Path("ff"), deno=Path("deno"), chromium=True, chord=True) -> Probes:
+def make_probes(ffmpeg=Path("ff"), deno=Path("deno"), chromium="present", chord=True) -> Probes:
     return Probes(
         ffmpeg_dir=lambda: ffmpeg,
         deno_bin=lambda: deno,
-        chromium_present=lambda: chromium,
+        chromium_state=lambda: chromium,
         chord_model_present=lambda: chord,
     )
 
@@ -51,8 +51,28 @@ def test_preflight_deno_only_for_url_ingest():
 
 
 def test_preflight_chromium_and_chord_model():
-    probes = make_probes(chromium=False, chord=False)
+    probes = make_probes(chromium="missing", chord=False)
     options = RunOptions(source="a.wav")
     assert "Chromium" in check_environment(options, ["render"], probes)[0].what
     problem = check_environment(options, ["harmony"], probes)[0]
     assert problem.fix == "youkelele setup"
+
+
+def test_preflight_chromium_present_is_fine():
+    assert check_environment(RunOptions(source="a.wav"), ["render"], make_probes()) == []
+
+
+def test_preflight_chromium_missing_gives_install_fix():
+    problems = check_environment(
+        RunOptions(source="a.wav"), ["render"], make_probes(chromium="missing")
+    )
+    assert problems[0].what == "Chromium is not installed"
+    assert problems[0].fix == "uv run playwright install chromium"
+
+
+def test_preflight_chromium_driver_failure_is_reported_distinctly():
+    problems = check_environment(
+        RunOptions(source="a.wav"), ["render"], make_probes(chromium="failed")
+    )
+    assert problems[0].what == "Playwright could not start"
+    assert problems[0].fix == "uv sync, then uv run playwright install chromium"
