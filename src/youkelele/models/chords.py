@@ -33,7 +33,9 @@ def recognise_chords(
     import static_ffmpeg
 
     static_ffmpeg.add_paths()  # the child's pydub then finds ffmpeg and stays silent
-    out_lab = work_dir / "out.lab"
+    # The child runs in the model directory, so hand it absolute paths.
+    wav = Path(wav).resolve()
+    out_lab = (Path(work_dir) / "out.lab").resolve()
     result = subprocess.run(
         [sys.executable, "chord_recognition.py", str(wav), str(out_lab), "submission"],
         cwd=chord_model_dir(),
