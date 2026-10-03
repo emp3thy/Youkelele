@@ -23,9 +23,16 @@ def test_backbeat_ratio_below_one_for_hits_on_one_and_three():
     assert backbeat_ratio(y, SR, _beats(20.0), 4) < 0.7
 
 
-def test_backbeat_ratio_three_four_uses_indices_one_and_two_against_zero():
+def test_backbeat_ratio_three_four_hits_on_two_and_three_above_one_and_a_half():
     y = drum_track(SR, BPM, 20.0, (1, 2), beats_per_bar=3)
     assert backbeat_ratio(y, SR, _beats(20.0), 3) > 1.5
+
+
+def test_backbeat_ratio_uniform_hits_read_one_in_both_meters():
+    for numerator in (3, 4):
+        y = drum_track(SR, BPM, 20.0, tuple(range(numerator)), beats_per_bar=numerator)
+        ratio = backbeat_ratio(y, SR, _beats(20.0), numerator)
+        assert 0.8 <= ratio <= 1.25, (numerator, ratio)
 
 
 def test_backbeat_ratio_none_for_fewer_than_eight_beats():

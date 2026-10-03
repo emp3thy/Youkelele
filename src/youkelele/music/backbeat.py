@@ -28,7 +28,9 @@ def drums_silent(y: np.ndarray) -> bool:
 def backbeat_ratio(
     y: np.ndarray, sr: int, beats: Sequence[float], numerator: int
 ) -> float | None:
-    """High-band flux on the backbeat beats over the flux on the strong beats.
+    """Mean high-band flux on the backbeat beats over the mean on the strong beats.
+
+    Means per position class keep 3/4 (two backbeat positions, one strong) unbiased.
 
     Beat index 0 is taken as the downbeat. In 4/4 the backbeat is indices 1 and 3
     against 0 and 2; in 3/4 it is 1 and 2 against 0. Returns None for fewer than
@@ -53,13 +55,17 @@ def backbeat_ratio(
 
     back_idx = (1, 2) if numerator == 3 else (1, 3)
     strong_idx = (0,) if numerator == 3 else (0, 2)
-    back = strong = 0.0
+    back_vals: list[float] = []
+    strong_vals: list[float] = []
     for i, t in enumerate(beats):
         pos = i % numerator
         if pos in back_idx:
-            back += at(t)
+            back_vals.append(at(t))
         elif pos in strong_idx:
-            strong += at(t)
+            strong_vals.append(at(t))
+    if not back_vals or not strong_vals:
+        return None
+    strong = float(np.mean(strong_vals))
     if strong <= 0:
         return None
-    return back / strong
+    return float(np.mean(back_vals)) / strong

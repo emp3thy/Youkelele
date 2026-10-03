@@ -165,3 +165,12 @@ def test_decide_octave_never_halves_139_or_outside_band():
 def test_decide_octave_overrides_ignore_backbeat():
     assert decide_octave(150, "none", 0.2) == "none"
     assert decide_octave(150, "half", 2.5) == "half"
+
+
+def test_decide_octave_boundaries():
+    assert decide_octave(140, "auto", 0.5) == "none"
+    assert decide_octave(140.01, "auto", 0.5) == "half"
+    assert decide_octave(190, "auto", 0.5) == "half"
+    assert decide_octave(190.01, "auto", 0.5) == "none"
+    assert decide_octave(150, "auto", 1.0) == "none"
+    assert decide_octave(150, "auto", 0.999) == "half"
