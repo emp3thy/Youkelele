@@ -111,9 +111,13 @@ def status_command(args: argparse.Namespace) -> int:
 
 def setup_command(args: argparse.Namespace) -> int:
     from youkelele.models.ffmpeg import ffmpeg_paths
-    from youkelele.vendoring import ensure_chord_model
+    from youkelele.vendoring import VendoringError, ensure_chord_model
 
-    ensure_chord_model(log=print)
+    try:
+        ensure_chord_model(log=print)
+    except VendoringError as exc:
+        print(f"setup failed: {exc}")
+        return 1
     ffmpeg, ffprobe = ffmpeg_paths()
     print(f"ffmpeg ready at {ffmpeg}")
     return 0

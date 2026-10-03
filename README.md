@@ -29,5 +29,18 @@ Options for `run`:
 
 - `--tier easy|full` chooses the arrangement tier (default `easy`).
 - `--beat-octave auto|none|half|double` forces or auto-detects the beat tempo octave.
-- `--sections-k N` sets the number of song sections instead of choosing it automatically.
+- `--sections-k N` sets the number of song sections instead of choosing it automatically (`auto` restores automatic choice).
 - `--meter 4/4` sets the time signature (default `4/4`).
+
+Options are saved in `runs/<slug>/manifest.json`. A `--from` run reuses them and changes only the flags you give again.
+
+### Requirements
+
+- `youkelele setup` needs git on PATH and network access: it clones the chord model and downloads ffmpeg.
+- Rendering the PDF needs Playwright's Chromium. If preflight reports that Chromium is missing, run `uv run playwright install chromium`.
+- Fast test suite (seconds, no network, no models): `uv run pytest -q -W error -m "not slow"`.
+- Slow suite (real models on a bundled clip, after `youkelele setup`): `uv run pytest -q -m slow`.
+
+### Known limitations
+
+- Drum bleed can read as muted strums. On a separated stem, drum bleed can satisfy the centroid and zero-crossing mute rule, so a busy snare shows up as chunked `x` slots in the strum pattern. The end-to-end test clip uses a quiet snare for this reason.

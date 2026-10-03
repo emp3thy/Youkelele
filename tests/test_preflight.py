@@ -4,12 +4,15 @@ from youkelele.options import RunOptions
 from youkelele.preflight import Probes, check_environment
 
 
-def make_probes(ffmpeg=Path("ff"), deno=Path("deno"), chromium="present", chord=True) -> Probes:
+def make_probes(
+    ffmpeg=Path("ff"), deno=Path("deno"), chromium="present", chord=True, source=True
+) -> Probes:
     return Probes(
         ffmpeg_dir=lambda: ffmpeg,
         deno_bin=lambda: deno,
         chromium_state=lambda: chromium,
         chord_model_present=lambda: chord,
+        source_exists=lambda _path: source,
     )
 
 
@@ -76,3 +79,25 @@ def test_preflight_chromium_driver_failure_is_reported_distinctly():
     )
     assert problems[0].what == "Playwright could not start"
     assert problems[0].fix == "uv sync, then uv run playwright install chromium"
+
+
+def test_preflight_reports_missing_local_source():
+    problems = check_environment(
+        RunOptions(source="missing.wav"), ["ingest"], make_probes(source=False)
+    )
+    assert [p.what for p in problems] == ["source file not found: missing.wav"]
+
+
+def test_preflight_ignores_source_file_for_urls_and_later_stages():
+    probes = make_probes(source=False)
+    assert check_environment(RunOptions(source="https://youtu.be/abcdefghijk"), ["ingest"], probes) == []
+    assert check_environment(RunOptions(source="missing.wav"), ["grid"], probes) == []
+
+
+def test_default_source_probe_checks_the_file_system(tmp_path):
+    from youkelele.preflight import default_probes
+
+    (tmp_path / "song.wav").write_bytes(b"")
+    probes = default_probes()
+    assert probes.source_exists(str(tmp_path / "song.wav"))
+    assert not probes.source_exists(str(tmp_path / "nope.wav"))

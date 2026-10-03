@@ -188,3 +188,17 @@ def test_run_rejects_bad_meter_and_sections_k(tmp_path, capsys, monkeypatch, fla
 def test_run_rejects_unknown_instrument(tmp_path, capsys):
     assert main(["run", "song.wav", "--instrument", "banjo", "--runs-dir", str(tmp_path)]) == 2
     assert "invalid choice: 'banjo'" in capsys.readouterr().err
+
+
+def test_setup_reports_vendoring_error_in_one_line(monkeypatch, capsys):
+    from youkelele import vendoring
+
+    def fail(log=print):
+        raise vendoring.VendoringError("git is not installed or not on PATH; install git and retry")
+
+    monkeypatch.setattr(vendoring, "ensure_chord_model", fail)
+    assert main(["setup"]) == 1
+    out = capsys.readouterr().out
+    assert out.strip().splitlines() == [
+        "setup failed: git is not installed or not on PATH; install git and retry"
+    ]

@@ -28,6 +28,7 @@ class Probes:
     deno_bin: Callable[[], Path | None]
     chromium_state: Callable[[], ChromiumState]
     chord_model_present: Callable[[], bool]
+    source_exists: Callable[[str], bool] = lambda path: Path(path).is_file()
 
 
 def _ffmpeg_dir() -> Path | None:
@@ -91,11 +92,19 @@ def check_environment(
         problems.append(Problem("separator 'roformer-sw' is unsupported", _NOT_IMPLEMENTED))
     if options.chord_model == "chordmini":
         problems.append(Problem("chord_model 'chordmini' is unsupported", _NOT_IMPLEMENTED))
+    is_url = options.source.startswith("http")
+    if "ingest" in stages and not is_url and not probes.source_exists(options.source):
+        problems.append(
+            Problem(
+                f"source file not found: {options.source}",
+                "check the path, or pass a YouTube URL",
+            )
+        )
     if stages & {"ingest", "separate"} and probes.ffmpeg_dir() is None:
         problems.append(Problem("ffmpeg is not installed", "youkelele setup"))
     if (
         "ingest" in stages
-        and options.source.startswith("http")
+        and is_url
         and probes.deno_bin() is None
     ):
         problems.append(Problem("Deno is not installed", "uv sync"))
