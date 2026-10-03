@@ -65,6 +65,7 @@ Re-run the four validation songs through the whole chain from their URLs, since 
 | Chelsea Dagger | intro bars filled with chords from the song's set; alternating G and D rows collapsed as a block; at most three pages, ideally two |
 | Summer of '69 | first verse rows start on D A; tempo header 138 or 139; at most three pages |
 | Pour Some Sugar On Me | solo bars filled where the band plays; still capo 4; at most three pages |
+| David Bowie, "Fame" (`Ypgq0qdgVZA`, 261 s), a second blind test run from scratch | the chain completes; title cleaned to "Fame" (the "(2016 Remaster)" tag removed); no section under four bars; at most three pages; tempo, key, capo, filled bars and passing chords recorded and judged from measurable audio features, with what cannot be verified stated plainly |
 | All | titles without artist prefix or upload tags; passing chords without diagrams; no filled chords in bars without harmonic energy |
 
 ## 7. Decisions
