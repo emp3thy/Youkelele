@@ -18,14 +18,18 @@ from youkelele.music.triads import to_triad
 from youkelele.schemas import Bar, ChordEvent
 
 # Measured on four real runs: docs/superpowers/specs/2026-10-03-v1-2-fill-measurements.md.
-# Energy is the bar's RMS over the median RMS of the bars holding a chord. The loudest
-# all-N bar with silent harmonic stems is 0.111 (Summer of '69, last bar); the quietest
-# band-playing bar filled is 0.235 (Pour Some Sugar On Me, bar 68).
+# Energy is the bar's RMS over the median RMS of the bars holding a chord. Silent-stem
+# all-N bars reach 0.111 (Summer of '69 bar 120). Pour Some Sugar On Me bar 15 (0.163, a
+# noise-floor bar with a flat chroma) cannot be told from bar 67 (0.162) on energy, so
+# both stay N; the quietest filled bar is 0.235 (Pour Some Sugar On Me bar 68).
 FILL_MIN_ENERGY = 0.2
-# The best match of any unpitched or off-set bar is 0.297 (Wet Leg outro, a drone outside
-# the song's chords); the weakest filled match is 0.427. On bars the recogniser labelled
-# with one chord, match >= 0.4 with margin >= 0.05 agrees with its label 97% of the time.
-FILL_MIN_MATCH = 0.4
+# The best match of any unpitched or off-set control bar is 0.297 (Wet Leg bar 112, a drone
+# outside the song's chords); the weakest filled match is 0.334 (Pour Some Sugar On Me
+# bar 74). On bars the recogniser labelled with one chord, agreement with its triad is
+# 96.4% at 0.32 against 96.9% at 0.4 (margin 0.05 both).
+FILL_MIN_MATCH = 0.32
+# The one bar that passes energy and match but is ambiguous has margin 0.027 (Pour Some
+# Sugar On Me bar 46, B against F#); the smallest filled margin is 0.057 (bar 70).
 FILL_MIN_MARGIN = 0.05
 
 _NO_CHORD = ("N", "X")

@@ -23,41 +23,106 @@ The brief named the positive and control bars:
 
 ## Chosen values
 
-| Constant | Value | Lower side | Upper side |
+| Constant | Value | Highest bar it must reject | Lowest bar it lets fill |
 |---|---:|---|---|
-| `FILL_MIN_ENERGY` | 0.2 | loudest all-N bar with silent harmonic stems: 0.111 (Summer of '69 bar 120, the last 0.4 s of the fade). Chelsea's drum-only intro bars reach 0.106. | quietest filled band bar: 0.235 (Pour Some Sugar On Me bar 68) |
-| `FILL_MIN_MATCH` | 0.4 | best unpitched or off-set control: 0.297 (Wet Leg bar 112, a drone outside the song's chords) | weakest filled match: 0.427 (Pour Some Sugar On Me bar 71) |
-| `FILL_MIN_MARGIN` | 0.05 | bars that pass energy and match but are ambiguous: 0.019, 0.027 and 0.042 (Pour Some Sugar On Me bars 43, 46 and 9) | smallest filled margin: 0.074 (Pour Some Sugar On Me bar 71) |
+| `FILL_MIN_ENERGY` | 0.2 | Summer of '69 bar 120 (0.111, silent fade tail). Pour Some Sugar On Me bars 15 (0.163) and 67 (0.162) are also rejected (see below). | Pour Some Sugar On Me bar 68 (0.235) |
+| `FILL_MIN_MATCH` | 0.32 | Wet Leg bar 112 (0.297, a drone outside the song's chords) | Pour Some Sugar On Me bar 74 (0.334) |
+| `FILL_MIN_MARGIN` | 0.05 | Pour Some Sugar On Me bar 46 (0.027, B against F sharp). This is the only bar that passes energy and match but is ambiguous. | Pour Some Sugar On Me bar 70 (0.057) |
 
-**Sanity check on labelled bars.** Take every bar the recogniser labelled with a single chord in the four songs. The template match agrees with the recogniser's triad on:
+### Match: agreement against the recogniser
 
-- 314 of 324 bars (97%) that pass match 0.4 and margin 0.05;
-- 274 of 279 (98%) at margin 0.10;
-- 343 of 366 (94%) with no margin test.
+The check covers every bar the recogniser labelled with a single chord, across all four songs. It compares the template match's triad with the recogniser's, at margin 0.05:
 
-When a bar passes both tests, the chosen chord is therefore usually the one the recogniser itself would have given.
+| MATCH | Single-chord bars passing | Agree | Agreement | Of those, energy ratio >= 0.2 | Agree | Agreement |
+|---:|---:|---:|---:|---:|---:|---:|
+| 0.30 | 330 | 318 | 96.4% | 329 | 317 | 96.4% |
+| 0.32 | 330 | 318 | 96.4% | 329 | 317 | 96.4% |
+| 0.35 | 329 | 318 | 96.7% | 328 | 317 | 96.6% |
+| 0.40 | 324 | 314 | 96.9% | 323 | 313 | 96.9% |
 
-**What fills.**
+**Choice.** Agreement at 0.32 is within 0.5 points of 0.40, so MATCH is lowered to the band between Wet Leg bar 112 (0.297) and Pour Some Sugar On Me bar 74 (0.334). This fills solo bars 70 and 74 as A. No control bar and no other table bar has a match in that band and passes energy and margin.
 
-- **Chelsea Dagger.** 3 of the 9 intro bars: 3 and 4 as C, and 8 as G. The other six intro bars carry drums only in the stems: guitar at most 0.004 RMS and bass at most 0.002, against 0.019 to 0.032 for guitar in bars 3, 4 and 8. They stay N. No setting could fill them without also filling Summer of '69's silent bar 120, which matches C at 0.414.
-- **Pour Some Sugar On Me, solo.** 2 of the 12 N bars: 68 as A and 71 as E. Bars 69, 70, 73 and 74 are loud (energy 0.70 to 0.96) but carry the lead line. They match the song's triads at only 0.19 to 0.38, so they stay N. Bars 66 and 77 to 80 are the drum-and-voice breakdown, with the guitar stem at 0.005 or less. They stay N.
-- **Summer of '69 (control).** Bars 0, 116, 117 and 120 stay N. Bar 0 is silent. Bars 116 and 117 are loud but unpitched against the song's set (best r 0.03 and 0.19). Bar 120 is silent. Bars 118 and 119 fill as A and B minor. They are not silent: bass 0.10 to 0.11 RMS, energy ratio 0.89 to 1.01, the band playing into the fade. They are pitched (r 0.46 and 0.48 with margins 0.44 and 0.15), so the rule's requirement holds: no genuinely silent or unpitched control bar fills. The chroma there peaks on D sharp and E, as it does in the labelled A and D bars just before. Whether A and B minor are what is played cannot be confirmed from the audio features alone.
-- **Wet Leg (control).** Nothing fills. Bars 109 to 112 are loud on the other stem (a drone on F sharp and C sharp), but match the song's triads at only 0.22 to 0.30.
-- **Pour Some Sugar On Me, outside the solo** (neither positive nor control).
-  - Bar 8, in the intro after seven C sharp bars, fills as C sharp.
-  - Bars 44 and 45 fill as E. They lie in the second verse, which the version 1.1 run lessons describe as marked N.C. by Ultimate Guitar. The guitar stem there is 0.008 to 0.009 RMS, a third of its usual level. The song's chorded-bar median is low (0.031), so this still gives energy ratios of 0.25 to 0.31. These are probably false fills.
-  - Raising `FILL_MIN_ENERGY` to 0.32 would remove bars 44 and 45. It would also lose solo bar 68 (0.235). Because the brief puts filling the positives first, the lower value was kept.
+**Caveat.** The overall figure barely moves because few labelled bars match in the 0.30 to 0.40 range. Of the 6 such bars, 4 agree with the recogniser, so a fill at this level is less certain than one above 0.4. Filled cells are printed in italics on the sheet.
 
-**Separation.** On energy and match together, the band-playing positives and the silent or unpitched controls separate cleanly. They do not separate completely, because most of the positive bars cannot be filled at all:
+All-N bars filled at each setting (margin 0.05; CD is Chelsea Dagger, PSSOM is Pour Some Sugar On Me, S69 is Summer of '69):
 
-- Chelsea's intro is mostly drums only in the stems.
-- Pour Some Sugar On Me's solo is mostly lead lines that do not match a triad.
+| ENERGY | MATCH | All-N bars filled |
+|---:|---:|---|
+| 0.20 | 0.40 | 10: CD 3, 4, 8; PSSOM 8, 44, 45, 68, 71; S69 118, 119 |
+| 0.20 | 0.35 | 11: as above plus PSSOM 70 |
+| 0.20 | 0.32 | 12: as above plus PSSOM 74 (chosen) |
+| 0.20 | 0.30 | 12: same as 0.32 |
+| 0.15 | 0.32 | 14: as chosen plus PSSOM 15 (B) and 67 (A) |
 
-In all, 5 of the 21 named positive bars fill. The 16 left as N fall into three groups:
+### Energy: why not lower than 0.2
+
+Any ENERGY in (0.111, 0.162] would also fill Pour Some Sugar On Me bars 67 (A, r 0.442) and 15 (B, r 0.499), with no control bar filling. The two bars cannot be told apart on energy:
+
+- **Same level.** Bar 15 has ratio 0.163 (absolute RMS 0.0051); bar 67 has ratio 0.162 (absolute RMS 0.0050).
+- **Bar 15 is a noise floor.** Its stems are guitar 0.002, bass 0.000, other 0.003, vocals 0.030 and drums 0.053, in the drum-and-voice opening. Its chroma is nearly flat: the top four bins are D sharp 0.71, F sharp 0.67, F 0.65 and G sharp 0.62. A B fill there would be a false chord.
+- **Bar 67 has a faint guitar part.** Guitar 0.005, drums 0.060, and a peaked chroma (A 0.86).
+
+**Choice.** ENERGY stays at 0.2. This trades positive bar 67 for keeping bar 15 empty.
+
+### Energy: what the ratio does and does not show
+
+The energy test only works relative to each song's own chorded bars. In absolute terms the levels overlap:
+
+- Pour Some Sugar On Me bar 68 (filled) has absolute RMS 0.0073. Its guitar stem is 0.007, against about 0.025 in the chorded bars.
+- Chelsea Dagger's drums-only bars 0 to 2 have absolute RMS 0.0053 to 0.0059.
+- Summer of '69's silent fade tail, bar 120, is 0.0166. It is louder in absolute terms than bar 68.
+
+Bar 68 passes because Pour Some Sugar On Me's chorded median is low (0.031 against 0.056 for Chelsea Dagger). The separation is therefore a property of these four songs at ratio 0.2, not a clean physical boundary. The margin is small:
+
+- Pour Some Sugar On Me bar 68 sits at 0.235.
+- Bar 80 (r 0.197, rejected on match) sits at 0.229.
+- Bars 15 and 67 sit at 0.16.
+
+### What fills
+
+**Chelsea Dagger: 3 of the 9 intro bars.**
+- Bars 3 and 4 fill as C, and bar 8 as G.
+- The other six intro bars carry drums only in the stems: guitar at most 0.004 RMS and bass at most 0.002, against 0.019 to 0.032 for guitar in bars 3, 4 and 8.
+- Filling bars 5 to 7 would need ENERGY under 0.064. That would also fill Summer of '69's silent bar 120 (C, r 0.414).
+
+**Pour Some Sugar On Me, solo: 4 of the 12 N bars.**
+- Bars 68 and 70 fill as A, bar 71 as E, and bar 74 as A.
+- Bars 69 and 73 are loud but carry the lead line, with r 0.23 and 0.19 against the song's triads.
+- Bars 66 and 77 to 80 are the drum-and-voice breakdown, with the guitar stem at 0.005 or less.
+- Bar 67 is left N for the energy reason above.
+
+**Summer of '69 (control).**
+- Bars 0, 116, 117 and 120 stay N. Bar 0 is silent. Bars 116 and 117 are loud but unpitched against the song's set (r 0.03 and 0.19). Bar 120 is silent.
+- Bars 118 and 119 fill as A and B minor. They are not silent: bass 0.10 to 0.11 RMS, energy ratio 0.89 to 1.01, the band playing into the fade. They are pitched (r 0.46 and 0.48), so the rule's requirement holds: no genuinely silent or unpitched control bar fills.
+- Their chroma peaks on D sharp and E, as in the labelled A and D bars just before. The audio features cannot confirm that A and B minor are what is played.
+
+**Wet Leg (control).**
+- Nothing fills.
+- Bars 109 to 112 are loud on the other stem (a drone on F sharp and C sharp). They match the song's triads at only 0.22 to 0.30, all below 0.32.
+
+**Pour Some Sugar On Me, outside the solo (neither positive nor control).**
+- Bar 8, in the intro after seven C sharp bars, fills as C sharp.
+- Bars 44 and 45 fill as E. These are probably false fills:
+  - They lie in the second verse, which the version 1.1 run lessons describe as marked N.C. by Ultimate Guitar.
+  - The guitar stem there is 0.008 to 0.009 RMS, a third of its usual level, but the song's low chorded median gives energy ratios of 0.25 and 0.31.
+  - Raising ENERGY to 0.32 would remove them, but would also lose solo bar 68 (0.235).
+
+### Summary
+
+7 of the 21 named positive bars fill: Chelsea Dagger 3, 4 and 8; Pour Some Sugar On Me 68, 70, 71 and 74.
+
+No silent or unpitched control bar fills. Two band-playing control bars fill: Summer of '69 118 and 119.
+
+The chosen values give up two kinds of positive bar for precision:
+
+- Pour Some Sugar On Me bar 67, to keep the noise-floor bar 15 empty.
+- Chelsea Dagger bars 5 to 7, to keep Summer of '69's silent bar 120 empty.
+
+The 14 positive bars left as N fall into three groups:
 
 - Chelsea Dagger bars 0 to 2 and 5 to 7: drums only in the stems.
-- Pour Some Sugar On Me bars 66, 67 and 77 to 80: guitar stem at 0.007 RMS or less. Bar 67 is the nearest miss, at energy ratio 0.162.
-- Pour Some Sugar On Me bars 69, 70, 73 and 74: loud, but carrying the lead line, with best r under 0.4.
+- Pour Some Sugar On Me bars 66, 67 and 77 to 80: guitar stem at 0.007 RMS or less.
+- Pour Some Sugar On Me bars 69 and 73: lead line, r under 0.25.
 
 ## Per-bar table (all-N bars only)
 
@@ -101,16 +166,16 @@ Reference RMS (median over chorded bars): 0.0311. Chord set: C#:maj, F#:maj, B:m
 | 67 | 0.162 | A:maj | 0.442 | -0.034 | 0.476 | no |
 | 68 | 0.235 | A:maj | 0.685 | 0.213 | 0.472 | A:maj |
 | 69 | 0.702 | A:maj | 0.228 | 0.186 | 0.042 | no |
-| 70 | 0.838 | A:maj | 0.382 | 0.324 | 0.057 | no |
+| 70 | 0.838 | A:maj | 0.382 | 0.324 | 0.057 | A:maj |
 | 71 | 0.849 | E:maj | 0.427 | 0.353 | 0.074 | E:maj |
 | 73 | 0.728 | A:maj | 0.190 | 0.149 | 0.041 | no |
-| 74 | 0.961 | A:maj | 0.334 | 0.252 | 0.081 | no |
+| 74 | 0.961 | A:maj | 0.334 | 0.252 | 0.081 | A:maj |
 | 77 | 0.069 | C#:min | 0.526 | 0.446 | 0.080 | no |
 | 78 | 0.001 | C#:min | 0.244 | 0.193 | 0.051 | no |
 | 79 | 0.007 | C#:min | 0.200 | 0.190 | 0.010 | no |
 | 80 | 0.229 | C#:min | 0.197 | 0.155 | 0.042 | no |
 
-Filled bars: 8, 44, 45, 68, 71.
+Filled bars: 8, 44, 45, 68, 70, 71, 74.
 
 ### Summer of '69 (`9f06qzcvuhg`), control
 
@@ -148,6 +213,7 @@ Filled bars: none.
 | Chelsea Dagger 3 and 4 | 0.019 to 0.032 | 0.002 to 0.005 | 0.001 to 0.004 | 0.003 to 0.013 | guitar enters |
 | Chelsea Dagger 5 to 7 | 0.001 to 0.004 | 0.000 to 0.001 | 0.000 | 0.069 to 0.071 | drums only |
 | Chelsea Dagger 8 | 0.030 | 0.052 | 0.000 | 0.064 | guitar and bass |
+| Pour Some Sugar On Me 15 | 0.002 | 0.000 | 0.003 | 0.053 | drum-and-voice opening, noise floor (vocals 0.030) |
 | Pour Some Sugar On Me 66 to 68 | 0.000 to 0.007 | 0.000 | 0.000 | 0.041 to 0.071 | into the solo |
 | Pour Some Sugar On Me 69 to 74 | 0.022 to 0.030 | 0.000 to 0.006 | 0.000 | 0.057 to 0.069 | solo |
 | Pour Some Sugar On Me 77 to 80 | 0.000 to 0.005 | 0.000 to 0.004 | 0.000 | 0.056 to 0.066 | drum-and-voice breakdown |
