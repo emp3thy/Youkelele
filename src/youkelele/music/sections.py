@@ -17,6 +17,9 @@ from youkelele.schemas import Bar, Section
 HOP = 512
 N_CHROMA = 12
 MIN_K, MAX_K = 3, 6
+RECURRENCE_WIDTH = 3
+# recurrence_matrix needs width < (n - 1) // 2, so n >= 2 * width + 3 bars
+MIN_SEGMENT_BARS = 2 * RECURRENCE_WIDTH + 3
 SPLIT_SHARE = 0.6  # a cluster above this share of bars is split (k rule) or is the verse (labeller)
 LOW_MARGIN_DB = 1.5
 SILENCE_RMS = 1e-6  # -120 dB floor
@@ -54,8 +57,9 @@ def bar_features(
     )
     Cb = librosa.util.sync(C, frames, aggregate=np.mean)
     Mb = librosa.util.sync(M, frames, aggregate=np.mean)
-    # sync column j covers frames [segment_starts[j], segment_starts[j + 1])
-    segment_starts = np.concatenate([[0], frames])
+    # sync pads the frames with 0 and n_frames and de-duplicates, so column j covers
+    # [segment_starts[j], next start); a beat in frame 0 adds no pre-beat column
+    segment_starts = librosa.util.fix_frames(frames, x_min=0, x_max=n_frames)[:-1]
     bar_frames = librosa.time_to_frames(np.array([bar.start for bar in bars]), sr=sr, hop_length=HOP)
     owner = np.searchsorted(bar_frames, segment_starts, side="right") - 1
     columns = []
@@ -89,7 +93,9 @@ def _embedding(X: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     chroma = librosa.util.normalize(X[:N_CHROMA], axis=0)
     timbre = _zscore_rows(X[N_CHROMA:])
     stacked = librosa.feature.stack_memory(chroma, n_steps=4, mode="edge")
-    R = librosa.segment.recurrence_matrix(stacked, width=3, mode="affinity", sym=True)
+    R = librosa.segment.recurrence_matrix(
+        stacked, width=RECURRENCE_WIDTH, mode="affinity", sym=True
+    )
     Rf = librosa.segment.timelag_filter(scipy.ndimage.median_filter)(R, size=(1, 7))
     path_distance = np.sum(np.diff(timbre, axis=1) ** 2, axis=0)
     sigma = float(np.median(path_distance))
@@ -120,10 +126,11 @@ def segment_bars(features: np.ndarray, k: int | None = None) -> tuple[list[int],
     """Cluster id per bar (features: dims x bars), the k used and the largest cluster share.
 
     With `k` None: start at 3 and add one while the largest cluster covers more
-    than 60% of bars, up to 6. Fewer than four bars form a single cluster.
+    than 60% of bars, up to 6. Inputs too short for the recurrence matrix
+    (fewer than MIN_SEGMENT_BARS bars) form a single cluster.
     """
     n = features.shape[1]
-    if n < 4:
+    if n < MIN_SEGMENT_BARS:
         return [0] * n, 1, 1.0
     evecs, cnorm = _embedding(features)
     k_now = min(k if k is not None else MIN_K, n)
@@ -135,28 +142,41 @@ def segment_bars(features: np.ndarray, k: int | None = None) -> tuple[list[int],
         k_now += 1
 
 
-def boundaries_from_clusters(cluster_ids: Sequence[int], min_bars: int = 2) -> list[int]:
-    """Segment start bars (first is 0) at cluster changes.
+def boundaries_from_clusters(
+    cluster_ids: Sequence[int], min_bars: int = 2
+) -> tuple[list[int], list[int]]:
+    """Segment start bars (first is 0) and the cluster id per bar after merging.
 
-    A segment shorter than `min_bars` loses its end boundary and merges forward
-    (a short last segment folds into the previous one); then adjacent segments
-    with equal clusters merge.
+    A segment shorter than `min_bars` loses its end boundary and merges into the
+    following segment, taking that segment's cluster; a short last segment folds
+    into the preceding one and takes its cluster. Then adjacent segments with
+    equal clusters merge.
     """
     n = len(cluster_ids)
     if n == 0:
-        return []
-    changes = [i for i in range(1, n) if cluster_ids[i] != cluster_ids[i - 1]]
-    kept = [0]
-    for b in changes:
-        if b - kept[-1] >= min_bars:
-            kept.append(b)
-    if len(kept) > 1 and n - kept[-1] < min_bars:
-        kept.pop()
-    merged = [kept[0]]
-    for b in kept[1:]:
-        if cluster_ids[b] != cluster_ids[merged[-1]]:
-            merged.append(b)
-    return merged
+        return [], []
+    ids = [int(c) for c in cluster_ids]
+    run_starts = [0] + [i for i in range(1, n) if ids[i] != ids[i - 1]]
+    run_ends = run_starts[1:] + [n]
+    segments: list[list[int]] = []  # [start, end, cluster]
+    start = 0
+    for end in run_ends:
+        if end - start >= min_bars:
+            segments.append([start, end, ids[end - 1]])
+            start = end
+    if start < n:  # a short tail
+        if segments:
+            segments[-1][1] = n
+        else:
+            segments.append([0, n, ids[-1]])
+    merged = [segments[0]]
+    for seg in segments[1:]:
+        if seg[2] == merged[-1][2]:
+            merged[-1][1] = seg[1]
+        else:
+            merged.append(seg)
+    per_bar = [c for s, e, c in merged for _ in range(s, e)]
+    return [s for s, _, _ in merged], per_bar
 
 
 def label_sections(

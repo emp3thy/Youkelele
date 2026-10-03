@@ -67,8 +67,8 @@ class GridStage(Stage):
         bars = build_bars(beats, db_idx, meter, duration, chroma)
         features, loudness = bar_features(y, sr, bars, beats)
         cluster_ids, k, share = segment_bars(features, ctx.options.sections_k)
-        boundaries = boundaries_from_clusters(cluster_ids)
-        sections, margin = label_sections(boundaries, cluster_ids, loudness)
+        boundaries, merged_ids = boundaries_from_clusters(cluster_ids)
+        sections, margin = label_sections(boundaries, merged_ids, loudness)
 
         # bar 0 is a pickup when it is shorter than a bar and others follow
         pickup = bars[0] if len(bars) > 1 and len(bars[0].beats) < meter.numerator else None
