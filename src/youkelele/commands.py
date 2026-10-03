@@ -85,7 +85,7 @@ def setup_command(args: argparse.Namespace) -> int:
 
 
 def evaluate_command(args: argparse.Namespace) -> int:
-    from youkelele.evaluate import evaluate_run, format_report
+    from youkelele.evaluate import TruthFormatError, evaluate_run, format_report
     from youkelele.jsonio import ArtifactError
 
     run_dir = Path(args.runs_dir) / args.slug
@@ -94,7 +94,7 @@ def evaluate_command(args: argparse.Namespace) -> int:
         return 1
     try:
         report = evaluate_run(run_dir, Path(args.truth))
-    except ArtifactError as exc:
+    except (ArtifactError, TruthFormatError) as exc:
         print(f"cannot evaluate: {exc}")
         return 1
     print(format_report(report))

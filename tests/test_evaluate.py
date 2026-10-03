@@ -81,3 +81,57 @@ def test_cli_evaluate_missing_run_returns_1(tmp_path, capsys):
     code = main(["evaluate", "nope", "--truth", str(EXAMPLE), "--runs-dir", str(tmp_path)])
     assert code == 1
     assert len(capsys.readouterr().out.strip().splitlines()) == 1
+
+
+def test_evaluate_imperfect_estimate_is_scored_per_metric(tmp_path):
+    grid = _grid()
+    beats = list(grid.beats)
+    beats[1] += 0.2  # a non-downbeat well outside the 70 ms window
+    grid = grid.model_copy(update={"beats": beats})
+    chords = _chords()
+    events = list(chords.events)
+    events[3] = events[3].model_copy(update={"label": "D:maj", "triad": "D:maj"})
+    chords = chords.model_copy(update={"events": events})
+    run = tmp_path / "run"
+    (run / "02_grid").mkdir(parents=True)
+    (run / "03_harmony").mkdir(parents=True)
+    save_model(run / "02_grid" / "grid.json", grid)
+    save_model(run / "03_harmony" / "chords.json", chords)
+    report = evaluate_run(run, EXAMPLE)
+    assert report.beat_f is not None and report.beat_f < 1.0
+    assert report.downbeat_f == 1.0
+    for score in (report.chord_root, report.chord_majmin, report.chord_triads):
+        assert score is not None and abs(score - 0.75) < 1e-6
+
+
+def _truth_cli(tmp_path, capsys, beats=None, lab=None):
+    _run(tmp_path / "runs" / "demo")
+    truth = tmp_path / "truth"
+    truth.mkdir()
+    if beats is not None:
+        (truth / "beats.txt").write_text(beats)
+    if lab is not None:
+        (truth / "chords.lab").write_text(lab)
+    code = main(["evaluate", "demo", "--truth", str(truth), "--runs-dir", str(tmp_path / "runs")])
+    return code, capsys.readouterr().out.splitlines()
+
+
+def test_cli_evaluate_malformed_beats_prints_one_line(tmp_path, capsys):
+    code, out = _truth_cli(tmp_path, capsys, beats="0.0\t1\nabc\n")
+    assert code == 1
+    assert len(out) == 1
+    assert "beats.txt:2" in out[0] and "'abc'" in out[0]
+
+
+def test_cli_evaluate_short_lab_line_prints_one_line(tmp_path, capsys):
+    code, out = _truth_cli(tmp_path, capsys, lab="0.0\t2.0\n")
+    assert code == 1
+    assert len(out) == 1 and "chords.lab:1" in out[0]
+
+
+def test_cli_evaluate_accepts_space_separated_lab(tmp_path, capsys):
+    lab = "0.0 2.0 C:maj\n2.0 4.0 G:maj\n4.0 6.0 A:min\n6.0 8.0 F:maj\n"
+    code, out = _truth_cli(tmp_path, capsys, lab=lab)
+    assert code == 0
+    assert "Chord root: 100.0%" in out
+    assert "Beat F-measure: n/a" in out

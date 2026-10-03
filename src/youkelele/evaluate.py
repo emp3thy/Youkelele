@@ -12,6 +12,14 @@ from youkelele.jsonio import load_model
 from youkelele.schemas import Chords, Grid
 
 
+class TruthFormatError(Exception):
+    def __init__(self, path: Path, line_number: int, detail: str) -> None:
+        super().__init__(f"{path}:{line_number}: {detail}")
+        self.path = path
+        self.line_number = line_number
+        self.detail = detail
+
+
 @dataclass
 class Report:
     beat_f: float | None
@@ -24,11 +32,16 @@ class Report:
 def _read_beats(path: Path) -> tuple[np.ndarray, np.ndarray]:
     beats: list[float] = []
     downbeats: list[float] = []
-    for line in path.read_text(encoding="utf-8").splitlines():
+    for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
         parts = line.split()
         if not parts:
             continue
-        time = float(parts[0])
+        try:
+            time = float(parts[0])
+        except ValueError:
+            raise TruthFormatError(
+                path, number, f"expected a beat time in seconds, got {parts[0]!r}"
+            ) from None
         beats.append(time)
         if len(parts) > 1 and parts[1] == "1":
             downbeats.append(time)
@@ -38,12 +51,20 @@ def _read_beats(path: Path) -> tuple[np.ndarray, np.ndarray]:
 def _read_chords(path: Path) -> tuple[np.ndarray, list[str]]:
     intervals: list[list[float]] = []
     labels: list[str] = []
-    for line in path.read_text(encoding="utf-8").splitlines():
+    for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
         if not line.strip():
             continue
-        start, end, label = line.split("\t")[:3]
-        intervals.append([float(start), float(end)])
-        labels.append(label.strip())
+        fields = line.split("\t") if "\t" in line else line.split()
+        if len(fields) < 3:
+            raise TruthFormatError(path, number, "expected 'start end label' (tab-separated)")
+        try:
+            interval = [float(fields[0]), float(fields[1])]
+        except ValueError:
+            raise TruthFormatError(
+                path, number, f"expected start and end times in seconds, got {fields[:2]!r}"
+            ) from None
+        intervals.append(interval)
+        labels.append(fields[2].strip())
     return np.array(intervals, dtype=float).reshape(-1, 2), labels
 
 
