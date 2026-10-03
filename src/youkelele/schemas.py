@@ -176,6 +176,7 @@ class ArrangedChord(_Artifact):
     event: int
     name: str
     shape: Shape
+    passing: bool = False  # rare and short: named in the grid, no full diagram
 
 
 class Substitution(_Artifact):
