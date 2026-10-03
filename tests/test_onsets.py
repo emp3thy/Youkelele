@@ -154,9 +154,9 @@ def test_section_has_instrument_at_0_10():
 
 
 def test_choose_slots_per_bar_prefers_8_for_eighth_grid_and_6_for_3_4():
-    assert choose_slots_per_bar(_onsets(_island_times(4)), _bars(4), m44) == 8
+    assert choose_slots_per_bar(_onsets(_island_times(4)), _bars(4), m44, 120.0) == 8
     times_34 = [b * 1.5 + k * 0.25 for b in range(4) for k in (0, 2, 3, 5)]
-    assert choose_slots_per_bar(_onsets(times_34), _bars(4, 1.5, 3), m34) == 6
+    assert choose_slots_per_bar(_onsets(times_34), _bars(4, 1.5, 3), m34, 120.0) == 6
 
 
 def test_choose_slots_per_bar_picks_16_when_odd_sixteenths_exceed_25_percent():
@@ -164,11 +164,38 @@ def test_choose_slots_per_bar_picks_16_when_odd_sixteenths_exceed_25_percent():
     # per bar: 6 eighth positions and 3 odd sixteenths -> 3/9 = 33% odd
     per_bar = (0, 2, 4, 6, 8, 10, 3, 7, 11)
     times = [b * 2.0 + k * width for b in range(4) for k in per_bar]
-    assert choose_slots_per_bar(_onsets(times), _bars(4), m44) == 16
+    assert choose_slots_per_bar(_onsets(times), _bars(4), m44, 120.0) == 16
     # 2 of 10 odd = 20% stays at eighths
     per_bar = (0, 2, 4, 6, 8, 10, 12, 14, 3, 7)
     times = [b * 2.0 + k * width for b in range(4) for k in per_bar]
-    assert choose_slots_per_bar(_onsets(times), _bars(4), m44) == 8
+    assert choose_slots_per_bar(_onsets(times), _bars(4), m44, 120.0) == 8
+
+
+def _sixteenth_heavy_times(per_bar):
+    width = 2.0 / 16
+    return [b * 2.0 + k * width for b in range(4) for k in per_bar]
+
+
+# 6 even positions and 4 odd sixteenths -> 40% odd
+HEAVY = (0, 2, 4, 6, 8, 10, 3, 7, 11, 13)
+# 8 even positions and 2 odd -> 20% odd
+LIGHT = (0, 2, 4, 6, 8, 10, 12, 14, 3, 7)
+
+
+def test_choose_slots_caps_at_eighths_above_140_bpm():
+    assert choose_slots_per_bar(_onsets(_sixteenth_heavy_times(HEAVY)), _bars(4), m44, 158.0) == 8
+
+
+def test_choose_slots_allows_sixteenths_at_exactly_140():
+    assert choose_slots_per_bar(_onsets(_sixteenth_heavy_times(HEAVY)), _bars(4), m44, 140.0) == 16
+
+
+def test_choose_slots_allows_sixteenths_at_86_bpm():
+    assert choose_slots_per_bar(_onsets(_sixteenth_heavy_times(HEAVY)), _bars(4), m44, 86.0) == 16
+
+
+def test_choose_slots_eighths_when_share_low_regardless_of_tempo():
+    assert choose_slots_per_bar(_onsets(_sixteenth_heavy_times(LIGHT)), _bars(4), m44, 86.0) == 8
 
 
 def test_grid_fit_is_share_within_15_percent():

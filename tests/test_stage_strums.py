@@ -166,6 +166,16 @@ def test_strums_stage_short_section_without_long_neighbour_uses_its_own_vector(t
         assert p.uncertain
 
 
+def test_strums_stage_passes_grid_bpm_to_slot_choice(tmp_path):
+    heavy = (0, 2, 4, 6, 8, 10, 3, 7, 11, 13)
+    times = [t for b in range(8) for t in _bar_times(b, heavy, n_slots=16)]
+    grid = _grid([8]).model_copy(update={"bpm": 158.0})
+    strums, _, _ = _run(tmp_path, grid, _detector(times))
+    assert strums.slots_per_bar == 8
+    strums, _, _ = _run(tmp_path / "slow", _grid([8]), _detector(times))
+    assert strums.slots_per_bar == 16
+
+
 def test_strums_stage_one_pattern_per_section_and_valid_schema(tmp_path):
     detector = _detector(_island(12))
     strums, ctx, out = _run(tmp_path, _grid([4, 8]), detector)
