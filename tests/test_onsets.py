@@ -174,3 +174,17 @@ def test_detect_onsets_finds_clicks_with_features(tmp_path):
     found = [np.min(np.abs(onsets.times - t)) for t in expected]
     assert max(found) < 0.05
     assert np.all(onsets.centroid > 0)
+
+
+def test_quantise_bar_clamps_an_onset_at_the_lower_window_edge_to_slot_0():
+    # floating point puts this onset, exactly half a slot early, at index -1
+    bar = Bar(index=0, start=4.4399999999999995, end=6.369999999999999, beats=[0, 1, 2, 3])
+    onsets = _onsets([4.319374999999999])
+    assert "".join(quantise_bar(onsets, np.zeros(1, dtype=bool), bar, 8)) == "S-------"
+
+
+def test_quantise_bar_clamps_an_onset_at_the_upper_window_edge_to_the_last_slot():
+    # just inside the shifted window, floating point rounds this onset to index 8
+    bar = Bar(index=0, start=1.406, end=3.483, beats=[0, 1, 2, 3])
+    onsets = _onsets([3.3531874999999998])
+    assert "".join(quantise_bar(onsets, np.zeros(1, dtype=bool), bar, 8)) == "-------S"

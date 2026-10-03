@@ -203,3 +203,11 @@ def test_slots_per_bar_must_fit_the_grid_meter():
     with pytest.raises(ValueError) as e:
         _build(_grid(2), _strums(slots=list("D-DU-U")))
     assert "slots_per_bar 6" in str(e.value) and "re-run from strums" in str(e.value)
+
+
+def test_inherited_from_is_copied_into_the_score_section():
+    strums = _strums()
+    inherited = strums.patterns[0].model_copy(update={"section": 1, "inherited_from": 0})
+    strums = strums.model_copy(update={"patterns": [strums.patterns[0], inherited]})
+    score = _build(_split(_grid(2)), strums)
+    assert [s.inherited_from for s in score.sections] == [None, 0]

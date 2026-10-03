@@ -92,3 +92,15 @@ def test_paths(monkeypatch, tmp_path):
     assert cache_dir().name == ".youkelele"
     assert package_data("a", "b").parts[-3:] == ("data", "a", "b")
     assert vendor_dir("v").parts[-2:] == ("vendor", "v")
+
+
+def test_slug_for_keeps_unicode_word_characters():
+    assert slug_for(r"C:\music\夜に駆ける.mp3") == "夜に駆ける"
+    assert slug_for("Café del Mar.wav") == "café-del-mar"
+
+
+def test_slug_for_falls_back_to_a_hash_when_nothing_is_left():
+    slug = slug_for("♪.wav")
+    assert slug.startswith("song-") and len(slug) == len("song-") + 8
+    assert slug == slug_for(r"D:\other\♪.wav")
+    assert slug != slug_for("♫.wav")

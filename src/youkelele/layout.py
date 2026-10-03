@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import re
 from collections.abc import Sequence
 from pathlib import Path
@@ -17,7 +18,11 @@ def slug_for(source: str) -> str:
         return match.group(1).lower()
     name = re.split(r"[\\/]", source.rstrip("\\/"))[-1]
     stem = name.rsplit(".", 1)[0] if "." in name else name
-    return re.sub(r"[^a-z0-9]+", "-", stem.lower()).strip("-")
+    slug = re.sub(r"[\W_]+", "-", stem.lower(), flags=re.UNICODE).strip("-")
+    if not slug:
+        slug = "song-" + hashlib.sha1(stem.encode("utf-8")).hexdigest()[:8]
+    assert slug, "slug must not be empty"
+    return slug
 
 
 class RunLayout:

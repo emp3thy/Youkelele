@@ -34,12 +34,19 @@ def render_html(score: Score, alphatex: str, assets_rel: str = "assets") -> str:
     start = 1
     for section in score.sections:
         count = len(section.bars)
+        source = section.inherited_from
+        inherited = (
+            score.sections[source].label
+            if source is not None and 0 <= source < len(score.sections)
+            else None
+        )
         sections.append(
             {
                 "label": section.label,
                 "uncertain": section.uncertain,
                 "no_instrument": section.no_instrument,
                 "repeat": f"{section.bar_repeat:.0%}",
+                "inherited_from": inherited,
                 "svg": Markup(strum_pattern_svg(section.pattern, score.meter)),
                 "start_bar": start,
                 "bar_count": count,

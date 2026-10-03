@@ -53,6 +53,7 @@
       <span><b>Meter</b> {{ score.meter.numerator }}/{{ score.meter.denominator }}</span>
     </div>
     {% if score.strum_source == "mix" %}<div class="note">Strum detected from full mix; directions are a best guess.</div>{% endif %}
+    {% if score.strums_uncertain %}<div class="note">Strum detection uncertain for this song (onsets fit the beat grid poorly)</div>{% endif %}
   </header>
 
   <h3 class="legend-head">Chords</h3>
@@ -71,7 +72,7 @@
       {% if section.no_instrument %}
         <p class="no-instrument">No strummed instrument detected</p>
       {% else %}
-        <div class="strum-label">Strum as played, {{ section.repeat }} repeatable{% if section.uncertain %} (uncertain){% endif %}</div>
+        <div class="strum-label">Strum as played, {{ section.repeat }} repeatable{% if section.uncertain %} (uncertain){% endif %}{% if section.inherited_from is not none %}, inherited from {{ section.inherited_from }}{% endif %}</div>
         <div class="strum-box">{{ section.svg }}</div>
       {% endif %}
       </div>

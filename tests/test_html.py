@@ -20,14 +20,16 @@ ISLAND = list("D-DU-UDU")
 C = Shape(frets=[0, 0, 0, 3], fingers=[0, 0, 0, 3], base_fret=1, barres=[])
 
 
-def _section(label, n_bars, start, uncertain=False, no_instrument=False, pattern=ISLAND):
+def _section(
+    label, n_bars, start, uncertain=False, no_instrument=False, pattern=ISLAND, inherited_from=None
+):
     bars = [
         ScoreBar(index=start + i, chords=[ScoreChord(name="C", diagram=0, start_slot=0, slots=list(pattern))])
         for i in range(n_bars)
     ]
     return ScoreSection(
         label=label, pattern=list(pattern), uncertain=uncertain, bars=bars, bar_repeat=0.875,
-        no_instrument=no_instrument,
+        no_instrument=no_instrument, inherited_from=inherited_from,
     )
 
 
@@ -158,3 +160,24 @@ def test_html_hostile_title_cannot_close_the_tex_block():
     assert "</script" not in block and "<!--" not in block
     assert html.count("<script") == html.count("</script>") == 3
     assert _embedded_tex(html) == tex
+
+
+STRUMS_NOTE = "Strum detection uncertain for this song (onsets fit the beat grid poorly)"
+
+
+def test_html_shows_song_level_strum_uncertainty_note():
+    score = _two_sections().model_copy(update={"strums_uncertain": True})
+    html = render_html(score, "tex")
+    head = html[html.index('<header class="sheet-head">'):html.index("</header>")]
+    assert STRUMS_NOTE in head
+    assert STRUMS_NOTE not in render_html(_two_sections(), "tex")
+
+
+def test_html_names_the_section_a_pattern_was_inherited_from():
+    score = _score(
+        [_section("Verse", 4, 0), _section("Pre-chorus", 2, 4, uncertain=True, inherited_from=0)]
+    )
+    html = render_html(score, "tex")
+    assert html.count("inherited from") == 1
+    second = html[html.index("<h2>Pre-chorus</h2>"):]
+    assert "inherited from Verse" in second[: second.index('class="strum-box"')]

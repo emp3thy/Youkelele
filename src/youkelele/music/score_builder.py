@@ -143,6 +143,7 @@ def build_score(
             ScoreSection(
                 label=section.label, pattern=list(pattern.slots), uncertain=pattern.uncertain,
                 bars=bars, bar_repeat=pattern.bar_repeat, no_instrument=pattern.no_instrument,
+                inherited_from=pattern.inherited_from,
             )
         )
 

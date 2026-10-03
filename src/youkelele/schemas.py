@@ -220,6 +220,7 @@ class ScoreSection(_Artifact):
     bars: list[ScoreBar]
     bar_repeat: float
     no_instrument: bool
+    inherited_from: int | None = None
 
 
 class Score(_Artifact):

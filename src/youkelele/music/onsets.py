@@ -124,6 +124,7 @@ def quantise_bar(onsets: Onsets, muted: np.ndarray, bar: Bar, slots_per_bar: int
         if not bar.start - width / 2 <= t < bar.end - width / 2:
             continue
         j = int(np.floor((t - bar.start) / width + 0.5))
+        j = min(max(j, 0), slots_per_bar - 1)  # floating point can land one past either edge
         if classes[j] == "-":
             classes[j] = "x" if m else "S"
     return classes
