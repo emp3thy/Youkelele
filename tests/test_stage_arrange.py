@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from youkelele.jsonio import load_model, save_model
 from youkelele.layout import RunLayout
@@ -52,7 +52,7 @@ def test_arrange_stage_writes_shapes_and_substitutions(tmp_path):
 def test_arrange_stage_keeps_flat_spelling_at_capo_0(tmp_path):
     _, arr = _run(tmp_path, ["C:maj", "F:maj", "G:maj", "A:min"] * 3 + ["Bb:maj", "Eb:7"], tier="full")
     assert arr.capo == 0
-    assert [c.name for c in arr.chords] [-2:] == ["Bb", "Eb7"]
+    assert [c.name for c in arr.chords][-2:] == ["Bb", "Eb7"]
 
 
 def test_arrange_stage_full_tier_keeps_seventh(tmp_path):
