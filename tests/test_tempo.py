@@ -10,6 +10,7 @@ from youkelele.music.tempo import (
     double_beats,
     downbeat_indices,
     fill_gaps,
+    mean_bpm,
     modal_phase,
     normalise_octave,
 )
@@ -20,6 +21,17 @@ FOUR = Meter(numerator=4, denominator=4)
 
 def test_bpm_from_regular_beats():
     assert bpm_from_beats([0, 0.5, 1.0, 1.5]) == pytest.approx(120)
+
+
+def test_mean_bpm_uses_mean_interval_not_median():
+    beats = [0.0, 0.43, 0.86, 1.29, 1.72, 2.20]  # median 0.43 s, mean 0.44 s
+    assert mean_bpm(beats) == pytest.approx(60 / 0.44)
+    assert bpm_from_beats(beats) == pytest.approx(60 / 0.43)
+
+
+def test_mean_bpm_needs_two_beats():
+    with pytest.raises(ValueError):
+        mean_bpm([1.0])
 
 
 def test_fill_gaps_inserts_one_dropped_beat():

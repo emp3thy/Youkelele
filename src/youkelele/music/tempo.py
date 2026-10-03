@@ -50,6 +50,13 @@ def bpm_from_beats(beats: Sequence[float]) -> float:
     return 60.0 / float(np.median(np.diff(np.asarray(beats, dtype=float))))
 
 
+def mean_bpm(beats: Sequence[float]) -> float:
+    """60 / mean interval, which is exact over the whole song; the median reads low on a drifting tempo."""
+    if len(beats) < 2:
+        raise ValueError("need at least two beats to measure a tempo")
+    return 60.0 / float(np.mean(np.diff(np.asarray(beats, dtype=float))))
+
+
 def decide_octave(
     bpm: float,
     mode: OctaveMode,

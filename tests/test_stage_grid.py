@@ -12,7 +12,9 @@ from youkelele.models.beats import BeatResult
 from youkelele.options import RunOptions
 from youkelele.schemas import Grid
 from youkelele.stage import StageContext
-from youkelele.stages.grid import GridStage
+from youkelele.music.tempo import mean_bpm
+from youkelele.stages import grid as grid_module
+from youkelele.stages.grid import MIN_SECTION_BARS, GridStage
 
 
 def _fake_detector(period: float, beats_per_bar: int, seconds: float):
@@ -164,3 +166,47 @@ def test_grid_stage_backbeat_uses_modal_downbeat_phase(tmp_path):
     grid = load_model(ctx.output("grid/grid.json"), Grid)
     assert grid.backbeat_ratio is not None and grid.backbeat_ratio > 1
     assert grid.octave_decision == "none"
+
+
+def test_grid_stage_sections_are_at_least_four_bars(tmp_path, monkeypatch):
+    # 24 s at 0.5 s per beat in 4/4 is 12 bars; clusters make a 2-bar middle segment
+    clusters = [0] * 4 + [1] * 2 + [2] * 6
+    monkeypatch.setattr(
+        grid_module, "segment_bars", lambda features, k=None: (clusters, 3, 0.5)
+    )
+    stage = GridStage(detector=_fake_detector(0.5, 4, 24.0))
+    ctx, _ = _ctx(tmp_path, stage, RunOptions(source="x.mp3"), lambda p: write_click_track(p, 24.0, 120))
+    stage.run(ctx)
+    grid = load_model(ctx.output("grid/grid.json"), Grid)
+    assert MIN_SECTION_BARS == 4
+    assert len(grid.bars) == 12
+    assert all(s.end_bar - s.start_bar >= 4 for s in grid.sections)
+    assert [(s.start_bar, s.end_bar) for s in grid.sections] == [(0, 4), (4, 12)]
+
+
+def test_grid_stage_bpm_is_mean_interval_octave_uses_median(tmp_path):
+    # 0.4 s beats (150 bpm median) with every eighth interval stretched to 0.5 s
+    beats = [0.0]
+    for i in range(1, 60):
+        beats.append(round(beats[-1] + (0.5 if i % 8 == 0 else 0.4), 6))
+
+    def detect(wav: Path) -> BeatResult:
+        return BeatResult(beats=beats, downbeats=beats[::4])
+
+    stage = GridStage(detector=detect)
+    ctx, messages = _ctx(
+        tmp_path,
+        stage,
+        RunOptions(source="x.mp3"),
+        lambda p: write_click_track(p, 26.0, 150),
+        hit_beats=(1, 3),
+        seconds=26.0,
+    )
+    stage.run(ctx)
+    grid = load_model(ctx.output("grid/grid.json"), Grid)
+    assert grid.octave_decision == "none"
+    assert grid.bpm == pytest.approx(mean_bpm(beats))
+    assert grid.bpm < 150 - 1  # the median would read 150
+    log = " ".join(messages)
+    assert "150.0 bpm detected" in log
+    assert f"{grid.bpm:.1f} bpm;" in log

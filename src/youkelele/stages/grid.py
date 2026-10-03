@@ -26,11 +26,14 @@ from youkelele.music.tempo import (
     double_beats,
     downbeat_indices,
     fill_gaps,
+    mean_bpm,
     modal_phase,
     normalise_octave,
 )
 from youkelele.schemas import Grid, Meter
 from youkelele.stage import Stage, StageContext
+
+MIN_SECTION_BARS = 4  # a section shorter than this merges into a neighbour
 
 
 def _backbeat_text(ratio: float | None) -> str:
@@ -77,13 +80,13 @@ class GridStage(Stage):
             beats, db_idx = normalise_octave(beats, db_idx, target_period=2 * 60.0 / detected_bpm)
         elif octave == "double":
             beats, db_idx = double_beats(beats, db_idx)
-        bpm = bpm_from_beats(beats)
+        bpm = mean_bpm(beats)  # stored tempo; the octave decision above used the median
 
         chroma = beat_chroma(y, sr, beats) if octave == "half" else None
         bars = build_bars(beats, db_idx, meter, duration, chroma)
         features, loudness = bar_features(y, sr, bars, beats)
         cluster_ids, k, share = segment_bars(features, ctx.options.sections_k)
-        boundaries, merged_ids = boundaries_from_clusters(cluster_ids)
+        boundaries, merged_ids = boundaries_from_clusters(cluster_ids, min_bars=MIN_SECTION_BARS)
         sections, margin = label_sections(boundaries, merged_ids, loudness)
 
         full_bars = [bar for bar in bars if len(bar.beats) == meter.numerator] or bars

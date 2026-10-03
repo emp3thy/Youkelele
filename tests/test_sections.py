@@ -129,6 +129,29 @@ def test_boundaries_min_two_bars_merges_forward():
     assert boundaries_from_clusters([0, 0, 1, 1], min_bars=3) == ([0], [1, 1, 1, 1])
 
 
+def _segment_lengths(bounds: list[int], n: int) -> list[int]:
+    return [e - s for s, e in zip(bounds, bounds[1:] + [n])]
+
+
+def test_boundaries_min_four_bars_merges_two_and_three_bar_segments():
+    ids = [0] * 8 + [1] * 2 + [0] * 8 + [2] * 3 + [0] * 8
+    bounds, per_bar = boundaries_from_clusters(ids, min_bars=4)
+    assert len(per_bar) == len(ids)
+    assert min(_segment_lengths(bounds, len(ids))) >= 4
+    # at min_bars=2 the same input keeps the short segments
+    short, _ = boundaries_from_clusters(ids, min_bars=2)
+    assert min(_segment_lengths(short, len(ids))) < 4
+
+
+def test_boundaries_min_four_on_twelve_bar_song_keeps_every_section_at_four_bars():
+    # three-bar segments merge forward in pairs: two six-bar sections, none under four bars
+    ids = [0] * 3 + [1] * 3 + [2] * 3 + [3] * 3
+    bounds, per_bar = boundaries_from_clusters(ids, min_bars=4)
+    assert bounds == [0, 6]
+    assert per_bar == [1] * 6 + [3] * 6
+    assert min(_segment_lengths(bounds, len(ids))) >= 4
+
+
 def test_boundaries_blip_takes_the_following_segment_cluster():
     # a one-bar chorus-like blip (cluster 1) before a long verse (cluster 2)
     bounds, ids = boundaries_from_clusters([0, 0, 0, 1, 2, 2, 2, 2, 2, 2])
