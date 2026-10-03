@@ -32,7 +32,7 @@ The artist field gets step 4 only. Both fields remain hand-editable. Evidence: 4
 ### 3.4 Harmony: filling no-chord bars where the band plays
 
 After beat snapping, each bar whose events are all `N` is a candidate. A candidate is filled when both hold:
-- the summed RMS of the harmonic stems (guitar, bass, piano, other) in the bar is at least `FILL_MIN_ENERGY` times the song's median bar harmonic RMS;
+- the summed RMS of the harmonic stems (guitar, bass, piano, other) in the bar is at least `FILL_MIN_ENERGY` times the median harmonic RMS over bars that hold a chord (this is the measured definition; see `music/fill.py`);
 - the bar's mean chroma (CQT chroma of the summed harmonic stems) correlates with the template of one of the song's existing chord labels (triad templates from `quality_to_bitmap`) at least `FILL_MIN_MATCH`, and beats the second-best template by at least `FILL_MIN_MARGIN`.
 A filled bar becomes one event spanning the bar, with the matched label, its triad, `confidence` equal to the correlation, and `filled: true` (new `ChordEvent.filled: bool = False`). The three constants are set by measurement during implementation: Chelsea Dagger's intro and Pour Some Sugar On Me's solo are the positive cases; Summer of '69 and Wet Leg are the controls, where filling must not add chords to bars that are genuinely silent or unpitched. The measured values and the evidence are recorded beside the constants. The harmony stage now also requires the four harmonic stems.
 

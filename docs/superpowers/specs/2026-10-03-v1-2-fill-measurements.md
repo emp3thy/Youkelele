@@ -83,7 +83,7 @@ Bar 68 passes because Pour Some Sugar On Me's chorded median is low (0.031 again
 **Chelsea Dagger: 3 of the 9 intro bars.**
 - Bars 3 and 4 fill as C, and bar 8 as G.
 - The other six intro bars carry drums only in the stems: guitar at most 0.004 RMS and bass at most 0.002, against 0.019 to 0.032 for guitar in bars 3, 4 and 8.
-- Filling bars 5 to 7 would need ENERGY under 0.064. That would also fill Summer of '69's silent bar 120 (C, r 0.414).
+- Bar 5 fills only at ENERGY at or below 0.074 and bar 6 only at or below 0.013, while bar 7 fails on match (0.290 under 0.32) regardless of ENERGY. Any ENERGY that fills bar 5 would also fill Summer of '69's silent bar 120 (C, r 0.414).
 
 **Pour Some Sugar On Me, solo: 4 of the 12 N bars.**
 - Bars 68 and 70 fill as A, bar 71 as E, and bar 74 as A.

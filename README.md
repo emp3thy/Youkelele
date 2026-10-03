@@ -21,7 +21,8 @@ The `youkelele` command-line tool lives in `src/youkelele`. It turns a YouTube U
 - `youkelele setup` fetches the chord model and ffmpeg once.
 - `youkelele run <url-or-path>` runs the whole chain; each stage writes a numbered folder under `runs/<slug>/`.
 - Resume with `--from <stage>` (and stop early with `--to <stage>`), for example `youkelele run <url-or-path> --from harmony`.
-- To correct a stage, edit its JSON (for example `02_grid/grid.json`) and re-run from the next stage with `--from`.
+- To correct a stage, edit its JSON (for example `02_grid/grid.json`) and re-run from the next stage with `--from`. The score stage may move a hand-edited section start one bar later to align with the chord phrase; `shifted` in `score.json` records it.
+- In `03_harmony/chords.json`, an event with `filled: true` prints in italics as inferred; clear the flag when you correct its label.
 - `youkelele stages` lists the stages; `youkelele status <slug>` shows which have run and which are stale.
 - `youkelele evaluate <slug> --truth <dir>` prints beat, downbeat and chord accuracy against `beats.txt` and `chords.lab` in `<dir>`; the formats are in `tests/fixtures/ground_truth/README.md`.
 

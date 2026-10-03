@@ -1,4 +1,8 @@
-"""Stage 4: chord labels snapped to the beat grid, reduced to triads, plus the key."""
+"""Stage 4: chord labels snapped to the beat grid, reduced to triads, plus the key.
+
+No-chord bars where the harmonic stems clearly play one of the song's own chords are
+then filled with that chord (`filled: true`); see `music/fill.py`.
+"""
 
 from __future__ import annotations
 
@@ -72,8 +76,9 @@ class HarmonyStage(Stage):
             events, grid.bars, bar_chroma(mix, sr, grid.bars), bar_energy(mix, sr, grid.bars)
         )
         filled = sum(e.filled for e in events)
+        chorded = sum(e.label != "N" and not e.filled for e in events)
         key = estimate_key(self._chroma(wav))
-        ctx.log(f"  {len(events)} chord events, key {key.tonic} {key.mode}")
+        ctx.log(f"  {chorded} chord events, key {key.tonic} {key.mode}")
         ctx.log(f"  {filled} bars filled")
         save_model(out, Chords(key=key, events=events))
         ctx.note("model", f"chord_cnn_lstm@{CHORD_MODEL_COMMIT}")

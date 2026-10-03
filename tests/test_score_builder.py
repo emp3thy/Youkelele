@@ -386,3 +386,62 @@ def test_score_json_without_new_fields_still_loads():
         c.filled or c.passing for s in loaded.sections for b in s.bars for c in b.chords
     )
     assert not any(d.passing for d in loaded.chord_diagrams)
+
+
+def _verse_chorus_score(specs):
+    """24 bars, Verse 0-8 and Chorus 8-24; specs are (start, end, label, passing) in bars."""
+    shapes = {"D": C, "A": G, "F": F}
+    evs = [_ev(s, e, lab) for s, e, lab, _ in specs]
+    arranged = [
+        ArrangedChord(event=i, name=lab, shape=shapes[lab], passing=passing)
+        for i, (_, _, lab, passing) in enumerate(specs)
+    ]
+    grid = _grid(24).model_copy(
+        update={
+            "sections": [
+                Section(label="Verse", start_bar=0, end_bar=8, confidence=0.5),
+                Section(label="Chorus", start_bar=8, end_bar=24, confidence=0.5),
+            ]
+        }
+    )
+    return build_score(
+        _source(), grid,
+        Chords(key=Key(tonic="D", mode="major", confidence=0.9), events=evs),
+        _two_section_strums(),
+        Arrangement(capo=0, transpose=0, tier="easy", chords=arranged, substitutions=[]),
+        UKULELE_TUNING, "Ukulele",
+    )
+
+
+def test_passing_chords_do_not_count_as_phrase_changes():
+    # chords change every two bars from bar 9, so the Chorus is one bar out of phase; a
+    # passing F sits mid-bar on the first bar of each pair. Counting it as the bar's last
+    # chord would add a change on the second bar of the pair (an even offset) and spoil
+    # the odd-offset share, so the Chorus would not shift.
+    bounds = [0, 2, 4, 6, 9, 11, 13, 15, 17, 19, 21, 23, 24]
+    specs = []
+    for a, b, lab in zip(bounds, bounds[1:], ["D", "A"] * 6):
+        if a >= 9 and b - a == 2 and a < 21:
+            specs += [(a, a + 0.5, lab, False), (a + 0.5, a + 1, "F", True), (a + 1, b, lab, False)]
+        else:
+            specs.append((a, b, lab, False))
+    score = _verse_chorus_score(specs)
+    chorus = score.sections[1]
+    assert (chorus.bars[0].index, chorus.shifted) == (9, 1)
+    assert [c.name for c in chorus.bars[0].chords] == ["D", "F"]
+    assert [b.chords[0].name for b in chorus.bars[:4]] == ["D", "D", "A", "A"]
+
+
+def test_mid_bar_change_followed_by_a_bar_holding_it_is_not_a_phrase_change():
+    # every even-offset Chorus bar changes chord half way and the next bar holds the new
+    # chord, so no bar starts on a chord other than the previous bar's last one. Comparing
+    # first chords instead would flag every odd-offset bar and shift the Chorus.
+    specs = [(0, 8, "D", False)]
+    for k in range(8):
+        first, last = ("D", "A") if k % 2 == 0 else ("A", "D")
+        bar = 8 + 2 * k
+        specs += [(bar, bar + 0.5, first, False), (bar + 0.5, bar + 2, last, False)]
+    score = _verse_chorus_score(specs)
+    chorus = score.sections[1]
+    assert (chorus.bars[0].index, chorus.shifted) == (8, 0)
+    assert [c.name for c in chorus.bars[0].chords] == ["D", "A"]
