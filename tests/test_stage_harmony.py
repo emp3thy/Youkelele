@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
+import soundfile as sf
 
 from tests.audio_fixtures import write_chord_loop
 from youkelele.jsonio import load_model, save_model
@@ -29,11 +30,24 @@ def _grid(n_bars: int, bar_seconds: float) -> Grid:
     )
 
 
-def _ctx(tmp_path, stage, n_bars, bar_seconds, write_audio):
+HARMONIC_STEMS = ("guitar", "bass", "piano", "other")
+
+
+def _write_silence(path, seconds, sr=44100):
+    sf.write(str(path), np.zeros((int(seconds * sr), 1), dtype=np.float32), sr, subtype="PCM_16")
+
+
+def _ctx(tmp_path, stage, n_bars, bar_seconds, write_audio, write_stems=None):
     layout = RunLayout(tmp_path / "run", ["ingest", "separate", "grid", "harmony"])
     audio = layout.path("ingest/audio.wav")
     audio.parent.mkdir(parents=True)
     write_audio(audio)
+    for stem in HARMONIC_STEMS:
+        path = layout.path(f"separate/stems/{stem}.wav")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        _write_silence(path, n_bars * bar_seconds)
+    if write_stems is not None:
+        write_stems(lambda stem: layout.path(f"separate/stems/{stem}.wav"))
     grid_path = layout.path("grid/grid.json")
     grid_path.parent.mkdir(parents=True)
     save_model(grid_path, _grid(n_bars, bar_seconds))
@@ -55,6 +69,36 @@ def test_harmony_stage_writes_chords_with_triads(tmp_path):
     chords = load_model(ctx.output("harmony/chords.json"), Chords)
     assert [e.triad for e in chords.events] == ["C:maj", "G:maj", "A:min", "F:maj"]
     assert chords.key.tonic
+    assert [p.name for p in out.rglob("*") if p.is_file()] == ["chords.json"]
+
+
+def test_harmony_stage_requires_harmonic_stems_and_fills(tmp_path):
+    assert {f"separate/stems/{s}.wav" for s in HARMONIC_STEMS} <= set(HarmonyStage.requires)
+    spans = [
+        LabelSpan(0.0, 2.0, "C:maj"),
+        LabelSpan(2.0, 4.0, "G:maj"),
+        LabelSpan(6.0, 8.0, "G:maj"),
+    ]
+    stage = HarmonyStage(
+        recogniser=lambda wav, work_dir, log=print: spans,
+        chroma=lambda wav: np.eye(12)[0] + 0.1,
+    )
+
+    def guitar(stem_path):
+        write_chord_loop(stem_path("guitar"), ["C:maj", "G:maj", "C:maj", "G:maj"], 2.0)
+
+    ctx, out = _ctx(
+        tmp_path, stage, 4, 2.0, lambda p: write_chord_loop(p, ["C:maj"], 2.0, bars=4), guitar
+    )
+    stage.run(ctx)
+    chords = load_model(ctx.output("harmony/chords.json"), Chords)
+    assert [(e.bar, e.label, e.filled) for e in chords.events] == [
+        (0, "C:maj", False),
+        (1, "G:maj", False),
+        (2, "C:maj", True),
+        (3, "G:maj", False),
+    ]
+    assert ctx.notes["filled"] == "1"
     assert [p.name for p in out.rglob("*") if p.is_file()] == ["chords.json"]
 
 

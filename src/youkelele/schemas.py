@@ -111,6 +111,7 @@ class ChordEvent(_Artifact):
     label: str
     triad: str
     confidence: float
+    filled: bool = False  # inferred from the harmonic stems for a bar the recogniser left N
 
     @field_validator("label", "triad")
     @classmethod
