@@ -68,6 +68,8 @@ class Grid(_Artifact):
     largest_cluster_share: float
     chorus_margin_db: float | None
     labels_low_confidence: bool
+    backbeat_ratio: float | None = None
+    drums_silent: bool = False
 
     @model_validator(mode="after")
     def _check_structure(self) -> Grid:

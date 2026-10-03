@@ -138,3 +138,30 @@ def test_build_bars_final_bar_ends_one_beat_after_last_beat_not_at_duration():
 def test_build_bars_final_bar_never_ends_after_duration():
     bars = build_bars([0.0, 0.5, 1.0, 1.5], [0], Meter(numerator=4, denominator=4), duration=1.7)
     assert bars[-1].end == pytest.approx(1.7)
+
+
+def test_decide_octave_auto_keeps_150_with_strong_backbeat():
+    assert decide_octave(150, "auto", backbeat_ratio=2.1) == "none"
+
+
+def test_decide_octave_auto_halves_150_with_weak_backbeat():
+    assert decide_octave(150, "auto", backbeat_ratio=0.57) == "half"
+
+
+def test_decide_octave_auto_halves_150_when_drums_silent():
+    assert decide_octave(150, "auto", backbeat_ratio=None, drums_silent=True) == "half"
+    assert decide_octave(150, "auto", backbeat_ratio=2.1, drums_silent=True) == "half"
+
+
+def test_decide_octave_auto_halves_150_with_no_evidence():
+    assert decide_octave(150, "auto") == "half"
+
+
+def test_decide_octave_never_halves_139_or_outside_band():
+    assert decide_octave(139, "auto", 0.2) == "none"
+    assert decide_octave(200, "auto", 0.2) == "none"
+
+
+def test_decide_octave_overrides_ignore_backbeat():
+    assert decide_octave(150, "none", 0.2) == "none"
+    assert decide_octave(150, "half", 2.5) == "half"

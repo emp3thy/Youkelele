@@ -9,6 +9,7 @@ import numpy as np
 import soundfile as sf
 
 from youkelele.jsonio import save_model
+from youkelele.music.backbeat import backbeat_ratio as measure_backbeat, drums_silent as is_drums_silent
 from youkelele.models.beats import CHECKPOINT, BeatResult, detect_beats
 from youkelele.music.sections import (
     LOW_MARGIN_DB,
@@ -31,9 +32,13 @@ from youkelele.schemas import Grid, Meter
 from youkelele.stage import Stage, StageContext
 
 
+def _backbeat_text(ratio: float | None) -> str:
+    return "  backbeat ratio n/a" if ratio is None else f"  backbeat ratio {ratio:.2f}"
+
+
 class GridStage(Stage):
     name = "grid"
-    requires = ("ingest/audio.wav",)
+    requires = ("ingest/audio.wav", "separate/stems/drums.wav")
     produces = ("grid/grid.json",)
 
     def __init__(self, detector: Callable[[Path], BeatResult] = detect_beats) -> None:
@@ -54,15 +59,25 @@ class GridStage(Stage):
 
         beats = fill_gaps(beats)
         detected_bpm = bpm_from_beats(beats)
-        octave = decide_octave(detected_bpm, ctx.options.beat_octave)
+        meter = Meter.parse(ctx.options.meter)
+        drums_signal, drums_sr = sf.read(
+            str(ctx.input("separate/stems/drums.wav")), dtype="float32", always_2d=True
+        )
+        drums = drums_signal.mean(axis=1)
+        silent = is_drums_silent(drums)
         db_idx = downbeat_indices(beats, downbeats)
+        first_downbeat = db_idx[0] if db_idx else 0  # bar phase: first detected downbeat is beat 0
+        ratio = None if silent else measure_backbeat(drums, drums_sr, beats[first_downbeat:], meter.numerator)
+        ctx.log("  drums silent" if silent else _backbeat_text(ratio))
+        octave = decide_octave(
+            detected_bpm, ctx.options.beat_octave, backbeat_ratio=ratio, drums_silent=silent
+        )
         if octave == "half":
             beats, db_idx = normalise_octave(beats, db_idx, target_period=2 * 60.0 / detected_bpm)
         elif octave == "double":
             beats, db_idx = double_beats(beats, db_idx)
         bpm = bpm_from_beats(beats)
 
-        meter = Meter.parse(ctx.options.meter)
         chroma = beat_chroma(y, sr, beats) if octave == "half" else None
         bars = build_bars(beats, db_idx, meter, duration, chroma)
         features, loudness = bar_features(y, sr, bars, beats)
@@ -92,6 +107,8 @@ class GridStage(Stage):
             largest_cluster_share=share,
             chorus_margin_db=margin,
             labels_low_confidence=margin is not None and margin < LOW_MARGIN_DB,
+            backbeat_ratio=ratio,
+            drums_silent=silent,
         )
         save_model(ctx.output("grid/grid.json"), grid)
         ctx.note("model", f"Beat This! {CHECKPOINT}")

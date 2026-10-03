@@ -5,7 +5,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tests.audio_fixtures import write_chord_loop, write_click_track
+from tests.audio_fixtures import write_chord_loop, write_click_track, write_drum_stem
 from youkelele.jsonio import load_model
 from youkelele.layout import RunLayout
 from youkelele.models.beats import BeatResult
@@ -23,11 +23,20 @@ def _fake_detector(period: float, beats_per_bar: int, seconds: float):
     return detect
 
 
-def _ctx(tmp_path: Path, stage: GridStage, options: RunOptions, write_audio) -> tuple[StageContext, list[str]]:
+def _ctx(
+    tmp_path: Path,
+    stage: GridStage,
+    options: RunOptions,
+    write_audio,
+    hit_beats: tuple[int, ...] = (),
+    bpm: float = 150,
+    seconds: float = 24.0,
+) -> tuple[StageContext, list[str]]:
     layout = RunLayout(tmp_path / "run", ["ingest", "separate", "grid"])
     audio = layout.path("ingest/audio.wav")
     audio.parent.mkdir(parents=True)
     write_audio(audio)
+    write_drum_stem(layout.path("separate/stems/drums.wav"), seconds, bpm, hit_beats)
     out = tmp_path / "out"
     out.mkdir()
     messages: list[str] = []
@@ -91,6 +100,7 @@ def test_grid_stage_real_beat_this_on_click_track(tmp_path):
     stage.run(ctx)
     grid = load_model(ctx.output("grid/grid.json"), Grid)
     assert 118 <= grid.bpm <= 122
+    assert grid.octave_decision == "none"  # 120 bpm is below the 140 halving threshold
 
 
 def test_grid_stage_pickup_comes_from_bar_flag(tmp_path):
@@ -107,3 +117,29 @@ def test_grid_stage_pickup_comes_from_bar_flag(tmp_path):
     assert grid.bars[0].pickup is True and grid.bars[0].beats == [0]
     assert all(not bar.pickup for bar in grid.bars[1:])
     assert grid.downbeats == [1, 5, 9]
+
+
+def test_grid_stage_requires_drums_stem_and_records_backbeat(tmp_path):
+    assert "separate/stems/drums.wav" in GridStage.requires
+    stage = GridStage(detector=_fake_detector(0.4, 4, 24.0))  # 150 bpm
+    options = RunOptions(source="x.mp3")
+    ctx, messages = _ctx(
+        tmp_path, stage, options, lambda p: write_click_track(p, 24.0, 150), hit_beats=(1, 3)
+    )
+    stage.run(ctx)
+    grid = load_model(ctx.output("grid/grid.json"), Grid)
+    assert grid.octave_decision == "none"
+    assert grid.backbeat_ratio is not None and grid.backbeat_ratio > 1
+    assert grid.drums_silent is False
+    assert "backbeat ratio" in "\n".join(messages)
+
+
+def test_grid_stage_halves_when_drums_stem_silent(tmp_path):
+    stage = GridStage(detector=_fake_detector(0.4, 4, 24.0))
+    options = RunOptions(source="x.mp3")
+    ctx, messages = _ctx(tmp_path, stage, options, lambda p: write_click_track(p, 24.0, 150))
+    stage.run(ctx)
+    grid = load_model(ctx.output("grid/grid.json"), Grid)
+    assert grid.octave_decision == "half"
+    assert grid.drums_silent is True
+    assert "drums silent" in "\n".join(messages)

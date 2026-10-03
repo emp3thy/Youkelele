@@ -59,3 +59,41 @@ def write_chord_loop(
         freqs = _chord_freqs(labels[i % len(labels)])
         parts.append(sum(np.sin(2 * np.pi * f * t) for f in freqs) * 0.15)
     _write(path, np.concatenate(parts)[:, None], sr)
+
+
+def drum_track(
+    sr: int, bpm: float, seconds: float, hit_beats: tuple[int, ...], beats_per_bar: int = 4
+) -> np.ndarray:
+    """Mono noise bursts (20 ms, 2 to 5 kHz) on the given 0-based beat indices of each bar."""
+    rng = np.random.default_rng(0)
+    n = int(seconds * sr)
+    data = np.zeros(n)
+    if hit_beats:  # faint room noise so quiet beats are not exactly zero
+        data += 0.002 * rng.standard_normal(n)
+    burst_len = int(0.02 * sr)
+    noise = rng.standard_normal(burst_len + 2048)
+    spec = np.fft.rfft(noise)
+    freqs = np.fft.rfftfreq(len(noise), 1 / sr)
+    spec[(freqs < 2000) | (freqs > 5000)] = 0
+    burst = np.fft.irfft(spec, len(noise))[:burst_len]
+    burst = 0.8 * burst / np.abs(burst).max() * np.linspace(1.0, 0.0, burst_len)
+    step = 60.0 / bpm
+    k = 0
+    while (start := int(round(k * step * sr))) < n:
+        if k % beats_per_bar in hit_beats:
+            end = min(start + burst_len, n)
+            data[start:end] = burst[: end - start]
+        k += 1
+    return data
+
+
+def write_drum_stem(
+    path: Path,
+    seconds: float,
+    bpm: float = 150,
+    hit_beats: tuple[int, ...] = (),
+    sr: int = 22050,
+) -> None:
+    """A drums stem; with no hit beats it is digital silence."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    _write(path, drum_track(sr, bpm, seconds, hit_beats)[:, None], sr)

@@ -50,11 +50,25 @@ def bpm_from_beats(beats: Sequence[float]) -> float:
     return 60.0 / float(np.median(np.diff(np.asarray(beats, dtype=float))))
 
 
-def decide_octave(bpm: float, mode: OctaveMode) -> OctaveDecision:
-    """`auto` halves if and only if bpm > 140 and the halved tempo is 60 to 95."""
+def decide_octave(
+    bpm: float,
+    mode: OctaveMode,
+    backbeat_ratio: float | None = None,
+    drums_silent: bool = False,
+) -> OctaveDecision:
+    """`auto` halves iff bpm > 140, the halved tempo is 60 to 95, and the drums do not object.
+
+    A drum backbeat ratio of at least 1 (snare on 2 and 4 at the detected tempo)
+    keeps a genuine fast song. A silent drum stem or a missing ratio is no
+    evidence against halving.
+    """
     if mode != "auto":
         return mode
-    return "half" if bpm > 140 and 60 <= bpm / 2 <= 95 else "none"
+    if not (bpm > 140 and 60 <= bpm / 2 <= 95):
+        return "none"
+    if drums_silent or backbeat_ratio is None or backbeat_ratio < 1.0:
+        return "half"
+    return "none"
 
 
 def downbeat_indices(
