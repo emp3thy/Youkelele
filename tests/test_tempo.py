@@ -121,3 +121,20 @@ def test_build_bars_phase_tie_break_by_chroma_change():
     with_chroma = build_bars(beats, idx, FOUR, duration=32.0, chroma_per_beat=chroma)
     assert with_chroma[0].beats == [0, 1]  # pickup
     assert with_chroma[1].beats == [2, 3, 4, 5]
+
+
+def test_build_bars_marks_leading_partial_bar_as_pickup():
+    bars = build_bars([0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5], [1, 5], Meter(numerator=4, denominator=4), 5.0)
+    assert bars[0].pickup is True and bars[0].beats == [0]
+    assert all(b.pickup is False for b in bars[1:])
+
+
+def test_build_bars_final_bar_ends_one_beat_after_last_beat_not_at_duration():
+    beats = [0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5]  # 8 beats, 0.5 s apart
+    bars = build_bars(beats, [0, 4], Meter(numerator=4, denominator=4), duration=13.5)
+    assert bars[-1].end == pytest.approx(4.0)  # 3.5 + 0.5, not 13.5
+
+
+def test_build_bars_final_bar_never_ends_after_duration():
+    bars = build_bars([0.0, 0.5, 1.0, 1.5], [0], Meter(numerator=4, denominator=4), duration=1.7)
+    assert bars[-1].end == pytest.approx(1.7)

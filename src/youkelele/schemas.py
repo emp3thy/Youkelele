@@ -45,6 +45,7 @@ class Bar(_Artifact):
     start: float
     end: float
     beats: list[int]
+    pickup: bool = False
 
 
 class Section(_Artifact):

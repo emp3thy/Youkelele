@@ -91,3 +91,19 @@ def test_grid_stage_real_beat_this_on_click_track(tmp_path):
     stage.run(ctx)
     grid = load_model(ctx.output("grid/grid.json"), Grid)
     assert 118 <= grid.bpm <= 122
+
+
+def test_grid_stage_pickup_comes_from_bar_flag(tmp_path):
+    def detect(wav: Path) -> BeatResult:
+        beats = [round(0.5 + i * 0.5, 6) for i in range(11)]  # 0.5 .. 5.5 s
+        return BeatResult(beats=beats, downbeats=[beats[1], beats[5], beats[9]])
+
+    # 1-beat pickup (beat 0), then full bars starting at beats 1, 5, 9
+    stage = GridStage(detector=detect)
+    options = RunOptions(source="x.mp3", meter="4/4")
+    ctx, _ = _ctx(tmp_path, stage, options, lambda p: write_click_track(p, 6.0, 120))
+    stage.run(ctx)
+    grid = load_model(ctx.output("grid/grid.json"), Grid)
+    assert grid.bars[0].pickup is True and grid.bars[0].beats == [0]
+    assert all(not bar.pickup for bar in grid.bars[1:])
+    assert grid.downbeats == [1, 5, 9]

@@ -174,8 +174,8 @@ def build_bars(
 
     When two phases tie or nearly tie (after halving) and per-beat chroma
     (12 x beats) is given, the phase with the larger adjacent-bar chroma change
-    wins. Beats before the first full bar form a pickup bar 0; the final bar ends
-    at `duration`; beats at or after `duration` (a downbeat at the exact end of
+    wins. Beats before the first full bar form a pickup bar 0 (flagged `pickup`); the
+    final bar ends one median beat after the last beat, capped at `duration`; beats at or after `duration` (a downbeat at the exact end of
     the audio) are ignored.
     """
     times = [float(b) for b in beats]
@@ -187,8 +187,20 @@ def build_bars(
     phase = _choose_phase(idx, n, n_beats, chroma_per_beat)
     phase = min(phase, n_beats - 1)
     starts = ([0] if phase > 0 else []) + list(range(phase, n_beats, n))
+    if n_beats >= 2:
+        final_end = min(float(duration), times[n_beats - 1] + float(np.median(np.diff(times[:n_beats]))))
+    else:
+        final_end = float(duration)
     bars = []
     for number, (s, e) in enumerate(zip(starts, starts[1:] + [n_beats])):
-        end = times[e] if e < n_beats else float(duration)
-        bars.append(Bar(index=number, start=times[s], end=end, beats=list(range(s, e))))
+        end = times[e] if e < n_beats else final_end
+        bars.append(
+            Bar(
+                index=number,
+                start=times[s],
+                end=end,
+                beats=list(range(s, e)),
+                pickup=number == 0 and phase > 0,
+            )
+        )
     return bars

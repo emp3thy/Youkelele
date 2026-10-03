@@ -70,8 +70,6 @@ class GridStage(Stage):
         boundaries, merged_ids = boundaries_from_clusters(cluster_ids)
         sections, margin = label_sections(boundaries, merged_ids, loudness)
 
-        # bar 0 is a pickup when it is shorter than a bar and others follow
-        pickup = bars[0] if len(bars) > 1 and len(bars[0].beats) < meter.numerator else None
         full_bars = [bar for bar in bars if len(bar.beats) == meter.numerator] or bars
         bar_len = float(np.median([bar.end - bar.start for bar in full_bars]))
         ctx.log(
@@ -85,7 +83,7 @@ class GridStage(Stage):
             bpm=bpm,
             meter=meter,
             beats=beats,
-            downbeats=[bar.beats[0] for bar in bars if bar is not pickup],
+            downbeats=[bar.beats[0] for bar in bars if not bar.pickup],
             bars=bars,
             sections=sections,
             octave_decision=octave,

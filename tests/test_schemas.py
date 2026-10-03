@@ -159,3 +159,9 @@ def test_chords_reject_non_harte_triad(tmp_path):
 def test_chords_accept_harte_labels(tmp_path, label):
     (tmp_path / "chords.json").write_text(json.dumps(_chords_json(label, triad=label)))
     assert load_model(tmp_path / "chords.json", Chords).events[0].label == label
+
+
+def test_bar_pickup_defaults_false_so_version_1_files_load():
+    from youkelele.schemas import Bar
+
+    assert Bar(index=0, start=0, end=1, beats=[0]).pickup is False
