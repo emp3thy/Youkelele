@@ -42,6 +42,10 @@ def load_model(path: Path, model: type[T]) -> T:
 
 def save_model(path: Path, obj: BaseModel) -> None:
     path = Path(path)
+    try:
+        type(obj).model_validate(obj.model_dump(by_alias=True))
+    except ValidationError as exc:
+        raise ArtifactError(path, _describe(exc)) from exc
     data = obj.model_dump_json(by_alias=True, indent=2)
     try:
         fd, tmp_name = tempfile.mkstemp(dir=path.parent, prefix=path.name + ".", suffix=".tmp")

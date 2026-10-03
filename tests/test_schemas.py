@@ -119,3 +119,12 @@ def test_round_trip_preserves_schema_alias(tmp_path):
     assert json.loads((tmp_path / "k.json").read_text())["schema"] == 1
     assert load_model(tmp_path / "k.json", Chords).key.tonic == "C"
     assert list(tmp_path.iterdir()) == [tmp_path / "k.json"]
+
+
+def test_save_model_rejects_invalid_mutated_model(tmp_path):
+    grid = Grid.model_validate(make_grid(n_bars=8))
+    grid.sections = [grid.sections[0].model_copy(update={"end_bar": 6})]
+    with pytest.raises(ArtifactError) as e:
+        save_model(tmp_path / "grid.json", grid)
+    assert "sections" in str(e.value)
+    assert list(tmp_path.iterdir()) == []
