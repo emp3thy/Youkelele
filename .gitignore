@@ -14,3 +14,8 @@ runs/
 
 # Playwright MCP scratch dumps
 .playwright-mcp/
+
+# Packaging and tests
+*.egg-info/
+.pytest_cache/
+tests/fixtures/generated/
