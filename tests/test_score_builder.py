@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
+import pytest
+
 from youkelele.music.score_builder import build_score
 from youkelele.profiles.ukulele import UKULELE_TUNING
 from youkelele.schemas import (
@@ -160,3 +162,44 @@ def test_every_bar_has_exactly_slots_per_bar_slots():
             slots = [s for c in bar.chords for s in c.slots]
             assert len(slots) == score.slots_per_bar
             assert bar.chords[0].start_slot == 0
+
+
+def _build(grid, strums):
+    return build_score(
+        _source(), grid, Chords(key=Key(tonic="C", mode="major", confidence=0.9), events=[]),
+        strums, Arrangement(capo=0, transpose=0, tier="easy", chords=[], substitutions=[]),
+        UKULELE_TUNING, "Ukulele",
+    )
+
+
+def _split(grid: Grid) -> Grid:
+    return grid.model_copy(
+        update={
+            "sections": [
+                Section(label="Verse", start_bar=0, end_bar=1, confidence=0.5),
+                Section(label="Chorus", start_bar=1, end_bar=2, confidence=0.5),
+            ]
+        }
+    )
+
+
+def test_split_section_without_rerunning_strums_is_a_clear_error():
+    with pytest.raises(ValueError) as e:
+        _build(_split(_grid(2)), _strums())
+    assert str(e.value) == (
+        "strums.json has 1 patterns for 2 sections in grid.json; re-run from strums"
+    )
+
+
+def test_pattern_section_indices_must_match_grid_sections():
+    strums = _strums()
+    strums.patterns[0] = strums.patterns[0].model_copy(update={"section": 3})
+    with pytest.raises(ValueError) as e:
+        _build(_grid(2), strums)
+    assert "re-run from strums" in str(e.value) and "[3]" in str(e.value)
+
+
+def test_slots_per_bar_must_fit_the_grid_meter():
+    with pytest.raises(ValueError) as e:
+        _build(_grid(2), _strums(slots=list("D-DU-U")))
+    assert "slots_per_bar 6" in str(e.value) and "re-run from strums" in str(e.value)

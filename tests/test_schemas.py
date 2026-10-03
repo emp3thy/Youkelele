@@ -128,3 +128,34 @@ def test_save_model_rejects_invalid_mutated_model(tmp_path):
         save_model(tmp_path / "grid.json", grid)
     assert "sections" in str(e.value)
     assert list(tmp_path.iterdir()) == []
+
+
+def _chords_json(label, triad="A:min"):
+    event = {
+        "bar": 0, "beat": 0, "start": 0.0, "end": 2.0, "label": label, "triad": triad,
+        "confidence": 0.9,
+    }
+    return {"schema": 1, "key": {"tonic": "A", "mode": "minor", "confidence": 0.9}, "events": [event]}
+
+
+@pytest.mark.parametrize("label", ["Am", "F#m7", ""])
+def test_chords_reject_non_harte_label(tmp_path, label):
+    (tmp_path / "chords.json").write_text(json.dumps(_chords_json(label)))
+    with pytest.raises(ArtifactError) as e:
+        load_model(tmp_path / "chords.json", Chords)
+    message = str(e.value)
+    assert "events" in message and "label" in message
+    assert "Harte" in message and "A:min" in message
+
+
+def test_chords_reject_non_harte_triad(tmp_path):
+    (tmp_path / "chords.json").write_text(json.dumps(_chords_json("A:min", triad="Am")))
+    with pytest.raises(ArtifactError) as e:
+        load_model(tmp_path / "chords.json", Chords)
+    assert "events.0.triad" in str(e.value) and "Harte" in str(e.value)
+
+
+@pytest.mark.parametrize("label", ["N", "X", "A:min", "C#:min7", "C:maj/3", "G"])
+def test_chords_accept_harte_labels(tmp_path, label):
+    (tmp_path / "chords.json").write_text(json.dumps(_chords_json(label, triad=label)))
+    assert load_model(tmp_path / "chords.json", Chords).events[0].label == label

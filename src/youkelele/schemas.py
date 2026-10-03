@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 Slot = Literal["D", "U", "x", "-"]
 
@@ -108,6 +108,21 @@ class ChordEvent(_Artifact):
     triad: str
     confidence: float
 
+    @field_validator("label", "triad")
+    @classmethod
+    def _check_harte(cls, value: str) -> str:
+        if value in ("N", "X"):
+            return value
+        import mir_eval.chord
+
+        try:
+            mir_eval.chord.split(value)
+        except mir_eval.chord.InvalidChordException:
+            raise ValueError(
+                f"{value!r} is not a chord label: expected Harte syntax such as A:min"
+            ) from None
+        return value
+
 
 class Chords(_Artifact):
     key: Key
@@ -144,7 +159,7 @@ class Strums(_Artifact):
 
 
 class Shape(_Artifact):
-    """Frets in diagram order left to right (G C E A for ukulele); -1 is muted."""
+    """Frets (diagram order, G C E A for ukulele; -1 muted) and barres are relative to base_fret."""
 
     frets: list[int]
     fingers: list[int]

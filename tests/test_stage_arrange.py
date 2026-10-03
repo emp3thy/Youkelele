@@ -72,7 +72,7 @@ def test_arrange_stage_capo_fills_no_capo_alternative(tmp_path):
 
 
 def test_arrange_stage_never_crashes_on_inversion_or_unknown(tmp_path):
-    _, arr = _run(tmp_path, ["N", "A:min/b3", "E:maj(9)", "Q:weird", "X", "C:maj"], tier="full")
+    _, arr = _run(tmp_path, ["N", "A:min/b3", "E:maj(9)", "C##:maj", "X", "C:maj"], tier="full")
     assert [c.event for c in arr.chords] == [1, 2, 5]
     assert [c.name for c in arr.chords] == ["Am", "E", "C"]
     reasons = {s.event: s.reason for s in arr.substitutions}

@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from youkelele.profiles.base import Tuning
+from typing import TYPE_CHECKING
+
 from youkelele.schemas import (
     ArrangedChord,
     Arrangement,
@@ -18,7 +19,31 @@ from youkelele.schemas import (
     Strums,
 )
 
+if TYPE_CHECKING:  # profiles imports the score stage, which imports this module
+    from youkelele.profiles.base import Tuning
+
 _EPS = 1e-6
+
+
+def check_strums_match_grid(grid: Grid, strums: Strums) -> None:
+    """Fail clearly when grid.json was edited after strums.json was made from it."""
+    n, m = len(strums.patterns), len(grid.sections)
+    if n != m:
+        raise ValueError(
+            f"strums.json has {n} patterns for {m} sections in grid.json; re-run from strums"
+        )
+    indices = [p.section for p in strums.patterns]
+    if indices != list(range(m)):
+        raise ValueError(
+            f"strums.json patterns are for sections {indices} but grid.json has sections "
+            f"{list(range(m))}; re-run from strums"
+        )
+    num = grid.meter.numerator
+    if strums.slots_per_bar not in (2 * num, 4 * num):
+        raise ValueError(
+            f"strums.json has slots_per_bar {strums.slots_per_bar} but grid.json meter "
+            f"{num}/{grid.meter.denominator} needs {2 * num} or {4 * num}; re-run from strums"
+        )
 
 
 def _place_events(grid: Grid, chords: Chords, spb: int) -> list[tuple[int, int, int]]:
@@ -72,6 +97,7 @@ def build_score(
     tuning: Tuning,
     instrument_name: str,
 ) -> Score:
+    check_strums_match_grid(grid, strums)
     spb = strums.slots_per_bar
     arranged = {a.event: a for a in arrangement.chords}
     starts = _bar_starts(grid, chords, arranged, spb)
