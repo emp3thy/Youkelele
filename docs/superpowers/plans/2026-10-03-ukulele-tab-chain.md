@@ -19,7 +19,7 @@
 - Artifact keys are `<stage name>/<file>` (for example `grid/grid.json`); folders on disk are `NN_<stage name>`.
 - Times are float seconds from the start of `00_ingest/audio.wav` (44.1 kHz, stereo, 16-bit).
 - Strum slot tokens are exactly `D`, `U`, `x`, `-`.
-- Dependencies declared in `pyproject.toml`: `yt-dlp[default,deno]`, `static-ffmpeg`, `audio-separator[cpu]`, `audioread`, `beat-this`, `torch` (PyPI CPU wheel, no custom index), `librosa>=1.0`, `soundfile`, `mir_eval`, `numpy`, `scipy`, `scikit-learn`, `pydantic>=2`, `jinja2`, `playwright==1.63.0`, `h5py`, `joblib`. Dev: `pytest`, `pytest-cov`.
+- Dependencies declared in `pyproject.toml`: `yt-dlp[default,deno]`, `static-ffmpeg`, `audio-separator[cpu]`, `audioread`, `beat-this`, `torch` (PyPI CPU wheel, no custom index), `librosa>=1.0`, `soundfile`, `mir_eval`, `numpy`, `scipy`, `scikit-learn`, `pydantic>=2`, `jinja2`, `playwright==1.63.0`, `h5py`, `joblib`, `pydub`, `pretty_midi` (the last two are imported by the vendored chord model at inference; found missing by the models spike). Dev: `pytest`, `pytest-cov`.
 - Licences: ship `LICENSE` files beside everything vendored (alphaTab MPL-2.0, Bravura OFL, chords-db MIT, Chord-CNN-LSTM MIT). Nothing non-commercial or unlicensed is installed by default.
 - The `--separator roformer-sw` and `--chord-model chordmini` option values are parsed and rejected with "not implemented in this version" in version one. The default paths are the deliverable.
 - UK spelling in user-facing text. No em-dashes in generated output.
@@ -293,14 +293,14 @@ git commit -m "feat: add chain runner with resume, atomic outputs and profile re
 
 ### Task 5: Preflight and CLI commands `run`, `stages`, `status`
 
-**Confidence:** 88%. The static-ffmpeg API for locating already-downloaded binaries without triggering a download was not verified; the implementer may need to check the package's install directory directly.
+**Confidence:** 95%. Spike (models report, Spike A): static-ffmpeg 3.0 installs into `static_ffmpeg.run.get_platform_dir()` and writes `installed.crumb` there; presence without download is `crumb and ffmpeg.exe and ffprobe.exe exist`; `run.get_or_fetch_platform_executables_else_raise()` returns `(ffmpeg, ffprobe)` and downloads only when the crumb is missing.
 
 **Files:**
 - Create: `src/youkelele/preflight.py`, `tests/test_preflight.py`
 - Modify: `src/youkelele/cli.py`, `tests/test_cli.py`
 
 **Interfaces:**
-- `preflight.py`: `@dataclass Problem(what: str, fix: str)`; `check_environment(options: RunOptions, stages_to_run: Sequence[str], probes: Probes = default_probes()) -> list[Problem]`. `Probes` is a dataclass of callables so tests can fake them: `ffmpeg_dir() -> Path | None` (uses `static_ffmpeg.run.get_or_fetch_platform_executables_else_raise` only when `fetch=True`; otherwise checks the known install dir), `deno_bin() -> Path | None` (`deno.find_deno_bin()`), `chromium_present() -> bool` (Playwright's executable path exists), `chord_model_present() -> bool` (Task 9's `vendoring.chord_model_ready()`). Rules: ffmpeg needed if `ingest` or `separate` runs; deno if `ingest` runs with a URL source; chromium if `render` runs; chord model if `harmony` runs. Unsupported option values (`roformer-sw`, `chordmini`) produce a Problem with fix text "not implemented in this version; use the default".
+- `preflight.py`: `@dataclass Problem(what: str, fix: str)`; `check_environment(options: RunOptions, stages_to_run: Sequence[str], probes: Probes = default_probes()) -> list[Problem]`. `Probes` is a dataclass of callables so tests can fake them: `ffmpeg_dir() -> Path | None` (returns `Path(static_ffmpeg.run.get_platform_dir())` when `installed.crumb`, `ffmpeg.exe` and `ffprobe.exe` all exist there, else `None`; never downloads; the fix text is `youkelele setup`), `deno_bin() -> Path | None` (`deno.find_deno_bin()`), `chromium_present() -> bool` (Playwright's executable path exists), `chord_model_present() -> bool` (Task 9's `vendoring.chord_model_ready()`). Rules: ffmpeg needed if `ingest` or `separate` runs; deno if `ingest` runs with a URL source; chromium if `render` runs; chord model if `harmony` runs. Unsupported option values (`roformer-sw`, `chordmini`) produce a Problem with fix text "not implemented in this version; use the default".
 - `cli.py`: `run` builds `RunOptions`, computes slug, chain and `start`/`end`, calls `check_environment`, prints each Problem as `what` then `  fix: ...` and returns 2 if any; otherwise `run_chain`. `stages` prints `NN name  reads: ...  writes: ...`. `status <slug>` prints one line per stage. `--runs-dir` defaults to `runs`. On `StageFailed` prints the stage, the cause and the resume command, returns 1.
 
 - [ ] **Step 1: Write the failing tests**
@@ -336,7 +336,7 @@ git commit -m "feat: add preflight checks and run/stages/status commands"
 
 ### Task 6: Ingest stage
 
-**Confidence:** 85%. Only the yt-dlp command-line form of the Deno and ffmpeg options was verified; the exact option names in the `YoutubeDL` Python options dictionary need checking against yt-dlp 2026.08.19, and YouTube extraction changes often.
+**Confidence:** 95%. Spike (audio report, Task 6): the library options below downloaded both target songs through the pip-installed Deno and ffmpeg; the debug line read `JS runtimes: deno-2.9.7`. Residual risk is YouTube itself changing, which the retry and error reporting cover.
 
 **Files:**
 - Create: `src/youkelele/models/__init__.py`, `src/youkelele/models/ytdl.py`, `src/youkelele/models/ffmpeg.py`, `src/youkelele/stages/__init__.py`, `src/youkelele/stages/ingest.py`, `tests/test_stage_ingest.py`, `tests/audio_fixtures.py`
@@ -344,7 +344,7 @@ git commit -m "feat: add preflight checks and run/stages/status commands"
 
 **Interfaces:**
 - `models/ffmpeg.py`: `ffmpeg_paths() -> tuple[Path, Path]` (ffmpeg, ffprobe from static-ffmpeg, fetching on first call); `to_wav(src: Path, dst: Path) -> None` running `ffmpeg -y -i src -ac 2 -ar 44100 -sample_fmt s16 dst`; `probe_duration(path: Path) -> float` via ffprobe JSON.
-- `models/ytdl.py`: `@dataclass DownloadResult(audio_path: Path, info: dict)`; `download_audio(url: str, out_dir: Path, retries: int = 3) -> DownloadResult` using `yt_dlp.YoutubeDL` with `format: "bestaudio/best"`, `outtmpl: out_dir/"source.%(ext)s"`, `writeinfojson: True`, `ffmpeg_location: str(ffmpeg_paths()[0].parent)`, `js_runtimes: {"deno": {"path": str(deno.find_deno_bin())}}`; backoff 2, 4, 8 seconds; raises `DownloadError(url, last_error)`.
+- `models/ytdl.py`: `@dataclass DownloadResult(audio_path: Path, info: dict)`; `download_audio(url: str, out_dir: Path, retries: int = 3) -> DownloadResult` using `yt_dlp.YoutubeDL` with `format: "bestaudio/best"`, `outtmpl: str(out_dir / "source.%(ext)s")`, `writeinfojson: True`, `ffmpeg_location: str(ffmpeg_paths()[0].parent)` (a directory is accepted), `js_runtimes: {"deno": {"path": str(deno.find_deno_bin())}}` (the only config key is `path`); the downloaded file is `info["requested_downloads"][0]["filepath"]`; build a fresh options dict per call because `YoutubeDL` mutates it; backoff 2, 4, 8 seconds; raises `DownloadError(url, last_error)`. Log lines must tolerate non-ASCII titles on a cp1252 console (encode with `errors="replace"`).
 - `stages/ingest.py`: `class IngestStage(Stage)` with `name = "ingest"`, `requires = ()`, `produces = ("ingest/audio.wav", "ingest/source.json")`; constructor `IngestStage(downloader=download_audio, converter=to_wav, prober=probe_duration)`. Treats `options.source` as a URL if it starts with `http`, else as a path. Writes `SourceInfo` (title from info `title`, artist from info `artist` or `uploader`, else file stem; `video_id` from info `id`).
 - `tests/audio_fixtures.py`: `write_sine_wav(path, seconds, sr=44100, freq=220.0, channels=2)`; `write_click_track(path, seconds, bpm, sr=44100)`; `write_chord_loop(path, labels: list[str], bar_seconds, sr=44100)` synthesising triads as summed sines.
 
@@ -381,21 +381,22 @@ git commit -m "feat: add ingest stage with yt-dlp and ffmpeg adapters"
 
 ### Task 7: Separate stage
 
-**Confidence:** 85%. The real model run was verified on this machine, but the output filename pattern used for stem mapping was observed once and audio-separator's `custom_output_names` behaviour is untested.
+**Confidence:** 95%. Spike (audio report, Task 7): `custom_output_names` with capitalised stem keys produced exactly `vocals.wav` to `other.wav` on a real song; `separate()` returns bare filenames to join with `output_dir`; measured 0.5x real time with cached weights.
 
 **Files:**
 - Create: `src/youkelele/models/separator.py`, `src/youkelele/stages/separate.py`, `tests/test_stage_separate.py`
 - Modify: `src/youkelele/runner.py` (append `SeparateStage()`)
 
 **Interfaces:**
-- `models/separator.py`: `STEMS = ("vocals", "drums", "bass", "guitar", "piano", "other")`; `separate_stems(wav: Path, out_dir: Path, model_dir: Path | None = None, log=print) -> dict[str, Path]`: imports `static_ffmpeg` and calls `add_paths()` before constructing `audio_separator.separator.Separator(output_dir=str(out_dir), model_file_dir=str(model_dir or cache_dir()/"models"/"audio-separator"), output_format="WAV")`, `load_model("htdemucs_6s.yaml")`, `separate(str(wav))`; maps returned filenames to stem names by the `_(Guitar)_` style token, case-insensitive, and renames to `out_dir/<stem>.wav`.
+- `models/separator.py`: `STEMS = ("vocals", "drums", "bass", "guitar", "piano", "other")`; `separate_stems(wav: Path, out_dir: Path, model_dir: Path | None = None, log=print) -> dict[str, Path]`: imports `static_ffmpeg` and calls `add_paths()` before constructing `audio_separator.separator.Separator(output_dir=str(out_dir), model_file_dir=str(model_dir or cache_dir()/"models"/"audio-separator"), output_format="WAV")`, `load_model("htdemucs_6s.yaml")`, `separate(str(wav), custom_output_names={"Vocals": "vocals", "Drums": "drums", "Bass": "bass", "Guitar": "guitar", "Piano": "piano", "Other": "other"})` (keys must be capitalised: the chunked code path matches them case-sensitively); `separate()` returns bare filenames, so join each with `out_dir`; keep a regex fallback that maps the default `{base}_({Stem})_{model}.wav` form, case-insensitive, in case a future version ignores the custom names.
 - `stages/separate.py`: `class SeparateStage(Stage)` with `name="separate"`, `requires=("ingest/audio.wav",)`, `produces=tuple(f"separate/stems/{s}.wav" for s in STEMS)`; constructor `SeparateStage(separator=separate_stems)`; notes `model=htdemucs_6s.yaml` and `licence=MIT (Demucs repository; no separate weight statement)`.
 
 - [ ] **Step 1: Write the failing tests**
 
 ```python
 def test_separate_stage_writes_six_named_stems(tmp_path): ...  # fake separator writes six files -> all produces present
-def test_stem_name_mapping_from_audio_separator_filenames(): ...  # "source_(Guitar)_htdemucs_6s.wav" -> "guitar"
+def test_stem_name_mapping_from_audio_separator_filenames(): ...  # fallback: "source_(Guitar)_htdemucs_6s.wav" -> "guitar"
+def test_separate_passes_capitalised_custom_output_names(): ...     # fake Separator records kwargs; keys == {"Vocals","Drums","Bass","Guitar","Piano","Other"}
 def test_separate_real_model_on_two_seconds(tmp_path):            # marked slow; downloads weights; asserts six WAVs with same length as input
     ...
 ```
@@ -475,15 +476,15 @@ git commit -m "feat: add grid stage with Beat This!, tempo octave, bars and Lapl
 
 ### Task 9: Chord model vendoring, harmony stage, triads and key
 
-**Confidence:** 80%. The model, the NumPy patch and the triad table are verified; the pinned-commit clone and hash verification plumbing on Windows, and the subprocess integration, are new code with no prior run.
+**Confidence:** 92%. Spike (models report, Spike B): the exact subprocess form ran on Windows with spaces and a drive letter in both paths, on the synthetic clip and both full songs (about 14 seconds per song); commit and hashes below are measured; the two missing dependencies are now declared.
 
 **Files:**
 - Create: `src/youkelele/vendoring.py`, `src/youkelele/models/chords.py`, `src/youkelele/music/triads.py`, `src/youkelele/music/key.py`, `src/youkelele/music/snap.py`, `src/youkelele/stages/harmony.py`, `tests/test_triads.py`, `tests/test_key.py`, `tests/test_snap.py`, `tests/test_stage_harmony.py`, `tests/test_vendoring.py`
 - Modify: `src/youkelele/cli.py` (`setup` command), `src/youkelele/preflight.py` (use `chord_model_ready`), `src/youkelele/runner.py` (append `HarmonyStage()`)
 
 **Interfaces:**
-- `vendoring.py`: `CHORD_MODEL_REPO = "https://github.com/music-x-lab/ISMIR2019-Large-Vocabulary-Chord-Recognition"`, `CHORD_MODEL_COMMIT: str` (the implementer pins the current master commit SHA), `CHORD_MODEL_CHECKPOINT_SHA256: dict[str, str]` for the five `cache_data/joint_chord_net_ismir_naive_v1.0_reweight(0.0,10.0)_s{0..4}.best.sdict` files (computed once by the implementer after cloning and recorded); `chord_model_dir() -> Path` = `cache_dir()/"models"/"chord_cnn_lstm"`; `ensure_chord_model(log=print) -> Path` (git clone at the pinned commit if absent, apply `patch_numpy_aliases(dir)` which replaces the regex `\bnp\.int\b` with `int` in `extractors/xhmm_ismir.py`, `extractors/xhmm_decoder.py`, `results_ismir2017.py`, then verify checkpoint hashes, raising `VendoringError` on mismatch); `chord_model_ready() -> bool`.
-- `models/chords.py`: `@dataclass LabelSpan(start: float, end: float, label: str)`; `recognise_chords(wav: Path, work_dir: Path, log=print) -> list[LabelSpan]` runs `[sys.executable, "chord_recognition.py", str(wav), str(work_dir/"out.lab"), "submission"]` with `cwd=chord_model_dir()`, streams stderr to `log`, parses the tab-separated `.lab`.
+- `vendoring.py`: `CHORD_MODEL_REPO = "https://github.com/music-x-lab/ISMIR2019-Large-Vocabulary-Chord-Recognition"`, `CHORD_MODEL_COMMIT = "481f4ce703f8822b99f4037e9104ba1760e21ea3"`, `CHORD_MODEL_CHECKPOINT_SHA256` for the five `cache_data/joint_chord_net_ismir_naive_v1.0_reweight(0.0,10.0)_s{N}.best.sdict` files: s0 `921b42d5d1cf9ce1c0c0e45a74d409b8066e0acec46058ef74e24ee0fb540761`, s1 `bcb75859e0efa256696cf5da396b320093317b9b1d9560c304f46c25fe1f8b17`, s2 `acddf85c3fff29954c4877021177d72e2cba9f729ce80c1010f054c477bf3f61`, s3 `65d81a3ab73435aaaade586981b4cabdf57b8953d76052703e6968c32ef8421c`, s4 `5ff6b0ec85640e17a09a9b3de68c93fdd45adc24488e8fa9be5715c28d561122`; `chord_model_dir() -> Path` = `cache_dir()/"models"/"chord_cnn_lstm"`; `ensure_chord_model(log=print) -> Path` (git clone, `git checkout` the pinned commit if absent, apply `patch_numpy_aliases(dir)` which replaces the regex `\bnp\.int\b` with `int` in `extractors/xhmm_ismir.py` (7 sites), `extractors/xhmm_decoder.py` (7), `results_ismir2017.py` (1) and `extractors/beat_preprocess.py` (2), then verify checkpoint hashes, raising `VendoringError` on mismatch); `chord_model_ready() -> bool`.
+- `models/chords.py`: `@dataclass LabelSpan(start: float, end: float, label: str)`; `recognise_chords(wav: Path, work_dir: Path, log=print) -> list[LabelSpan]` calls `static_ffmpeg.add_paths()` first (so the child's pydub finds ffmpeg and stays silent), then runs `[sys.executable, "chord_recognition.py", str(wav), str(work_dir/"out.lab"), "submission"]` with `cwd=chord_model_dir()`, streams stderr to `log`, parses the tab-separated `.lab`. Label boundaries lag true changes by 0.1 to 0.4 s, which the beat snapping absorbs.
 - `music/triads.py`: `TRIAD_TEMPLATES: dict[str, frozenset[int]]` for `maj {0,4,7}`, `min {0,3,7}`, `dim {0,3,6}`, `aug {0,4,8}`, `sus4 {0,5,7}`, `sus2 {0,2,7}`; `to_triad(label: str) -> str`: `N` and `X` unchanged; `mir_eval.chord.split(label, reduce_extended_chords=True)`, `quality_to_bitmap`, take semitones `< 8` where bit set, pick the template equal to that set, else the template with the largest overlap preferring `maj`; return `join(root, quality)` with no bass; on `InvalidChordException` return `f"{root}:maj"` if a root parses else the label unchanged.
 - `music/key.py`: `KRUMHANSL_MAJOR`, `KRUMHANSL_MINOR` (the 12-value Krumhansl-Kessler profiles); `estimate_key(chroma_mean: np.ndarray) -> Key` correlating against the 24 rotated profiles, confidence = (best - second best) / best clipped to [0, 1]; `chroma_mean_for(wav: Path) -> np.ndarray` using `librosa.feature.chroma_cqt` on the mono signal.
 - `music/snap.py`: `snap_to_beats(spans: Sequence[LabelSpan], grid: Grid) -> list[ChordEvent]`: for each beat, the label covering the largest share of it; adjacent beats with equal labels merge into one event; `confidence` = covered share averaged over the merged beats; `triad = to_triad(label)`; `bar`/`beat` from `grid.bars`.
@@ -505,7 +506,7 @@ def test_snap_majority_label_within_beat(): ...
 def test_harmony_stage_writes_chords_with_triads(tmp_path): ...   # fake recogniser returns C-G-Am-F spans; fake chroma -> events triads ["C:maj","G:maj","A:min","F:maj"]
 def test_harmony_real_model_on_synthetic_loop(tmp_path): ...      # slow; requires chord_model_ready(); chord loop fixture 16 s -> set of triads superset of {"C:maj","G:maj","A:min","F:maj"}
 # tests/test_vendoring.py
-def test_patch_numpy_aliases_rewrites_only_np_int(tmp_path): ...  # "np.int(3) np.int64 np.integer" -> "int(3) np.int64 np.integer"
+def test_patch_numpy_aliases_rewrites_only_np_int(tmp_path): ...  # "np.int(3) np.int64 np.integer" -> "int(3) np.int64 np.integer"; returns {"extractors/xhmm_ismir.py": 7, ...} counts on the real clone (slow)
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
@@ -515,7 +516,7 @@ Expected: FAIL with `ImportError`.
 
 - [ ] **Step 3: Implement the modules as specified. Add `youkelele setup` calling `ensure_chord_model` and fetching ffmpeg via `ffmpeg_paths()`. Append `HarmonyStage()` to `GENERIC_STAGES`.**
 
-Pin `CHORD_MODEL_COMMIT` to the SHA `git ls-remote` reports for `master` today, clone once, compute and record the five checkpoint hashes.
+The commit and hashes are already pinned above from the spike; verify them once after cloning rather than recomputing.
 
 - [ ] **Step 4: Run tests**
 
@@ -642,14 +643,14 @@ git commit -m "feat: add arrange stage with chords-db shapes, capo chooser and v
 
 ### Task 12: Score stage (score.json and alphaTex)
 
-**Confidence:** 85%. The alphaTex syntax is verified by rendering; mid-bar chord changes that do not land on a slot boundary and very short chords are edge cases the verified example did not cover.
+**Confidence:** 92%. Spike (render report, Spike 2): fourteen alphaTex cases rendered, including mid-bar changes, one-slot chords, 16 slots, 3/4, capo and high-position diagrams. Two earlier assumptions were wrong and are corrected below: direction tokens must be per-beat `lyrics` properties, not a `\lyrics` line, and `{firstfret}` diagrams take absolute frets.
 
 **Files:**
 - Create: `src/youkelele/music/score_builder.py`, `src/youkelele/music/alphatex.py`, `src/youkelele/stages/score.py`, `tests/test_score_builder.py`, `tests/test_alphatex.py`, `tests/test_stage_score.py`
 
 **Interfaces:**
-- `music/score_builder.py`: `build_score(source: SourceInfo, grid: Grid, chords: Chords, strums: Strums, arrangement: Arrangement, tuning: Tuning, instrument_name: str) -> Score`. Rules: `chord_diagrams` are unique `(name, shape)` pairs in order of first appearance; each bar's chords are the arranged events starting in that bar (an event continuing from an earlier bar is repeated at `start_slot 0` without a diagram change); `start_slot = round((event.start - bar.start) / bar_len * slots_per_bar)`; each chord's `slots` is the section pattern sliced from its `start_slot` to the next chord's `start_slot` (or bar end); bars with no chord get one `ScoreChord(name="N.C.", diagram=-1, ...)`; `key` string is `f"{tonic} {mode}"`.
-- `music/alphatex.py`: `score_to_alphatex(score: Score) -> str` producing, in order: `\title`, `\artist` (if any), `\tempo <round bpm>`, `\hideDynamics`, `.`, `\track "<instrument name>"`, `\staff {slash}`, `\tuning (<pitches reversed, e.g. A4 E4 C4 G4>) { label "<tuning name>" }`, `\capo <n>` if capo > 0, one `\chord ("<name>" f1 f2 f3 f4)` per diagram with frets listed in the reversed string order and `{firstfret <base_fret>}` when `base_fret > 1` and `{barre (...)}` when barres present, `\ts <num> <den>`, then per section `\section "<label>"` and per bar a `\lyrics "<tokens>"` line (one token per slot, section pattern or the chord-sliced pattern, joined by spaces) followed by the beats: duration prefix `:8` for `slots_per_bar == 2 * numerator`, `:16` for `4 *`; `D` -> `(<f>.1 <f>.2 <f>.3 <f>.4){bd}` (string 1 is the first tuning entry, A4; a muted string is omitted from the chord; `{ch "<name>"}` added on the first beat of each chord), `U` -> same with `{bu}`, `x` -> `(){ds}`, `-` -> `r`; bars separated by ` |` and newline. Must reproduce the two-bar example in the rendering check report (B1) when fed the equivalent `Score`.
+- `music/score_builder.py`: `build_score(source: SourceInfo, grid: Grid, chords: Chords, strums: Strums, arrangement: Arrangement, tuning: Tuning, instrument_name: str) -> Score`. Rules: `chord_diagrams` are unique `(name, shape)` pairs in order of first appearance; each bar's chords are the arranged events starting in that bar (an event continuing from an earlier bar is repeated at `start_slot 0` without a diagram change); slot rule (verified in the render spike, case k): `start_slot = round((event.start - bar.start) / bar_len * slots_per_bar)` clamped to `[0, slots_per_bar - 1]`; an event whose rounded start equals the previous chord's `start_slot` in the same bar replaces it, so every chord lasts at least one slot; an event rounding to `slots_per_bar` belongs to the next bar at slot 0; each chord's `slots` is the section pattern sliced from its `start_slot` to the next chord's `start_slot` (or bar end); bars with no chord get one `ScoreChord(name="N.C.", diagram=-1, ...)`; `key` string is `f"{tonic} {mode}"`.
+- `music/alphatex.py`: `score_to_alphatex(score: Score) -> str` producing, in order: `\title`, `\artist` (if any), `\tempo <round bpm>`, `\hideDynamics`, `.`, `\track "<instrument name>"`, `\staff {slash}`, `\tuning (<pitches reversed, e.g. A4 E4 C4 G4>) { hide }`, `\capo <n>` if capo > 0, one `\chord ("<name>" f1 f2 f3 f4) {showdiagram false ...}` per diagram with frets listed in the reversed string order as ABSOLUTE fret numbers (`x` for a muted string), plus `firstfret <base_fret>` when `base_fret > 1` and `barre <absolute fret>` for each barre (both verified: relative frets draw garbage), `\ts <num> <den>`, then per section `\section "<label>"` and per bar the beats with the direction token as a per-beat property: duration prefix `:8` for `slots_per_bar == 2 * numerator`, `:16` for `4 *`; `D` -> `(<f>.1 <f>.2 <f>.3 <f>.4){bd lyrics "D"}` (string 1 is the first tuning entry, A4; a muted string is omitted from the chord; `ch "<name>"` added inside the braces on the first beat of each chord), `U` -> same with `{bu lyrics "U"}`, `x` -> `(){ds lyrics "x"}`, `-` -> `r{lyrics "-"}`; bars separated by ` |` and newline. A staff-level `\lyrics` line must NOT be used: alphaTab skips rests when spreading it and stacks one line per directive. Must reproduce the corrected two-bar example in the render spike report (Spike 2, "verified fix") when fed the equivalent `Score`.
 - `stages/score.py`: `class ScoreStage(Stage)` with `name="score"`, `requires=("grid/grid.json", "harmony/chords.json", "strums/strums.json", "arrange/arrangement.json", "ingest/source.json")`, `produces=("score/score.json", "score/score.alphatex")`; constructor `ScoreStage(tuning: Tuning, instrument_name: str)`.
 
 - [ ] **Step 1: Write the failing tests**
@@ -658,11 +659,15 @@ git commit -m "feat: add arrange stage with chords-db shapes, capo chooser and v
 # tests/test_score_builder.py
 def test_diagrams_unique_in_first_appearance_order(): ...
 def test_chord_change_mid_bar_splits_slots(): ...   # C for 4 slots then G for 4 -> two ScoreChords with start_slot 0 and 4, slots lengths 4 and 4
+def test_change_at_three_eighths_rounds_to_slot_3(): ...
+def test_two_events_rounding_to_same_slot_later_wins(): ...
+def test_event_rounding_to_bar_end_moves_to_next_bar_slot_0(): ...
 def test_bar_without_chord_gets_nc(): ...
 # tests/test_alphatex.py
-def test_alphatex_matches_verified_two_bar_example(): ...   # Score for C island strum + G7 chunked -> exact string from the rendering check report (B1), whitespace-normalised
+def test_alphatex_matches_verified_two_bar_example(): ...   # Score for C island strum + G chunked -> exact string from the render spike report Spike 2 "verified fix", whitespace-normalised
+def test_alphatex_uses_per_beat_lyrics_never_staff_lyrics(): ...  # output contains '{lyrics "' on every beat and never a line starting with '\lyrics'
 def test_alphatex_3_4_uses_ts_3_4_and_six_slots(): ...
-def test_alphatex_omits_muted_strings_and_adds_firstfret(): ...  # shape frets [-1,2,1,0] base 1 -> "(0.1 1.2 2.3)"; base_fret 3 -> "{firstfret 3}"
+def test_alphatex_omits_muted_strings_and_uses_absolute_firstfret(): ...  # shape frets [-1,2,1,0] base 1 -> beat "(0.1 1.2 2.3)" and chord "x 0 1 2"; shape frets [3,3,4,5] base 3 barre 3 -> '\chord ("C" 5 4 3 3) {showdiagram false firstfret 3 barre 3}'
 # tests/test_stage_score.py
 def test_score_stage_writes_both_files_and_score_validates(tmp_path): ...
 ```
@@ -690,7 +695,7 @@ git commit -m "feat: add score stage building score.json and alphaTex"
 
 ### Task 13: Render stage (diagrams, strum boxes, HTML template, PDF)
 
-**Confidence:** 80%. The alphaTab and Playwright path is verified; the hand-rolled diagram and strum-box SVG and the print-CSS page-break behaviour in Chromium's PDF output are untested and will need a visual pass.
+**Confidence:** 90%. Spike (render report, Spike 3): a 64-bar prototype with eight hand-rolled diagrams and three strum boxes printed to six A4 pages with every section intact and everything legible; the settings below are the ones that worked. The one open point is cosmetic: 16-slot bars take a full line each.
 
 **Files:**
 - Create: `src/youkelele/vendor/alphatab/alphaTab.min.js`, `src/youkelele/vendor/alphatab/font/Bravura.woff2`, `src/youkelele/vendor/alphatab/font/Bravura.woff`, `src/youkelele/vendor/alphatab/Bravura-OFL.txt`, `src/youkelele/vendor/alphatab/LICENSE`, `src/youkelele/render/__init__.py`, `src/youkelele/render/diagrams.py`, `src/youkelele/render/strum_box.py`, `src/youkelele/render/html.py`, `src/youkelele/render/templates/sheet.html.j2`, `src/youkelele/render/pdf.py`, `src/youkelele/stages/render.py`, `tests/test_diagrams.py`, `tests/test_strum_box.py`, `tests/test_html.py`, `tests/test_stage_render.py`
@@ -700,7 +705,7 @@ git commit -m "feat: add score stage building score.json and alphaTex"
 - Vendored alphaTab: files from the `@coderline/alphatab@1.8.4` npm tarball `dist/` as listed; `LICENSE` is the package's MPL-2.0 text.
 - `render/diagrams.py`: `chord_diagram_svg(name: str, shape: Shape, string_labels: Sequence[str] = ("G","C","E","A"), frets_shown: int = 4) -> str` producing a standalone `<svg>` 80x100 px: title, four vertical strings, nut as a thick line when `base_fret == 1` else a `<text>` fret number at the left of row one, dots with finger numbers from `fingers` (0 means no number), a barre rectangle across the strings covered for each entry in `barres`, `x` above muted strings and `o` above open ones.
 - `render/strum_box.py`: `strum_pattern_svg(slots: Sequence[Slot], meter: Meter) -> str`: one column per slot, beat numbers `1 & 2 &` above (`1 e & a` for sixteenths), a down arrow for `D`, an up arrow for `U`, a crossed arrow for `x`, nothing for `-`; width 28 px per slot.
-- `render/html.py`: `render_html(score: Score, alphatex: str, assets_rel: str = "assets") -> str` rendering `templates/sheet.html.j2` with: header fields; a "Strum pattern uncertain" badge per uncertain section and a "Strum detected from full mix" note when `strum_source == "mix"`; the diagram legend; per section a heading, the strum box and a `<div class="at-section" data-bars="...">`; the alphaTex inlined in a `<script type="text/plain" id="tex">`; alphaTab initialised with `{core: {useWorkers: false, tex: true, fontDirectory: assets_rel + "/font/"}, player: {playerMode: 0}, display: {staveProfile: "Default"}}` and `api.renderFinished.on(() => { window.__rendered = true; })`; print CSS: `@page { size: A4; margin: 14mm }`, `.section-head { break-after: avoid }`, `.section { break-inside: avoid-page }` for sections shorter than one page, `.no-print { display: none }`. Fonts for text: system sans-serif stack, no external stylesheets.
+- `render/html.py`: `render_html(score: Score, alphatex: str, assets_rel: str = "assets") -> str` rendering `templates/sheet.html.j2` with: header fields; a "Strum pattern uncertain" badge per uncertain section and a "Strum detected from full mix" note when `strum_source == "mix"`; the diagram legend; per section a heading, the strum box and a `<div class="at-section" data-start-bar="..." data-bar-count="...">`; the whole-song alphaTex inlined RAW (not HTML-escaped) in a `<script type="text/plain" id="tex">`; ONE `AlphaTabApi` per section, each with `{core: {useWorkers: false, tex: true, fontDirectory: assets_rel + "/font/"}, player: {playerMode: 0}, display: {scale: 0.85 (0.75 when slots_per_bar == 16), startBar: <section first bar, 1-based>, barCount: <bars in section>, layoutMode: "page"}, notation: {elements: {effectTempo: false, trackNames: false, scoreTitle: false, chordDiagrams: false, effectMarker: false, effectCapo: false}}}`; `window.__rendered = true` only when every section has fired `postRenderFinished` and `document.fonts.ready` resolved. Layout CSS: `.sheet { width: 182mm; margin: 0 auto }` on screen and `html, body { width: 182mm }` under `@media print`, because alphaTab does not reflow during `page.pdf()` and a fluid page prints shrunk. Print CSS: `@page { size: A4; margin: 14mm }`, `.section-head { break-after: avoid }`, `.section { break-inside: avoid-page }`, `.no-print { display: none }`; crop alphaTab's hard-coded "rendered by alphaTab" footer with an `overflow: hidden` wrapper. Fonts for text: system sans-serif stack, no external stylesheets.
 - `render/pdf.py`: `html_to_pdf(html_path: Path, pdf_path: Path, timeout_ms: int = 60000) -> None` using `playwright.sync_api`, `chromium.launch(args=["--allow-file-access-from-files"])`, `page.goto(html_path.as_uri())`, `page.wait_for_function("window.__rendered === true")`, `page.evaluate("document.fonts.ready")`, `page.pdf(path=..., format="A4", print_background=True, prefer_css_page_size=True)`.
 - `stages/render.py`: `class RenderStage(Stage)` with `name="render"`, `requires=("score/score.json", "score/score.alphatex")`, `produces=("render/sheet.html", "render/sheet.pdf")`; constructor `RenderStage(pdf_writer=html_to_pdf)`; copies the vendored alphaTab folder to `07_render/assets/` so the HTML is self-contained.
 
@@ -715,7 +720,9 @@ def test_muted_string_draws_x(): ...
 def test_island_strum_box_has_three_down_three_up_arrows(): ...
 def test_3_4_box_has_six_columns_and_beat_labels_1_2_3(): ...
 # tests/test_html.py
-def test_html_inlines_tex_and_disables_workers(): ...   # contains 'useWorkers: false', the alphaTex text, 'playerMode: 0'
+def test_html_inlines_tex_and_disables_workers(): ...   # contains 'useWorkers: false', the alphaTex text unescaped (a '\chord ("C"' literal survives), 'playerMode: 0'
+def test_html_one_api_per_section_with_bar_ranges(): ...  # two sections of 8 and 4 bars -> data-start-bar 1 and 9, data-bar-count 8 and 4
+def test_html_fixed_sheet_width_for_print(): ...         # CSS contains 'width: 182mm' inside @media print
 def test_html_shows_uncertain_badge_and_mix_note(): ...
 # tests/test_stage_render.py
 def test_render_stage_writes_html_and_calls_pdf_writer(tmp_path): ...   # fake pdf_writer records paths; assets/font/Bravura.woff2 copied
