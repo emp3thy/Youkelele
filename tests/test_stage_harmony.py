@@ -89,3 +89,31 @@ def test_recognise_chords_failure_includes_stderr(tmp_path, monkeypatch):
         chords.recognise_chords(tmp_path / "a.wav", tmp_path, logged.append)
     assert "ValueError: bad model" in str(info.value)
     assert "ValueError: bad model" in logged
+
+
+def test_recognise_chords_passes_absolute_paths_to_child(tmp_path, monkeypatch):
+    import subprocess
+    from pathlib import Path
+
+    from youkelele.models import chords
+
+    monkeypatch.chdir(tmp_path)
+    wav = Path("runs/x/00_ingest/audio.wav")
+    wav.parent.mkdir(parents=True)
+    wav.write_bytes(b"")
+    work_dir = Path("runs/x/03_harmony")
+    work_dir.mkdir(parents=True)
+    (work_dir / "out.lab").write_text("0.0\t1.0\tC:maj\n", encoding="utf-8")
+    seen: list[list[str]] = []
+
+    def fake_run(argv, **kwargs):
+        seen.append(list(argv))
+        return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(chords.subprocess, "run", fake_run)
+    spans = chords.recognise_chords(wav, work_dir, lambda m: None)
+    assert [s.label for s in spans] == ["C:maj"]
+    wav_arg, lab_arg = Path(seen[0][2]), Path(seen[0][3])
+    assert wav_arg.is_absolute() and lab_arg.is_absolute()
+    assert wav_arg == (tmp_path / wav).resolve()
+    assert lab_arg == (tmp_path / work_dir / "out.lab").resolve()

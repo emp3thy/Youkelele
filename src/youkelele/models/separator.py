@@ -35,7 +35,8 @@ def separate_stems(
     static_ffmpeg.add_paths()  # audio-separator shells out to ffmpeg at construction
     from audio_separator.separator import Separator
 
-    out_dir = Path(out_dir)
+    out_dir = Path(out_dir).resolve()
+    wav = Path(wav).resolve()
     model_dir = model_dir or cache_dir() / "models" / "audio-separator"
     model_dir.mkdir(parents=True, exist_ok=True)
     separator = Separator(
