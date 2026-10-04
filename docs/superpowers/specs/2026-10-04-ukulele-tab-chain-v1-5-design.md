@@ -83,7 +83,7 @@ Pair novelty is `section_novelty`'s notion (`relabel.py:31-47`) applied to a pai
 | Pour Some Sugar On Me | 8 | 8 | unchanged |
 | Wet Leg "mangetout" | 9 | 8 | Verse 4 (58 to 100) absorbs the old Verse 5 |
 | Fame | 9 | 9 | unchanged |
-| All Fired Up | 13 | 6 | Intro 0 to 28, Verse 1 28 to 49, Chorus 1 49 to 55, Verse 2 55 to 110, Chorus 2 110 to 132, Outro 132 to 156 |
+| All Fired Up | 13 | 8 (the design expected 6) | Intro 0 to 28, Verse 1 28 to 49, Chorus 1 49 to 55, Verse 2 55 to 110, Chorus 2 110 to 124, Verse 3 124 to 128, Chorus 3 128 to 132, Outro 132 to 156. The sandwich rule does not fire: chorus 128 to 132 holds only Em and D, so the all-G fragment 124 to 128 has pair novelty 1.0 against it (the research's claim that its G was in both choruses counted bar 132, the outro's first bar). The rule stands as written (section 1, Generality); the validation measured 8 |
 | Need You Tonight | 7 | 7 | unchanged |
 
 ## 4. Strums: certainty, limitation, riff
@@ -119,7 +119,7 @@ The README's limitation reads: "When one separated guitar stem holds two players
 
 ### 4.3 The riff marker
 
-A section is marked `riff` when its guitar-stem onsets play single notes rather than chords. Two features are computed in the strums stage on the stage's own onsets, in a 40 to 130 ms window after each onset over a constant-Q spectrum from C2 over six octaves:
+A section is marked `riff` when its guitar-stem onsets play single notes rather than chords. Two features are computed in the strums stage on the detector's own onsets, before the recall gate adds high-band onsets (the gate's additions are percussive and raise the entropy: on All Fired Up 49 to 55 the post-gate reading was 0.806 and 0.433 against 0.788 and 0.625 pre-gate, enough to cross the share threshold), on the source signal resampled to 22 050 Hz, in a 40 to 130 ms window after each onset over a constant-Q spectrum from C2 over six octaves:
 
 - `riff_entropy`: the **median over the section's onsets** of each onset's normalised chroma entropy (low means one or two pitch classes at a time). Not the entropy of the mean chroma, which marks nothing (`riff-thresholds.md` finding 1).
 - `riff_single_share`: the share of onsets whose chroma has only one pitch class at half the maximum or more.
@@ -143,7 +143,7 @@ On the sheet, a riff section prints its pattern and strip as today, with the str
 
 ### 5.1 The strip rule
 
-The strip draws one bar unless one of the first two bars changes chord inside the bar; then it draws both, as today.
+The strip draws one bar unless one of the bars it would show changes chord inside the bar; then it draws both, as today. The shown bars are `example_bars`' choice, which already replaces the second bar with a later bar that changes chord inside it when neither of the first two does, so a section with any in-bar change among its struck bars keeps a two-bar strip above the rows. This is the variant the page study measured (`page-layout.md`, A2 + R).
 
 ```python
 def strip_bars(section: ScoreSection) -> list[ScoreBar]:
@@ -228,11 +228,11 @@ Written before the runs, checked after. The seven 1.4 folders are the baseline; 
 
 | Expectation | Songs | Yes or no criterion |
 |---|---|---|
-| Section counts 12, 7, 8, 8, 9, 6, 7 | all seven, in the order of section 3.4 | exact |
+| Section counts 12, 7, 8, 8, 9, 6, 7 (measured 12, 7, 8, 8, 9, 8, 7: the All Fired Up sandwich did not fire, section 3.4) | all seven, in the order of section 3.4 | exact |
 | All Fired Up's merged Verse 1 prints 29 to 49 (phrase alignment, A5) with the `DUDUDUDU` pattern of its longest member, certain | one | exact |
 | Pages 2, 3, 2, 2, 2, at most 3, 2 | all seven | exact, All Fired Up at most 3 |
 | Certainty flips: exactly Summer of '69 53 to 58, All Fired Up 55 to 61 and 128 to 132 | all seven | no other section changes certainty |
-| Riff marker on every Fame section and every Need You Tonight section with its own pattern; also on the recorded list (All Fired Up 33 to 49 and its eight unlabelled sections, Summer of '69 0 to 4 and 4 to 19, Wet Leg 0 to 5 and 100 to 108), as `riff-thresholds.md` measured; nowhere else | all seven | exact against the list; the merged All Fired Up sections take their longest member's flag |
+| Riff marker on every Fame section and every Need You Tonight section with its own certain pattern (its near-silent intro, confidence 0.084, is uncertain and not expected); also on the recorded list (All Fired Up 33 to 49 and its eight unlabelled sections, Summer of '69 0 to 4 and 4 to 19, Wet Leg 0 to 5 and 100 to 108), as `riff-thresholds.md` measured; nowhere else | all seven | exact against the list; the merged All Fired Up sections take their longest member's flag |
 | Headers unchanged except Need You Tonight "F major (or C major)" | all seven | exact |
 | Power line on Pour Some Sugar On Me's easy sheet; no other sheet has one | all seven | exact |
 | Chords, beats, bars and onsets identical to 1.4 | the six re-run from strums | bar-by-bar compare |
@@ -248,7 +248,7 @@ Status after the automatic validation pass run on this machine after the initial
 |---|---|---|---|---|
 | A1 | The grid's clusters are the chord groups wherever chords differ, so renaming by chords changes nothing on those songs | **Verified** | recomputed clusters reproduce `grid.json` on 7 of 7; chord groups equal clusters on the four chord-distinct songs (`sections-by-chords.md` 3.2) | a song where a chord group crosses clusters would want renaming this version does not do |
 | A2 | A same-label section under 8 bars that adds no chord is a fragment of its neighbour | **Measured**, unverified by ear | 7 merges on two songs, none on the five referenced; `FRAGMENT_BARS` band above 7 to 16 | a real short part loses its heading; the listening pass checks All Fired Up's merged sections |
-| A3 | A verse fragment between two choruses on their chords is chorus | **Measured once** | All Fired Up 124 to 128, the loudest sung passage of the song; the labeller's fall-through argument in code | a short verse prints inside a chorus |
+| A3 | A verse fragment between two choruses on their chords is chorus | **Unexercised** (validation) | the one design case, All Fired Up 124 to 128, does not meet the rule's precondition: chorus 128 to 132 holds only Em and D, so the all-G fragment has pair novelty 1.0 against it; the rule fired on no song and stands as written | a short verse prints inside a chorus; or, as here, two extra headings print on one song |
 | A4 | A merged section's strip should come from its longest member, not a vote over all its bars | **Measured, design amended** (probe `validate/probes.py` on the stored `bar_onsets`) | all-bar votes on All Fired Up: Verse 1 28 to 49 `DUDxDUxU` conf 0.548 p 0.262 (uncertain; members 0.56 and 0.55 certain, `DUDUDUDU` ear-confirmed); Verse 2 55 to 110 `DxDxDUDU` conf 0.477 p 0.003 (a blend of five members' patterns); Chorus 2 110 to 132 conf 0.162 (uncertain, rightly); hence the longest-member rule in 3.3 | the strip describes the longest member and says nothing about a distinct shorter stretch (All Fired Up 90 to 110) |
 | A5 | Phrase alignment behaves on the plan's spans as on grid spans | **Measured: one shift** (same probe) | All Fired Up's merged Verse 1 shifts to start at bar 29 (its intro ends at 29); on the grid spans no section shifted; Wet Leg's shifts are identical on both | the validation expects All Fired Up's Verse 1 at 29 to 49; any other moved boundary is a miss |
 | A6 | The shuffle p-value is a calibrated noise test | **Measured** | about 5 percent of random sprays pass at any density, grid or length; the bare correction cannot replace the confidence (kappa paradox) | none for calibration; a metre-aware null would flip more short sections |
