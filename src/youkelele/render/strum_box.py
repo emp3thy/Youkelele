@@ -118,6 +118,13 @@ def example_bars(section: ScoreSection) -> list[ScoreBar]:
     return list(bars)
 
 
+def strip_bars(section: ScoreSection) -> list[ScoreBar]:
+    """The bars the strip draws: the example bars when one of them changes chord inside the bar,
+    otherwise the first alone (the bar-to-bar changes are already in the grid)."""
+    bars = example_bars(section)
+    return bars if any(len(b.chords) > 1 for b in bars) else bars[:1]
+
+
 def _chord_parts(bar: ScoreBar, n: int, per_slot: int, ox: int) -> list[str]:
     """One bar's chord row under its strokes: each name on its start slot, a dot per held slot."""
     y = _H + 20

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 
-from youkelele.render.strum_box import example_bars, slot_px, worked_example_svg
+from youkelele.render.strum_box import example_bars, slot_px, strip_bars, worked_example_svg
 from youkelele.schemas import Meter, ScoreBar, ScoreChord, ScoreSection
 
 FOUR_FOUR = Meter(numerator=4, denominator=4)
@@ -170,3 +170,19 @@ def test_example_bars_may_show_struck_bars_that_are_not_neighbours():
 def test_example_bars_fallback_when_no_bar_struck():
     bars = [_struck(_bar(i, ("C", 0)), False) for i in range(4)]
     assert [b.index for b in example_bars(_section(bars))] == [0, 1]
+
+
+def test_strip_bars_is_one_bar_unless_a_shown_bar_changes_inside():
+    # two bars of one chord each: the bar-to-bar change is already in the grid, so one bar is drawn
+    section_two_plain_bars = _section([_bar(0, ("C", 0)), _bar(1, ("G", 0)), _bar(2, ("C", 0))])
+    # a later bar changes chord inside the bar: example_bars pulls it in and both bars are drawn
+    section_with_mid_bar_change = _section(
+        [_bar(0, ("C", 0)), _bar(1, ("G", 0)), _bar(2, ("D", 0), ("A", 4))]
+    )
+    # a one-bar section with a change inside it stays one bar
+    section_single_bar_with_change = _section([_bar(0, ("D", 0), ("A", 4))])
+    assert len(strip_bars(section_two_plain_bars)) == 1
+    assert [b.index for b in strip_bars(section_two_plain_bars)] == [0]
+    assert len(strip_bars(section_with_mid_bar_change)) == 2
+    assert [b.index for b in strip_bars(section_with_mid_bar_change)] == [0, 2]
+    assert len(strip_bars(section_single_bar_with_change)) == 1

@@ -46,6 +46,9 @@
   .block.span .repeat { padding-right: 3mm; }
   .block.span::after { content: ""; position: absolute; right: 0; top: 0; bottom: 1.5mm; width: 1.5mm; border: 1.5px solid var(--ink); border-left: none; }
   .no-print { background: #fef3c7; padding: 6px 10px; margin-bottom: 8px; font-size: 10pt; }
+  .section-body.beside { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 4mm; align-items: start; }
+  .section-body.beside > .strum-box { grid-column: 2; grid-row: 1; margin: 0; }
+  .section-body.beside .grid.has-pickup .row { grid-template-columns: minmax(13mm, 0.25fr) repeat(4, minmax(0, 1fr)) auto; }
   @page { size: A4; margin: 14mm }
   @media print {
     html, body { width: 182mm }
@@ -104,14 +107,19 @@
           {% elif section.inherited_from is not none %}
           {# an inherited pattern's covers figure is the donor's, so it is not printed #}
           <span class="strum-label">Strum as in {{ section.inherited_from }}{% if section.uncertain %} (uncertain){% endif %}</span>
+          {% elif section.riff %}
+          {# single notes over the chords: the pattern is the riff's rhythm, to strum on the chord #}
+          <span class="strum-label">Riff heard in this section: strum the chord to this rhythm{% if section.show_covers %}; covers {{ section.explained_pct }}% of detected strokes{% endif %}{% if section.uncertain %} (uncertain){% endif %}</span>
           {% else %}
           <span class="strum-label">Strum heard in this section{% if section.show_covers %}; covers {{ section.explained_pct }}% of detected strokes{% endif %}. Up and down follow the beat{% if section.uncertain %} (uncertain){% endif %}</span>
           {% endif %}
         </div>
-        {% if section.example is not none %}
+        {% if section.example is not none and not section.beside %}
         <div class="strum-box"><div class="worked-example">{{ section.example }}</div></div>
         {% endif %}
       </div>
+      {# a one-bar strip sits beside the rows, in the body's second column #}
+      <div class="section-body{% if section.beside %} beside{% endif %}">
       {% set grid = section.grid %}
       <div class="grid{% if grid.pickup is not none %} has-pickup{% endif %}">
       {% if grid.pickup is not none and not grid.blocks %}
@@ -140,6 +148,10 @@
         {% endfor %}
         </div>
       {% endfor %}
+      </div>
+      {% if section.beside %}
+      <div class="strum-box"><div class="worked-example">{{ section.example }}</div></div>
+      {% endif %}
       </div>
     </section>
   {% endfor %}
