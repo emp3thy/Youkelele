@@ -36,6 +36,7 @@ from youkelele.music.key import (
     pair_rule_note,
     plain_major_root,
     power_chord_events,
+    tonic_votes_note,
 )
 from youkelele.music.snap import snap_to_beats
 from youkelele.schemas import ChordEvent, Chords, Grid, Key
@@ -61,7 +62,10 @@ def read_stems(paths: list[Path]) -> tuple[list[np.ndarray], int]:
 def _key_log(key: Key, decision: TonicDecision | None) -> str:
     if decision is None:
         return f"key {key_text(key)} (mix)"
-    return f"key {key_text(key)} (chords+stems, margin {key.margin:.3f} by {decision.rule})"
+    return (
+        f"key {key_text(key)} (chords+stems, margin {key.margin:.3f} by {decision.rule}, "
+        f"decided by {decision.decided_by})"
+    )
 
 
 def relabel_power(events: list[ChordEvent], indices: list[int]) -> list[ChordEvent]:
@@ -141,6 +145,7 @@ class HarmonyStage(Stage):
         ctx.note("key_method", key.method)
         ctx.note("key_margin", "none" if key.margin is None else f"{key.margin:.3f}")
         ctx.note("tonic_pair_rule", pair_rule_note(decision))
+        ctx.note("tonic_votes", tonic_votes_note(key))
         ctx.note("model", f"chord_cnn_lstm@{CHORD_MODEL_COMMIT}")
         prefixes = ",".join(h[:8] for h in CHORD_MODEL_CHECKPOINT_SHA256.values())
         ctx.note("checkpoints", prefixes)

@@ -184,6 +184,13 @@ def test_harmony_stage_key_from_chords_and_notes(tmp_path):
     # the hedge's own mode is stored, and the log prints it
     assert key.hedge_mode in ("major", "minor")
     assert any(f"key {key_text(key)} (chords+stems" in line for line in logged)
+    # the three votes: the score and the pair rule agree on D, the mix names another tonic
+    votes = key.tonic_votes
+    assert (votes.score, votes.pair, votes.decided_by) == ("D", "D", "agreement")
+    assert key.pair_tonic == "D"
+    assert ctx.notes["tonic_votes"] == f"score D, pair D, mix {key.mix.tonic}, decided by agreement"
+    key_lines = [line for line in logged if "chords+stems" in line]
+    assert len(key_lines) == 1 and key_lines[0].endswith(", decided by agreement)")
 
 
 def test_relabel_power_takes_only_plain_major_labels():
@@ -243,6 +250,7 @@ def test_harmony_stage_key_falls_back_to_the_mix_with_few_chords(tmp_path):
     assert key.method == "mix_krumhansl" and key.margin is None and key.mix is None
     assert ctx.notes["key_method"] == "mix_krumhansl"
     assert ctx.notes["tonic_pair_rule"] == "none"
+    assert key.tonic_votes is None and ctx.notes["tonic_votes"] == "none"
 
 
 @pytest.mark.slow
