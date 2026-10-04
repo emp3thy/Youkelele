@@ -74,7 +74,7 @@ To fix something the tool got wrong, edit that stage's JSON file and run again f
 uv run youkelele run "https://www.youtube.com/watch?v=VIDEO_ID" --from harmony
 ```
 
-- The strums stage plans the sheet's sections from `02_grid/grid.json` and the chords: short fragments with the same chords merge into their neighbours (see the limitations below), so the sheet can have fewer sections than `grid.json`. The score stage checks that this plan still describes `grid.json`. If you edit `grid.json` after the strums stage has run, run again from `--from strums` at the earliest; the `--from harmony` above is enough because it re-runs the strums stage too.
+- The strums stage plans the sheet's sections from `02_grid/grid.json` and the chords: short fragments with the same chords merge into their neighbours (see the limitations below), so the sheet can have fewer sections than `grid.json`. The score stage checks that this plan is still the one `grid.json` and the chords give, a renamed section included. If you edit `grid.json` after the strums stage has run, run again from `--from strums` at the latest (strums or any earlier stage); the `--from harmony` above is enough because it re-runs the strums stage too.
 - The score stage may move a section start one bar later so that it lines up with the chord phrase; `shifted` in `06_score/score.json` records each move.
 - In `03_harmony/chords.json`, an event with `filled: true` was inferred and prints in italics; clear the flag when you correct its label.
 - The score stage chooses at most one bridge from the chords, so it may rename sections labelled `verse`, `chorus` or `bridge`. Any other label (`intro`, `instrumental`, `outro`, or one of your own such as `solo` or `pre-chorus`) prints as written.
@@ -83,7 +83,7 @@ uv run youkelele run "https://www.youtube.com/watch?v=VIDEO_ID" --from harmony
 
 ## Measuring
 
-`evaluate` reads a run's own files and needs no reference: it prints the key with its method and margins and the three tonic votes, the no-chord share, the share of chord changes on a bar start, and per planned section (with the grid sections it merged) the strikes per bar, the share of detected strokes the printed pattern covers, the shuffle test's p value, the riff features and whether it is uncertain.
+`evaluate` reads a run's own files and needs no reference: it prints the key with its method and margins and the three tonic votes, the no-chord share, the share of chord changes on a bar start, and per planned section (by the name the sheet prints, with the grid sections it merged) the printed pattern and its confidence, the strikes per bar, the share of detected strokes the printed pattern covers, the shuffle test's p value, the riff features with the number of onsets they rest on, and whether it is uncertain.
 
 ```
 uv run youkelele evaluate <song-name>
@@ -95,7 +95,7 @@ uv run youkelele evaluate <song-name>
 uv run youkelele evaluate <song-name> --truth tests/fixtures/ground_truth/<song-name>
 ```
 
-`--compare` scores a second run against the first, which is the reference: chord agreement, then each section's strum figures side by side with the second minus the first. To see what a change did, copy the run folder first (to `runs/<song-name>-before`, say), re-run, then compare. A run compared with itself scores 1.000.
+`--compare` scores a second run against the first, which is the reference: chord agreement, then each section's strum figures side by side with the second minus the first (a section merged in one run is paired with the section its figures come from in the other). To see what a change did, copy the run folder first (to `runs/<song-name>-before`, say), re-run, then compare. A run compared with itself scores 1.000.
 
 ```
 uv run youkelele evaluate <song-name>-before --compare <song-name>
