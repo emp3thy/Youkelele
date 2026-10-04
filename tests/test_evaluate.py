@@ -338,8 +338,8 @@ def test_format_report_prints_section_lines(tmp_path):
     run = _run_with(tmp_path / "run", grid=_sectioned_grid(),
                     strums=_strums(bar_onsets, patterns))
     text = format_report(evaluate_run(run))
-    assert "verse" in text and "chorus" in text
-    assert "strikes/bar 2.0" in text
+    assert "  0 Verse bars 0-2: D-U-, conf 0.80, strikes/bar 2.0" in text
+    assert "  1 Chorus bars 2-4: D-U-, conf 0.80, strikes/bar 2.0" in text
 
 
 def test_compare_identical_runs_is_identity(tmp_path):
@@ -506,8 +506,8 @@ def test_evaluate_prints_vocal_runs_and_labels(tmp_path):
     text = format_report(evaluate_run(_run_with(tmp_path / "run", grid=grid,
                                                 strums=_strums(bar_onsets, patterns))))
     assert "Vocal runs: (0, 5)" in text
-    assert "  0 intro bars 0-5: strikes/bar 2.0" in text
-    assert "  1 verse bars 5-12: strikes/bar 2.0" in text
+    assert "  0 Intro bars 0-5: D-U-, conf 0.80, strikes/bar 2.0" in text
+    assert "  1 Verse bars 5-12: D-U-, conf 0.80, strikes/bar 2.0" in text
     # a 1.3 grid has no vocal levels
     assert "Vocal runs: n/a" in format_report(evaluate_run(_run_with(tmp_path / "old")))
     sung = grid.model_copy(update={"bar_vocal_db": [-20.0] * 12})
@@ -542,7 +542,7 @@ def test_compare_scores_power_events_by_their_triad(tmp_path):
     assert compare_runs(minor, power).majmin == 1.0
 
 
-def test_section_lines_print_the_refined_label_beside_the_grids(tmp_path):
+def test_section_lines_print_the_planned_sections_display_name(tmp_path):
     # the middle verse plays chords no other section plays: the sheet calls it the bridge
     bars = [
         Bar(index=i, start=i * 2.0, end=(i + 1) * 2.0, beats=list(range(4 * i, 4 * i + 4)))
@@ -568,11 +568,11 @@ def test_section_lines_print_the_refined_label_beside_the_grids(tmp_path):
     run = _run_with(tmp_path / "run", grid=grid, chords=chords,
                     strums=_strums([["D", "-", "U", "-"]] * 6, patterns))
     lines = format_report(evaluate_run(run)).splitlines()
-    assert any(line.startswith("  0 verse bars 0-2:") for line in lines)
-    assert any(line.startswith("  1 bridge bars 2-4:") for line in lines)
-    assert any(line.startswith("  2 chorus bars 4-6:") for line in lines)
+    assert any(line.startswith("  0 Verse bars 0-2:") for line in lines)
+    assert any(line.startswith("  1 Bridge bars 2-4:") for line in lines)
+    assert any(line.startswith("  2 Chorus bars 4-6:") for line in lines)
     text = format_comparison(compare_runs(run, run))
-    assert "  1 bridge: A " in text
+    assert "  1 Bridge: A " in text
 
 
 def test_section_line_prints_members_p_density_and_riff():
@@ -580,10 +580,11 @@ def test_section_line_prints_members_p_density_and_riff():
         index=2, label="verse", strikes_per_bar=3.1, explained=1.0, rest_share=0.25,
         uncertain=False, recall_boost=False, start_bar=55, end_bar=110, members=[4, 5, 6],
         member_labels=["verse"] * 3, chance_p=0.003, strike_density=0.58, riff=True,
-        riff_entropy=0.66, riff_single_share=0.58, riff_onsets=8,
+        riff_entropy=0.66, riff_single_share=0.58, riff_onsets=8, name="Verse 2",
+        pattern=list("D-DU-UDU"), confidence=0.55,
     )
     assert _section_line(d) == (
-        "  2 verse (grid 4, 5, 6: verse, verse, verse) bars 55-110: strikes/bar 3.1, "
+        "  2 Verse 2 (grid 4, 5, 6: verse, verse, verse) bars 55-110: D-DU-UDU, conf 0.55, strikes/bar 3.1, "
         "explained 100.0%, rests 25.0%, p 0.003, density 0.58, riff 0.66/0.58 (8 onsets) riff"
     )
     one = SectionDiag(**{**d.__dict__, "riff_onsets": 1, "riff": False})
@@ -596,10 +597,10 @@ def test_section_line_prints_na_for_a_1_4_section_and_no_group_for_one_member():
     d = SectionDiag(
         index=0, label="verse", strikes_per_bar=2.0, explained=1.0, rest_share=0.5,
         uncertain=True, recall_boost=False, start_bar=0, end_bar=2, members=[0],
-        member_labels=["verse"],
+        member_labels=["verse"], name="Verse", pattern=list("D-U-"), confidence=0.4,
     )
     assert _section_line(d) == (
-        "  0 verse bars 0-2: strikes/bar 2.0, explained 100.0%, rests 50.0%, "
+        "  0 Verse bars 0-2: D-U-, conf 0.40, strikes/bar 2.0, explained 100.0%, rests 50.0%, "
         "p n/a, density n/a, riff n/a uncertain"
     )
 
@@ -741,6 +742,27 @@ def test_evaluate_prints_the_plan_section_line_and_the_votes(tmp_path):
     lines = format_report(evaluate_run(run)).splitlines()
     assert any(line.endswith("votes score C pair C mix G (agreement))") for line in lines)
     assert (
-        "  0 verse (grid 0, 1: verse, chorus) bars 0-4: strikes/bar 2.0, explained 100.0%, "
-        "rests 50.0%, p 0.020, density 0.50, riff 0.40/0.70 (12 onsets) riff"
+        "  0 Verse (grid 0, 1: verse, chorus) bars 0-4: D-U-, conf 0.80, strikes/bar 2.0, "
+        "explained 100.0%, rests 50.0%, p 0.020, density 0.50, riff 0.40/0.70 (12 onsets) riff"
     ) in lines
+
+
+def test_section_diags_carry_the_pattern_confidence_and_the_sheets_numbered_names():
+    grid = _grid().model_copy(
+        update={
+            "sections": [
+                Section(label="verse", start_bar=0, end_bar=1, confidence=0.5),
+                Section(label="chorus", start_bar=1, end_bar=2, confidence=0.5),
+                Section(label="verse", start_bar=2, end_bar=4, confidence=0.5),
+            ]
+        }
+    )
+    plan = [
+        PlannedSection(start_bar=s.start_bar, end_bar=s.end_bar, label=s.label, members=[i])
+        for i, s in enumerate(grid.sections)
+    ]
+    patterns = [_pattern(i, ["D", "-", "U", "-"]) for i in range(3)]
+    diags = _section_diags(grid, _strums([["D", "-", "U", "-"]] * 4, patterns, plan=plan), _chords())
+    assert [d.name for d in diags] == ["Verse 1", "Chorus", "Verse 2"]
+    assert [d.label for d in diags] == ["verse", "chorus", "verse"]
+    assert all(d.pattern == ["D", "-", "U", "-"] and d.confidence == 0.8 for d in diags)

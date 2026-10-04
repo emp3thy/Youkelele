@@ -14,6 +14,7 @@ from youkelele.music.as_played import explained_onsets
 from youkelele.music.relabel import default_plan, longest_member
 from youkelele.music.sections import runs_text, vocal_flags, vocal_runs
 from youkelele.music.trailing import trailing_silent_bars
+from youkelele.render.html import display_names
 from youkelele.schemas import ChordEvent, Chords, Grid, Key, Strums
 
 BAR_START_TOLERANCE = 0.06  # a chord change this close to a bar start counts as on the bar
@@ -48,15 +49,17 @@ class SectionDiag:
     riff_single_share: float | None = None
     riff_onsets: int | None = None  # the detector's own onsets the riff pair rests on
     analysed_start: int = 0  # the first bar of the longest member, the bars the figures are read over
+    name: str = ""  # the sheet's name for the section (`Verse 2`); the label when empty
+    pattern: list[str] = field(default_factory=list)  # the printed pattern's slots
+    confidence: float = 0.0  # the pattern's confidence
 
 
 def _label_text(d: SectionDiag) -> str:
-    """The planned label, with `(grid a, b: l1, l2)` after it when it merges several grid sections."""
+    """The sheet's name, with `(grid a, b: l1, l2)` after it when it merges several grid sections."""
+    name = d.name or d.label
     if len(d.members) < 2:
-        return d.label
-    return (
-        f"{d.label} (grid {', '.join(str(m) for m in d.members)}: {', '.join(d.member_labels)})"
-    )
+        return name
+    return f"{name} (grid {', '.join(str(m) for m in d.members)}: {', '.join(d.member_labels)})"
 
 
 def _scored_label(event: ChordEvent) -> str:
@@ -239,6 +242,7 @@ def _section_diags(grid: Grid, strums: Strums, chords: Chords) -> list[SectionDi
         tail = grid.sections[-1]
         tail_end = tail.end_bar
         drop = trailing_silent_bars(chords, grid.bars, cap=tail.end_bar - tail.start_bar)
+    names = display_names([section.label for section in plan])
     for k, pattern in enumerate(strums.patterns):
         if not 0 <= k < len(plan):
             continue
@@ -268,6 +272,9 @@ def _section_diags(grid: Grid, strums: Strums, chords: Chords) -> list[SectionDi
                 riff_single_share=pattern.riff_single_share,
                 riff_onsets=pattern.riff_onsets,
                 analysed_start=start,
+                name=names[k],
+                pattern=list(pattern.slots),
+                confidence=pattern.confidence,
             )
         )
     return diags
@@ -450,7 +457,8 @@ def _section_line(d: SectionDiag) -> str:
     if d.riff_onsets is not None:  # 0 onsets gives "n/a (0 onsets)"
         features += f" ({d.riff_onsets} onset{'' if d.riff_onsets == 1 else 's'})"
     return (
-        f"  {d.index} {_label_text(d)} bars {d.start_bar}-{d.end_bar}: strikes/bar {d.strikes_per_bar:.1f}, "
+        f"  {d.index} {_label_text(d)} bars {d.start_bar}-{d.end_bar}: "
+        f"{''.join(d.pattern) or 'n/a'}, conf {d.confidence:.2f}, strikes/bar {d.strikes_per_bar:.1f}, "
         f"explained {_pct(d.explained)}, rests {_pct(d.rest_share)}, "
         f"p {_num(d.chance_p, '.3f')}, density {_num(d.strike_density, '.2f')}, "
         f"riff {features}{' riff' if d.riff else ''}{flags}"
