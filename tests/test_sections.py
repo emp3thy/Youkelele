@@ -171,6 +171,19 @@ def test_boundaries_blip_takes_the_following_segment_cluster():
     assert [(s.start_bar, s.end_bar) for s in sections] == [(0, 3), (3, 10)]
 
 
+def test_label_sections_no_cluster_numbering():
+    # recurring and once-only clusters beyond the verse and chorus are all plain `verse`
+    bounds = [0, 4, 12, 20, 24, 32, 40, 44, 48, 52, 60]
+    clusters = [0, 1, 2, 6, 1, 2, 3, 4, 6, 2, 5]
+    ids = _segments(bounds, 64, clusters)
+    db = {0: -25.0, 1: -20.0, 2: -10.0, 3: -25.0, 4: -25.0, 5: -25.0, 6: -22.0}
+    sections, _ = label_sections(bounds, ids, [db[c] for c in ids])
+    labels = [s.label for s in sections]
+    assert not any(label[-1].isdigit() for label in labels)
+    assert "bridge" not in labels
+    assert set(labels) == {"intro", "verse", "chorus", "outro"}
+
+
 def test_label_sections_chorus_is_loudest_recurring_bar_weighted():
     # V C V C V C(3-bar quiet fade): the segment-mean rule would pick V, bar-weighted picks C
     bounds = [0, 8, 16, 24, 32, 40]
@@ -186,7 +199,7 @@ def test_label_sections_chorus_is_loudest_recurring_bar_weighted():
     assert all(s.confidence == 0.3 for s in sections)  # margin under 1.5 dB
 
 
-def test_label_sections_order_intro_bridge_outro():
+def test_label_sections_order_intro_verse_outro():
     bounds = [0, 4, 12, 20, 24, 32, 40, 44, 48, 52, 60]
     clusters = [0, 1, 2, 6, 1, 2, 3, 4, 6, 2, 5]
     n_bars = 64
@@ -195,8 +208,8 @@ def test_label_sections_order_intro_bridge_outro():
     loud = [db[c] for c in ids]
     sections, margin = label_sections(bounds, ids, loud)
     assert [s.label for s in sections] == [
-        "intro", "verse", "chorus", "verse 2", "verse", "chorus",
-        "bridge", "bridge 2", "verse 2", "chorus", "outro",
+        "intro", "verse", "chorus", "verse", "verse", "chorus",
+        "verse", "verse", "verse", "chorus", "outro",
     ]
     assert [(s.start_bar, s.end_bar) for s in sections] == list(
         zip(bounds, bounds[1:] + [n_bars])
@@ -383,12 +396,13 @@ def test_label_sections_instrumental_intro_and_merge():
 
 
 def test_label_sections_split_section_counts_once():
-    # A C B C D C, all vocal, B loudest but once-only: B and D are bridges, C the chorus
+    # A C B C D C, all vocal, B loudest but once-only: B and D are verses (the score stage
+    # decides the bridge from the chords), C the chorus
     bounds = [0, 8, 16, 40, 48, 56]
     ids = _segments(bounds, 64, [0, 2, 1, 2, 3, 2])
     loud = [{0: -20.0, 1: -10.0, 2: -15.0, 3: -20.0}[c] for c in ids]
     sections, _ = label_sections(bounds, ids, loud, vocal=[True] * 64)
-    assert [s.label for s in sections] == ["intro", "chorus", "bridge", "chorus", "bridge 2", "chorus"]
+    assert [s.label for s in sections] == ["intro", "chorus", "verse", "chorus", "verse", "chorus"]
     # a non-vocal run (24, 32) inside B cuts it into sung, instrumental, sung: still one B
     vocal = [True] * 24 + [False] * 8 + [True] * 32
     split = insert_vocal_boundaries(bounds, vocal_runs(vocal), 64)
@@ -397,11 +411,11 @@ def test_label_sections_split_section_counts_once():
     assert [(s.label, s.start_bar, s.end_bar) for s in sections] == [
         ("intro", 0, 8),
         ("chorus", 8, 16),
-        ("bridge", 16, 24),
+        ("verse", 16, 24),
         ("instrumental", 24, 32),
-        ("bridge", 32, 40),
+        ("verse", 32, 40),
         ("chorus", 40, 48),
-        ("bridge 2", 48, 56),
+        ("verse", 48, 56),
         ("chorus", 56, 64),
     ]
 

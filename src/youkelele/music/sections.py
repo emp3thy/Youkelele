@@ -345,8 +345,9 @@ def label_sections(
     the bar-weighted mean dB over all bars of the cluster's segments. Order: a cluster
     over 60% of bars is `verse`; `chorus` is the loudest recurring cluster not already
     verse (fallback: most bars); `verse` if unset is the remaining recurring cluster
-    with most bars; once-only clusters are `intro` (first), `outro` (last) or `bridge`,
-    `bridge 2`; other recurring clusters `verse 2`, `verse 3`. Confidence is 0.5, or
+    with most bars; once-only clusters are `intro` (first), `outro` (last) or `verse`;
+    other recurring clusters are `verse` too (the sheet numbers verses by occurrence, and
+    the score stage names the bridge from the chords: music/relabel.py). Confidence is 0.5, or
     0.3 when the chorus margin is under 1.5 dB.
 
     With `vocal` (one flag per bar), a segment whose vocal share is under
@@ -386,7 +387,6 @@ def label_sections(
     rest = [c for c in recurring if c != chorus]
     if verse is None and rest:
         verse = max(rest, key=lambda c: bars_of[c])
-    others = sorted((c for c in rest if c != verse), key=lambda c: -bars_of[c])
 
     rivals = [c for c in occ if occ[c] >= 2 and c != chorus]
     margin = (
@@ -397,7 +397,6 @@ def label_sections(
     last = len(segc) - 1
     reaches_end = {occurrence[i] for i in occurrence if i == last}
     sections: list[Section] = []
-    bridge_no: dict[int, int] = {}  # occurrence -> bridge number
     for i, (s, e, c) in enumerate(zip(starts, ends, segc)):
         if low[i]:
             if i > 0 and low[i - 1]:  # merge with the low-vocal segment before, keeping its start
@@ -409,15 +408,11 @@ def label_sections(
             label = "verse"
         elif c == chorus:
             label = "chorus"
-        elif occ[c] == 1:
-            if occurrence[i] == 0:
-                label = "intro"
-            elif occurrence[i] in reaches_end:
-                label = "outro"
-            else:
-                n = bridge_no.setdefault(occurrence[i], len(bridge_no) + 1)
-                label = "bridge" if n == 1 else f"bridge {n}"
+        elif occ[c] == 1 and occurrence[i] == 0:
+            label = "intro"
+        elif occ[c] == 1 and occurrence[i] in reaches_end:
+            label = "outro"
         else:
-            label = f"verse {others.index(c) + 2}"
+            label = "verse"
         sections.append(Section(label=label, start_bar=s, end_bar=e, confidence=confidence))
     return sections, margin

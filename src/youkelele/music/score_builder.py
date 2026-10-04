@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 from youkelele.music.key import hedge_tonic
 from youkelele.music.phrase import NO_CHORD, aligned_starts, bar_change_bars
+from youkelele.music.relabel import refine_labels
 from youkelele.music.trailing import trailing_silent_bars
 from youkelele.schemas import (
     ArrangedChord,
@@ -142,9 +143,12 @@ def build_score(
     last = grid.sections[-1]
     drop = trailing_silent_bars(chords, grid.bars, cap=last.end_bar - last.start_bar)
 
+    # the bridge is decided from the chords here; grid.json keeps the labeller's own names
+    labels = refine_labels(grid, chords)
+
     sections: list[ScoreSection] = []
     dropped = 0
-    for k, (section, (start_bar, end_bar, shifted)) in enumerate(zip(grid.sections, aligned)):
+    for k, (label, (start_bar, end_bar, shifted)) in enumerate(zip(labels, aligned)):
         pattern = strums.patterns[k]
         if k == len(grid.sections) - 1:
             dropped = min(drop, max(end_bar - start_bar - 1, 0))  # phrase alignment may have shortened it
@@ -179,7 +183,7 @@ def build_score(
             )
         sections.append(
             ScoreSection(
-                label=section.label, pattern=list(pattern.slots), uncertain=pattern.uncertain,
+                label=label, pattern=list(pattern.slots), uncertain=pattern.uncertain,
                 bars=bars, bar_repeat=pattern.bar_repeat, no_instrument=pattern.no_instrument,
                 inherited_from=pattern.inherited_from, shifted=shifted,
                 explained=pattern.explained,

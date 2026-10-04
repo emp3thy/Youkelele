@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections import Counter
+from collections.abc import Sequence
 from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
@@ -24,6 +26,23 @@ _ENV = Environment(
 CAPO_NOTE = "Shapes are relative to the capo"
 POWER_LEGEND = "{name} is a power chord on the record"
 FILLED_NOTE ="Italic chords were inferred where the recording had no clear chord"
+
+
+def display_names(labels: Sequence[str]) -> list[str]:
+    """Section names as printed: `Verse 1`, `Verse 2`, `Chorus`, `Instrumental 1`, `Bridge`.
+
+    A label that occurs once carries no number; one that recurs is numbered by occurrence,
+    in order, ignoring case. The first letter is capitalised and the rest left as written.
+    """
+    totals = Counter(label.casefold() for label in labels)
+    seen: Counter[str] = Counter()
+    names: list[str] = []
+    for label in labels:
+        key = label.casefold()
+        seen[key] += 1
+        name = label[:1].upper() + label[1:]
+        names.append(f"{name} {seen[key]}" if totals[key] > 1 else name)
+    return names
 
 
 def _capo(capo: int) -> str:
@@ -75,19 +94,16 @@ def render_html(score: Score) -> str:
     sections = []
     any_filled = False
     per_slot = slot_px(score.slots_per_bar)
-    for section in score.sections:
+    names = display_names([s.label for s in score.sections])
+    for name, section in zip(names, score.sections):
         source = section.inherited_from
-        inherited = (
-            score.sections[source].label
-            if source is not None and 0 <= source < len(score.sections)
-            else None
-        )
+        inherited = names[source] if source is not None and 0 <= source < len(names) else None
         show_box = not (section.uncertain or section.no_instrument)
         grid = section_grid(section)
         any_filled = any_filled or any(cell.filled for cell in _shown_cells(grid))
         sections.append(
             {
-                "label": section.label,
+                "label": name,
                 "uncertain": section.uncertain,
                 # truncated, not rounded, so 0.597 never prints as 60% beside a 60 percent threshold;
                 # the epsilon keeps 0.29 (0.28999... in binary) at 29

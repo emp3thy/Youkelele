@@ -581,3 +581,38 @@ def test_score_json_without_trailing_field_loads():
     loaded = type(score).model_validate(data)
     assert loaded.schema_version == 1
     assert loaded.trailing_bars_dropped == 0
+
+
+def test_score_uses_refined_labels():
+    # the grid names the once-only middle section a verse; its chords are heard nowhere
+    # else, so the score names it the bridge, and the grid keeps its own label
+    labels = ["C", "G"] * 4 + ["F", "D"] * 4 + ["C", "G"] * 4
+    evs = [_ev(i, i + 1, lab) for i, lab in enumerate(labels)]
+    arranged = [ArrangedChord(event=i, name=ev.label, shape=C) for i, ev in enumerate(evs)]
+    grid = _grid(24).model_copy(
+        update={
+            "sections": [
+                Section(label="verse", start_bar=0, end_bar=8, confidence=0.5),
+                Section(label="verse", start_bar=8, end_bar=16, confidence=0.5),
+                Section(label="chorus", start_bar=16, end_bar=24, confidence=0.5),
+            ]
+        }
+    )
+    patterns = [
+        SectionPattern(
+            section=k, slots=list(ISLAND), confidence=0.8, bar_repeat=0.9, uncertain=False,
+            no_instrument=False, inherited_from=None,
+        )
+        for k in range(3)
+    ]
+    strums = Strums(
+        slots_per_bar=8, source="other_stem", source_ratio=0.6, grid_fit=0.9,
+        uncertain=False, patterns=patterns, bar_onsets=[],
+    )
+    score = build_score(
+        _source(), grid, Chords(key=Key(tonic="C", mode="major", confidence=0.9), events=evs),
+        strums, Arrangement(capo=0, transpose=0, tier="easy", chords=arranged, substitutions=[]),
+        UKULELE_TUNING, "Ukulele",
+    )
+    assert [s.label for s in score.sections] == ["verse", "bridge", "chorus"]
+    assert [s.label for s in grid.sections] == ["verse", "verse", "chorus"]

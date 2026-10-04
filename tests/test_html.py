@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 
-from youkelele.render.html import render_html
+from youkelele.render.html import display_names, render_html
 from youkelele.schemas import (
     ChordDiagram,
     Instrument,
@@ -462,3 +462,34 @@ def test_html_sixteen_slot_strip_uses_the_narrow_slot_width():
     verse = _section_html(render_html(score), "Verse")
     widths = re.findall(r'<svg [^>]*width="(\d+)"', verse)
     assert widths == ["652"]  # 2 * 16 * 20 + 12, within the 688 px text width
+
+
+def test_display_names_number_by_occurrence():
+    assert display_names(["verse", "chorus", "verse", "bridge"]) == [
+        "Verse 1", "Chorus", "Verse 2", "Bridge",
+    ]
+    assert display_names(
+        ["intro", "verse", "chorus", "verse", "instrumental", "chorus", "instrumental", "outro"]
+    ) == [
+        "Intro", "Verse 1", "Chorus 1", "Verse 2", "Instrumental 1", "Chorus 2", "Instrumental 2",
+        "Outro",
+    ]
+    assert display_names([]) == []
+    # a hand-capitalised label counts as the same label
+    assert display_names(["Verse", "verse"]) == ["Verse 1", "Verse 2"]
+
+
+def test_html_headings_and_strum_as_in_use_display_names():
+    score = _score(
+        [
+            _section("verse", 4, 0),
+            _section("chorus", 4, 4),
+            _section("verse", 4, 8),
+            _section("bridge", 4, 12),
+            _section("verse", 2, 16, uncertain=True, inherited_from=2),
+        ]
+    )
+    html = render_html(score)
+    headings = re.findall(r"<h2>(.*?)</h2>", html)
+    assert headings == ["Verse 1", "Chorus", "Verse 2", "Bridge", "Verse 3"]
+    assert "Strum as in Verse 2 (uncertain)" in _section_html(html, "Verse 3")
