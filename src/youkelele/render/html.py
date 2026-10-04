@@ -22,7 +22,8 @@ _ENV = Environment(
 )
 
 CAPO_NOTE = "Shapes are relative to the capo"
-FILLED_NOTE = "Italic chords were inferred where the recording had no clear chord"
+POWER_LEGEND = "{name} is a power chord on the record"
+FILLED_NOTE ="Italic chords were inferred where the recording had no clear chord"
 
 
 def _capo(capo: int) -> str:
@@ -63,6 +64,13 @@ def render_html(score: Score) -> str:
     ]
     passing = ", ".join(
         f"{d.name} {fret_notation(d.shape)}" for d in score.chord_diagrams if d.passing
+    )
+    # the badge and its legend line belong to the full tier; the easy tier prints the plain name
+    power_badge = score.tier == "full"
+    power_lines = (
+        [POWER_LEGEND.format(name=d.name) for d in score.chord_diagrams if d.power]
+        if power_badge
+        else []
     )
     sections = []
     any_filled = False
@@ -114,5 +122,7 @@ def render_html(score: Score) -> str:
         tuning=" ".join(score.instrument.tuning),
         diagrams=diagrams,
         passing=passing or None,
+        power_badge=power_badge,
+        power_lines=power_lines,
         sections=sections,
     )

@@ -124,6 +124,11 @@ def simplify_for_tier(label: str, tier: str, db: ShapeDB) -> tuple[str, str | No
     if label in ("N", "X"):
         return label, None
     reason = None
+    root, _, quality = label.partition(":")
+    if quality == "5":
+        # a power chord on the record: the harmony stage only writes it for a minor tonic, so
+        # the key's quality is minor, in both tiers
+        label, reason = f"{root}:min", "power chord: quality from key"
     if tier == "easy":
         triad = to_triad(label)
         if triad != label:

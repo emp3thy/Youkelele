@@ -167,6 +167,11 @@ def test_simplify_unknown_quality_falls_back_to_triad(db):
     assert simplify_for_tier("E:maj(9)", "full", db) == ("E:maj", "no shape in chords-db for maj(9)")
 
 
+@pytest.mark.parametrize("tier", ["easy", "full"])
+def test_simplify_for_tier_maps_power_to_key_quality(db, tier):
+    assert simplify_for_tier("C#:5", tier, db) == ("C#:min", "power chord: quality from key")
+
+
 def test_simplify_left_blank_when_nothing_found(db):
     assert simplify_for_tier("Q:weird", "full", db) == ("N", "no shape; left blank")
 

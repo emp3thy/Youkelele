@@ -59,7 +59,7 @@ class ArrangeStage(Stage):
         arranged = [
             ArrangedChord(
                 event=i, name=display_name_for(label, db), shape=played_shapes[label],
-                passing=labels[i] in passing,
+                passing=labels[i] in passing, power=chords.events[i].power,
             )
             for i, label in enumerate(played)
             if label not in _BLANK
@@ -71,7 +71,7 @@ class ArrangeStage(Stage):
             no_capo = [
                 ArrangedChord(
                     event=i, name=display_name_for(label, db), shape=open_shapes[label],
-                    passing=label in passing,
+                    passing=label in passing, power=chords.events[i].power,
                 )
                 for i, label in enumerate(labels)
                 if label not in _BLANK

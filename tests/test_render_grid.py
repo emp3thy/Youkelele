@@ -70,6 +70,30 @@ def test_cell_with_three_or_more_chords_is_crowded_and_cells_wrap():
     assert ".cell.crowded" in template
 
 
+def test_cell_power_marks_the_power_chords_of_the_bar():
+    bar = ScoreBar(
+        index=0,
+        chords=[
+            ScoreChord(name="G", diagram=0, start_slot=4, slots=list("DUDU")),
+            ScoreChord(name="C#m", diagram=1, start_slot=0, slots=list("DUDU"), power=True),
+        ],
+    )
+    cell = cell_for(bar)
+    assert cell.text == "C#m / G" and cell.power is True and cell.badges == (True, False)
+    assert cell_for(_bar(0, "Am")).power is False and cell_for(_bar(0, "Am")).badges == ()
+
+
+def test_rows_with_the_same_names_but_a_different_power_flag_do_not_collapse():
+    plain, power = _bar(0, "C#m"), ScoreBar(
+        index=1, chords=[ScoreChord(name="C#m", diagram=0, start_slot=0, slots=list("DUDU"), power=True)]
+    )
+    section = ScoreSection(
+        label="Verse", pattern=list("DUDU"), uncertain=False, bars=[plain] * 4 + [power] * 4,
+        bar_repeat=1.0, no_instrument=False,
+    )
+    assert [b.repeat for b in section_grid(section).blocks] == [1, 1]
+
+
 def test_cell_nc_bar():
     cell = cell_for(_bar(3, "N.C."))
     assert cell == Cell(text="N.C.", nc=True, pickup=False)

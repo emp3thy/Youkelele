@@ -8,6 +8,8 @@ from youkelele.music.key import (
     KRUMHANSL_MAJOR,
     KRUMHANSL_MINOR,
     MODE_TIE_MARGIN,
+    POWER_MIN_SHARE,
+    POWER_MODE_MARGIN,
     SECTION_END_WEIGHT,
     decide_tonic,
     estimate_key,
@@ -17,6 +19,7 @@ from youkelele.music.key import (
     key_text,
     mode_at,
     pair_shares,
+    power_chord_events,
     tonic_chord_mode,
     tonic_scores,
 )
@@ -248,6 +251,70 @@ def test_minor_key_candidate_is_scored_by_its_minor_pair():
     # B major with G# minor beats B minor with D major: C# half, B and E full, A outside
     assert shares["B"] == pytest.approx((5 + 6 + 5) / 25)
     assert shares["C#"] > shares["B"]
+
+
+# --- tonic power chords (spec 1.4, section 3.2) ---
+
+C_SHARP_MINOR = Key(tonic="C#", mode="minor", confidence=0.4, method="chords_stems",
+                    margin=0.14, mode_margin=0.42, runner_up="B")
+# C# minor's own triad (C#, E, G#): the harmonic stems hear a minor tonic
+MINOR_STEMS = _triad_chroma((1, 4, 8))
+
+
+def _riff_stream() -> list[ChordEvent]:
+    """Shaped like Pour Some Sugar On Me: the riff reads C#:maj for ten of 25 bars."""
+    seconds = {"C#:maj": 10, "B:maj": 6, "E:maj": 5, "A:maj": 4}
+    return _events([label for label, n in seconds.items() for _ in range(n)])
+
+
+def test_power_chord_constants():
+    assert POWER_MODE_MARGIN == 0.2 and POWER_MIN_SHARE == 0.2
+
+
+def test_power_chord_events_fire_only_at_the_minor_tonic_with_all_gates():
+    events = _riff_stream()
+    mode, margin = mode_at("C#", MINOR_STEMS)
+    assert mode == "minor" and margin >= POWER_MODE_MARGIN
+    indices = power_chord_events(events, C_SHARP_MINOR, MINOR_STEMS)
+    assert indices == [i for i, e in enumerate(events) if e.label == "C#:maj"] == list(range(10))
+
+
+def test_power_chord_events_count_every_maj_event_of_the_tonic_root():
+    labels = ["C#:maj", "B:maj", "C#:maj", "E:maj", "C#:min7", "C#:maj", "A:maj"]
+    # C#:maj 3 bars against C#:min7 1 bar; the root holds 4 of 7 bars of chord time
+    assert power_chord_events(_events(labels), C_SHARP_MINOR, MINOR_STEMS) == [0, 2, 5]
+
+
+def test_power_chord_events_off_when_the_tonic_is_not_mostly_major():
+    labels = ["C#:min"] * 3 + ["C#:maj"] * 2 + ["B:maj", "E:maj"]
+    assert power_chord_events(_events(labels), C_SHARP_MINOR, MINOR_STEMS) == []
+
+
+def test_power_chord_events_off_when_the_stems_do_not_clearly_prefer_minor():
+    events = _riff_stream()
+    major_stems = _triad_chroma((1, 5, 8))  # C# major's own triad
+    assert power_chord_events(events, C_SHARP_MINOR, major_stems) == []
+    assert power_chord_events(events, C_SHARP_MINOR, np.ones(12)) == []  # no preference at all
+    # prefers minor, but not by POWER_MODE_MARGIN
+    unsure = _triad_chroma((1, 4, 5, 8))
+    assert mode_at("C#", unsure)[0] == "minor" and mode_at("C#", unsure)[1] < POWER_MODE_MARGIN
+    assert power_chord_events(events, C_SHARP_MINOR, unsure) == []
+
+
+def test_power_chord_events_off_for_picardy_under_share():
+    # the tonic is major for two of twenty bars and never minor: 10 percent of chord time
+    labels = ["C#:maj"] * 2 + ["B:maj"] * 8 + ["E:maj"] * 6 + ["A:maj"] * 4
+    assert power_chord_events(_events(labels), C_SHARP_MINOR, MINOR_STEMS) == []
+
+
+def test_power_chord_events_off_in_major_key():
+    major = C_SHARP_MINOR.model_copy(update={"mode": "major"})
+    assert power_chord_events(_riff_stream(), major, MINOR_STEMS) == []
+
+
+def test_power_chord_events_share_ignores_no_chord_time():
+    labels = ["C#:maj"] * 3 + ["N"] * 10 + ["B:maj"] * 6 + ["E:maj"] * 5 + ["A:maj"] * 1
+    assert power_chord_events(_events(labels), C_SHARP_MINOR, MINOR_STEMS) == [0, 1, 2]
 
 
 def test_key_json_without_new_fields_loads():

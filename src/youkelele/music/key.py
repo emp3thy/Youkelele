@@ -360,6 +360,56 @@ def key_from_chords(
     return key_and_decision(events, bars, sections, chroma_mean, mix_key)[0]
 
 
+# --- Tonic power chords: a minor tonic played as root and fifth reads as major ---
+#
+# The chord model has no power-chord class, so it prints a minor-key riff on root and fifth as
+# the tonic's major (Pour Some Sugar On Me: C#:maj for 41 percent of chord time).
+
+# The harmonic chroma must prefer minor at the tonic by at least this much (the Krumhansl
+# major-minus-minor difference; Pour Some Sugar On Me 0.423, the three major songs 0.2 to 0.3
+# in the other direction).
+POWER_MODE_MARGIN = 0.2
+# The tonic root must hold at least this share of non-N chord time, so a one-bar Picardy or
+# borrowed major tonic is left alone.
+POWER_MIN_SHARE = 0.2
+
+
+def power_chord_events(
+    events: Sequence[ChordEvent], key: Key, chroma_mean: np.ndarray
+) -> list[int]:
+    """Indices of the tonic root's major events when the tonic is a power chord, else `[]`.
+
+    All four hold: the key is minor; the tonic root's chord time as major exceeds its time as
+    minor; the harmonic chroma prefers minor at the tonic by at least `POWER_MODE_MARGIN`; and
+    the tonic root holds at least `POWER_MIN_SHARE` of non-N chord time.
+    """
+    if key.mode != "minor":
+        return []
+    tonic = _pitch_class(key.tonic)
+    total = root_time = major = minor = 0.0
+    majors: list[int] = []
+    for index, event in enumerate(events):
+        chords = _chords([event])
+        if not chords:
+            continue
+        chord = chords[0]
+        total += chord.duration
+        if chord.root != tonic:
+            continue
+        root_time += chord.duration
+        if chord.triad == "maj":
+            major += chord.duration
+            majors.append(index)
+        elif chord.triad == "min":
+            minor += chord.duration
+    if not majors or major <= minor or root_time < POWER_MIN_SHARE * total:
+        return []
+    mode, margin = mode_at(key.tonic, chroma_mean)
+    if mode != "minor" or margin < POWER_MODE_MARGIN:
+        return []
+    return majors
+
+
 def _close(key: Key) -> bool:
     return key.margin is not None and key.margin < KEY_HEDGE_MARGIN
 

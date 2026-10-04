@@ -167,7 +167,10 @@ def test_harmony_stage_key_from_chords_and_notes(tmp_path):
     )
     ctx.log = logged.append
     stage.run(ctx)
-    key = load_model(ctx.output("harmony/chords.json"), Chords).key
+    chords = load_model(ctx.output("harmony/chords.json"), Chords)
+    key = chords.key
+    assert not any(e.power for e in chords.events)
+    assert ctx.notes["power_chords"] == "0"
     assert (key.tonic, key.mode, key.method) == ("D", "major", "chords_stems")
     assert key.mix is not None and key.mix.tonic != "D"
     assert key.runner_up is not None and key.margin is not None and key.mode_margin > 0.05
@@ -176,6 +179,34 @@ def test_harmony_stage_key_from_chords_and_notes(tmp_path):
     assert ctx.notes["key_margin"] == f"{key.margin:.3f}"
     assert ctx.notes["tonic_pair_rule"].startswith("D by ")
     assert any("key D major (or" in line and "chords+stems, margin" in line for line in logged)
+
+
+def test_harmony_stage_relabels_power_events(tmp_path):
+    # the model hears the riff as C#:maj; the guitar stem plays C# minor
+    labels = ["C#:maj", "B:maj", "C#:maj", "E:maj", "C#:maj", "B:maj", "A:maj", "C#:maj"]
+    played = [label.replace("C#:maj", "C#:min") for label in labels]
+    spans = [LabelSpan(i * 2.0, (i + 1) * 2.0, lab) for i, lab in enumerate(labels)]
+    logged: list[str] = []
+    stage = HarmonyStage(recogniser=_recogniser(spans), chroma=lambda wav: np.eye(12)[0] + 0.1)
+
+    def guitar(stem_path):
+        write_chord_loop(stem_path("guitar"), played, 2.0)
+
+    ctx, out = _ctx(tmp_path, stage, 8, 2.0, lambda p: write_chord_loop(p, played, 2.0), guitar)
+    ctx.log = logged.append
+    stage.run(ctx)
+    chords = load_model(ctx.output("harmony/chords.json"), Chords)
+    assert (chords.key.tonic, chords.key.mode) == ("C#", "minor")
+    got = [(e.label, e.triad, e.power) for e in chords.events]
+    power = ("C#:5", "C#:min", True)
+    assert got == [
+        power, ("B:maj", "B:maj", False), power, ("E:maj", "E:maj", False), power,
+        ("B:maj", "B:maj", False), ("A:maj", "A:maj", False), power,
+    ]
+    assert ctx.notes["power_chords"] == "4"
+    assert any("4 power chord events" in line for line in logged)
+    # the raw model output is not touched
+    assert "C#:maj" in ctx.output("harmony/spans.lab").read_text(encoding="utf-8")
 
 
 def test_harmony_stage_key_falls_back_to_the_mix_with_few_chords(tmp_path):

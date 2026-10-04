@@ -359,6 +359,31 @@ def test_diagram_used_both_passing_and_full_is_not_passing():
     assert [(d.name, d.passing) for d in score.chord_diagrams] == [("F", False), ("C", False)]
 
 
+def test_score_sets_power_on_chord_and_diagram():
+    evs = [_ev(0, 1, "C#:5"), _ev(1, 2, "G"), _ev(2, 3, "C#:5")]
+    arranged = [
+        ArrangedChord(event=0, name="C#m", shape=F, power=True),
+        ArrangedChord(event=1, name="G", shape=G),
+        ArrangedChord(event=2, name="C#m", shape=F, power=True),
+    ]
+    score = _build_events(3, evs, arranged)
+    assert [[(c.name, c.power) for c in bar.chords] for bar in score.sections[0].bars] == [
+        [("C#m", True)], [("G", False)], [("C#m", True)],
+    ]
+    assert [(d.name, d.power) for d in score.chord_diagrams] == [("C#m", True), ("G", False)]
+
+
+def test_diagram_used_both_power_and_plain_is_not_power():
+    evs = [_ev(0, 1, "C#:5"), _ev(1, 2, "G"), _ev(2, 3, "C#:min")]
+    arranged = [
+        ArrangedChord(event=0, name="C#m", shape=F, power=True),
+        ArrangedChord(event=1, name="G", shape=G),
+        ArrangedChord(event=2, name="C#m", shape=F),
+    ]
+    score = _build_events(3, evs, arranged)
+    assert [(d.name, d.power) for d in score.chord_diagrams] == [("C#m", False), ("G", False)]
+
+
 def test_score_sections_use_aligned_starts_and_record_shift():
     score = _mid_phrase_score()
     verse, chorus = score.sections

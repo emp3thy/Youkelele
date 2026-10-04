@@ -3,7 +3,9 @@
 No-chord bars where the harmonic stems clearly play one of the song's own chords are
 then filled with that chord (`filled: true`); see `music/fill.py`. The key's tonic is
 then taken from the chord stream and its mode from the harmonic-stem chroma; see
-`music/key.py: key_from_chords`. The chroma is computed once and shared.
+`music/key.py: key_from_chords`. The chroma is computed once and shared. After the key, a
+minor tonic the model hears as major (a power chord) is relabelled `X:5` with the key's
+quality as its triad and `power: true`; see `music/key.py: power_chord_events`.
 """
 
 from __future__ import annotations
@@ -31,9 +33,10 @@ from youkelele.music.key import (
     estimate_key,
     key_and_decision,
     key_text,
+    power_chord_events,
 )
 from youkelele.music.snap import snap_to_beats
-from youkelele.schemas import Chords, Grid, Key
+from youkelele.schemas import ChordEvent, Chords, Grid, Key
 from youkelele.stage import Stage, StageContext
 from youkelele.vendoring import CHORD_MODEL_CHECKPOINT_SHA256, CHORD_MODEL_COMMIT
 
@@ -57,6 +60,22 @@ def _key_log(key: Key, decision: TonicDecision | None) -> str:
     if decision is None:
         return f"key {key_text(key)} (mix)"
     return f"key {key_text(key)} (chords+stems, margin {key.margin:.3f} by {decision.rule})"
+
+
+def relabel_power(events: list[ChordEvent], indices: list[int]) -> list[ChordEvent]:
+    """The events at `indices` as power chords: label `<root>:5`, the key's quality (minor, the
+    gate's precondition) as the triad, `power` set. The root keeps the model's spelling and
+    nothing else changes."""
+    chosen = set(indices)
+    out: list[ChordEvent] = []
+    for i, event in enumerate(events):
+        if i in chosen:
+            root = event.label.split(":", 1)[0]
+            event = event.model_copy(
+                update={"label": f"{root}:5", "triad": f"{root}:min", "power": True}
+            )
+        out.append(event)
+    return out
 
 
 class HarmonyStage(Stage):
@@ -105,12 +124,16 @@ class HarmonyStage(Stage):
         chorded = sum(e.label != "N" and not e.filled for e in events)
         # after the fill, so filled chords count
         mix_key = estimate_key(self._chroma(wav))
-        key, decision = key_and_decision(
-            events, grid.bars, grid.sections, chroma.mean(loud, grid.bars), mix_key
-        )
+        chroma_mean = chroma.mean(loud, grid.bars)
+        key, decision = key_and_decision(events, grid.bars, grid.sections, chroma_mean, mix_key)
         ctx.log(f"  {chorded} chord events, {_key_log(key, decision)}")
         ctx.log(f"  {filled} bars filled")
+        # after the key: a minor tonic the model hears as major is a power chord (spec 3.2)
+        power = power_chord_events(events, key, chroma_mean)
+        events = relabel_power(events, power)
+        ctx.log(f"  {len(power)} power chord events")
         save_model(out, Chords(key=key, events=events))
+        ctx.note("power_chords", str(len(power)))
         ctx.note("key_method", key.method)
         ctx.note("key_margin", "none" if key.margin is None else f"{key.margin:.3f}")
         ctx.note(

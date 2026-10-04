@@ -14,3 +14,7 @@ from youkelele.music.triads import to_triad
 )
 def test_to_triad(label, triad):
     assert to_triad(label) == triad
+
+
+def test_to_triad_keeps_power_label():
+    assert to_triad("C#:5") == "C#:5"

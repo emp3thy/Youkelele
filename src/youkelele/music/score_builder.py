@@ -125,8 +125,11 @@ def build_score(
         for i, d in enumerate(diagrams):
             if d.name == a.name and d.shape == a.shape:
                 d.passing = d.passing and a.passing  # one full use makes a full diagram
+                d.power = d.power and a.power  # one plain use drops the legend line
                 return i
-        diagrams.append(ChordDiagram(name=a.name, shape=a.shape, passing=a.passing))
+        diagrams.append(
+            ChordDiagram(name=a.name, shape=a.shape, passing=a.passing, power=a.power)
+        )
         return len(diagrams) - 1
 
     # rows follow the chord-change phrase; grid.json and the section count are unchanged
@@ -158,7 +161,7 @@ def build_score(
                     ScoreChord(
                         name=a.name, diagram=diagram_index(a), start_slot=slot,
                         slots=list(pattern.slots[slot:end]),
-                        filled=chords.events[a.event].filled, passing=a.passing,
+                        filled=chords.events[a.event].filled, passing=a.passing, power=a.power,
                     )
                 )
             if chord_list and chord_list[0].start_slot > 0:

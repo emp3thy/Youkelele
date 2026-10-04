@@ -128,6 +128,7 @@ class ChordEvent(_Artifact):
     triad: str
     confidence: float
     filled: bool = False  # inferred from the harmonic stems for a bar the recogniser left N
+    power: bool = False  # the minor tonic played as root and fifth: label `X:5`, triad the key's
 
     @field_validator("label", "triad")
     @classmethod
@@ -195,6 +196,7 @@ class ArrangedChord(_Artifact):
     name: str
     shape: Shape
     passing: bool = False  # rare and short: named in the grid, no full diagram
+    power: bool = False  # copied from the chord event: a power chord on the record
 
 
 class Substitution(_Artifact):
@@ -224,6 +226,7 @@ class ChordDiagram(_Artifact):
     name: str
     shape: Shape
     passing: bool = False  # every use of this chord is a passing chord
+    power: bool = False  # every use of this chord is a power chord on the record
 
 
 class ScoreChord(_Artifact):
@@ -233,6 +236,7 @@ class ScoreChord(_Artifact):
     slots: list[Slot]
     filled: bool = False  # copied from the chord event
     passing: bool = False  # copied from the arranged chord
+    power: bool = False  # copied from the arranged chord
 
 
 class ScoreBar(_Artifact):

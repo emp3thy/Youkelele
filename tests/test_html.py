@@ -321,6 +321,67 @@ def test_passing_line_lists_every_passing_chord():
     assert "Passing: B 4322, E7 1202" in render_html(score)
 
 
+def _power_score(tier: str) -> Score:
+    split = ScoreBar(
+        index=1,
+        chords=[
+            ScoreChord(name="C#m", diagram=0, start_slot=0, slots=ISLAND[:4], power=True),
+            ScoreChord(name="G", diagram=1, start_slot=4, slots=ISLAND[4:]),
+        ],
+    )
+    whole = ScoreBar(
+        index=0,
+        chords=[ScoreChord(name="C#m", diagram=0, start_slot=0, slots=ISLAND, power=True)],
+    )
+    plain = ScoreBar(
+        index=2, chords=[ScoreChord(name="G", diagram=1, start_slot=0, slots=ISLAND)]
+    )
+    section = ScoreSection(
+        label="Verse", pattern=ISLAND, uncertain=False, bars=[whole, split, plain],
+        bar_repeat=1.0, no_instrument=False,
+    )
+    return _score([section]).model_copy(
+        update={
+            "tier": tier,
+            "chord_diagrams": [
+                ChordDiagram(name="C#m", shape=C, power=True),
+                ChordDiagram(name="G", shape=G),
+            ],
+        }
+    )
+
+
+def test_html_power_badge_and_legend_line():
+    html = render_html(_power_score("full"))
+    assert re.findall(r'<div class="cell">([^<]*(?:<sup>5</sup>[^<]*)*)</div>', html) == [
+        "C#m<sup>5</sup>", "C#m<sup>5</sup> / G", "G",
+    ]
+    assert "<sup>5</sup>" in html
+    legend_line = "C#m is a power chord on the record"
+    assert html.count(legend_line) == 1
+    assert html.index('class="legend"') < html.index(legend_line) < html.index('class="sections"')
+    assert "sup {" in html  # the badge is styled small and raised
+
+
+def test_html_power_legend_line_follows_the_passing_line():
+    score = _power_score("full")
+    diagrams = [*score.chord_diagrams, ChordDiagram(name="B", shape=B, passing=True)]
+    html = render_html(score.model_copy(update={"chord_diagrams": diagrams}))
+    assert html.index("Passing: B 4322") < html.index("C#m is a power chord on the record")
+
+
+def test_html_easy_tier_prints_the_plain_name_without_badge_or_legend_line():
+    html = render_html(_power_score("easy"))
+    assert "<sup>5</sup>" not in html
+    assert "power chord" not in html
+    assert re.findall(r'<div class="cell">([^<]*)</div>', html) == ["C#m", "C#m / G", "G"]
+
+
+def test_html_without_power_has_no_badge_markup():
+    html = render_html(_two_sections())
+    assert "<sup>5</sup>" not in html and "power chord" not in html
+
+
 def test_filled_cell_italic_and_header_note():
     bars = _bars(["C", "G"]) + _bars(["G"], start=2, filled=True)
     html = render_html(_score([_plain_section("Verse", bars)]))
