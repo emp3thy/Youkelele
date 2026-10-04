@@ -125,7 +125,7 @@ class Key(_Artifact):
     # chords_stems: tonic from the chord stream, mode from the harmonic stems (1.4);
     # mix_krumhansl: the 24-way profile search on the mix (1.3 files, or too few chords)
     method: Literal["mix_krumhansl", "chords_stems"] = "mix_krumhansl"
-    margin: float | None = None  # the deciding tonic margin (by score, or by the pair rule)
+    margin: float | None = None  # the score's margin, or the pair rule's when it decided a close score (decided_by "pair rule")
     mode_margin: float | None = None  # major minus minor correlation at the tonic, absolute
     runner_up: str | None = None  # the runner-up tonic under the deciding rule
     mix: Key | None = None  # the mix estimate, kept for comparison

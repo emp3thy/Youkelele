@@ -100,7 +100,7 @@ def plain_major_root(label: str) -> str | None:
 @dataclass(frozen=True)
 class TonicDecision:
     tonic: str
-    margin: float  # the deciding margin
+    margin: float  # the pair rule's margin under rule 1, else the score's (rules 2 and 3, even when the mix picks the pair rule's tonic)
     runner_up: str | None
     rule: Literal["score", "pair rule"]
     pair_tonic: str  # the pair rule's winner, computed whether or not it decided

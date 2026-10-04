@@ -180,7 +180,7 @@ def test_harmony_stage_key_from_chords_and_notes(tmp_path):
     assert ctx.notes["key_method"] == "chords_stems"
     assert ctx.notes["key_margin"] == f"{key.margin:.3f}"
     assert ctx.notes["tonic_pair_rule"].startswith("D by ")
-    assert any("key D major (or" in line and "chords+stems, margin" in line for line in logged)
+    assert any("key D major (or" in line and "chords+stems, score margin" in line for line in logged)
     # the hedge's own mode is stored, and the log prints it
     assert key.hedge_mode in ("major", "minor")
     assert any(f"key {key_text(key)} (chords+stems" in line for line in logged)
@@ -312,3 +312,15 @@ def test_recognise_chords_passes_absolute_paths_to_child(tmp_path, monkeypatch):
     assert wav_arg.is_absolute() and lab_arg.is_absolute()
     assert wav_arg == (tmp_path / wav).resolve()
     assert lab_arg == (tmp_path / work_dir / "out.lab").resolve()
+
+
+def test_key_log_names_whose_margin_it_prints():
+    from youkelele.music.key import TonicDecision
+    from youkelele.schemas import Key
+    from youkelele.stages.harmony import _key_log
+
+    key = Key(tonic="A", mode="minor", confidence=0.2, method="chords_stems", margin=0.031)
+    by_score = TonicDecision("A", 0.031, "C", "score", "C", 0.1, "A", "score")
+    by_pair = TonicDecision("A", 0.031, "C", "pair rule", "A", 0.031, "C", "pair rule")
+    assert "(chords+stems, score margin 0.031 by score, decided by score)" in _key_log(key, by_score)
+    assert "(chords+stems, pair margin 0.031 by pair rule, decided by pair rule)" in _key_log(key, by_pair)

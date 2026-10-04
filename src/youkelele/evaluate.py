@@ -466,11 +466,17 @@ def _section_line(d: SectionDiag) -> str:
 
 
 def _key_line(key: Key | None) -> str:
-    """`Key: tonic mode (method, margin, mode margin, runner-up[, mix tonic mode])`."""
+    """`Key: tonic mode (method, score margin, mode margin, runner-up[, mix tonic mode][, votes ...])`.
+
+    The margin is the score's unless the pair rule decided a close score, when it is the pair
+    rule's (`pair margin`). The votes tail, `votes score X pair Y mix Z (decided by)`, is
+    printed when the key carries the three votes (1.5 files).
+    """
     if key is None:
         return "Key: n/a"
+    by_pair = key.tonic_votes is not None and key.tonic_votes.decided_by == "pair rule"
     figures = (
-        f"{key.method}, margin {_num(key.margin, '.3f')}, "
+        f"{key.method}, {'pair' if by_pair else 'score'} margin {_num(key.margin, '.3f')}, "
         f"mode margin {_num(key.mode_margin, '.3f')}, runner-up {key.runner_up or 'n/a'}"
     )
     if key.mix is not None:

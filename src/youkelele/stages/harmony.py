@@ -63,7 +63,8 @@ def _key_log(key: Key, decision: TonicDecision | None) -> str:
     if decision is None:
         return f"key {key_text(key)} (mix)"
     return (
-        f"key {key_text(key)} (chords+stems, margin {key.margin:.3f} by {decision.rule}, "
+        f"key {key_text(key)} (chords+stems, {'pair' if decision.rule == 'pair rule' else 'score'} "
+        f"margin {key.margin:.3f} by {decision.rule}, "
         f"decided by {decision.decided_by})"
     )
 

@@ -101,7 +101,7 @@ def test_cli_evaluate_prints_report(tmp_path, capsys):
         "Filled bars: 0",
         "Changes on bar: 100.0%",
         "Sub-beat events: 0",
-        "Key: C major (mix_krumhansl, margin n/a, mode margin n/a, runner-up n/a)",
+        "Key: C major (mix_krumhansl, score margin n/a, mode margin n/a, runner-up n/a)",
         "Key confidence: 0.90",
         "Boxes mostly rests: n/a",
         "Vocal runs: n/a",
@@ -326,9 +326,14 @@ def test_evaluate_prints_key_method_and_margins(tmp_path):
     )
     chords = _chords().model_copy(update={"key": key})
     text = format_report(evaluate_run(_run_with(tmp_path / "new", chords=chords)))
-    assert "Key: D major (chords_stems, margin 0.052, mode margin 0.302, runner-up A, mix A major)" in text
+    assert "Key: D major (chords_stems, score margin 0.052, mode margin 0.302, runner-up A, mix A major)" in text
     old = format_report(evaluate_run(_run_with(tmp_path / "old")))
-    assert "Key: C major (mix_krumhansl, margin n/a, mode margin n/a, runner-up n/a)" in old
+    assert "Key: C major (mix_krumhansl, score margin n/a, mode margin n/a, runner-up n/a)" in old
+    # under the pair rule (a close score) the margin is the pair rule's
+    paired = key.model_copy(
+        update={"tonic_votes": TonicVotes(score="A", pair="D", mix="A", decided_by="pair rule")}
+    )
+    assert _key_line(paired).startswith("Key: D major (chords_stems, pair margin 0.052, ")
     assert "Key: n/a" in format_report(Report(None, None, None, None, None))
 
 
