@@ -72,8 +72,8 @@ def render_html(score: Score) -> str:
             {
                 "label": section.label,
                 "uncertain": section.uncertain,
+                "explained": section.explained,
                 "no_instrument": section.no_instrument,
-                "repeat": f"{section.bar_repeat:.0%}",
                 "inherited_from": inherited,
                 "svg": Markup(strum_pattern_svg(section.pattern, score.meter)) if show_box else None,
                 "grid": grid,

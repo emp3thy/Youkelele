@@ -50,10 +50,10 @@ def _source() -> SourceInfo:
     )
 
 
-def _strums(slots=ISLAND) -> Strums:
+def _strums(slots=ISLAND, explained=0.0) -> Strums:
     pattern = SectionPattern(
         section=0, slots=list(slots), confidence=0.8, bar_repeat=0.9, uncertain=False,
-        no_instrument=False, inherited_from=None,
+        no_instrument=False, inherited_from=None, explained=explained,
     )
     return Strums(
         slots_per_bar=len(slots), source="other_stem", source_ratio=0.6, grid_fit=0.9,
@@ -61,7 +61,7 @@ def _strums(slots=ISLAND) -> Strums:
     )
 
 
-def _score(n_bars, events, shapes, capo=0):
+def _score(n_bars, events, shapes, capo=0, explained=0.0):
     """events: (start in bars, end in bars, label); shapes: label -> Shape (None for N)."""
     evs = [
         ChordEvent(bar=0, beat=0, start=s * BAR, end=e * BAR, label=lab, triad=lab, confidence=0.9)
@@ -76,7 +76,7 @@ def _score(n_bars, events, shapes, capo=0):
         _source(),
         _grid(n_bars),
         Chords(key=Key(tonic="C", mode="major", confidence=0.9), events=evs),
-        _strums(),
+        _strums(explained=explained),
         Arrangement(capo=capo, transpose=0, tier="easy", chords=arranged, substitutions=[]),
         UKULELE_TUNING,
         "Ukulele",
@@ -113,6 +113,11 @@ def test_diagrams_unique_in_first_appearance_order():
     section = score.sections[0]
     assert section.pattern == ISLAND
     assert section.bar_repeat == 0.9
+
+
+def test_score_copies_explained():
+    score = _score(1, [(0, 1, "C")], {"C": C}, explained=0.85)
+    assert score.sections[0].explained == 0.85
 
 
 def test_chord_change_mid_bar_splits_slots():

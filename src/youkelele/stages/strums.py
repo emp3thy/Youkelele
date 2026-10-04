@@ -11,6 +11,7 @@ import soundfile as sf
 from youkelele.jsonio import load_model, save_model
 from youkelele.music.as_played import (
     MIN_SECTION_BARS,
+    EXPLAINED_BELOW,
     STAGE_UNCERTAIN_GRID_FIT,
     UNCERTAIN_BELOW,
     section_summary,
@@ -93,12 +94,12 @@ class StrumsStage(Stage):
                     uncertain=True, no_instrument=True, inherited_from=None,
                 )
                 continue
-            rendered, confidence, repeat = section_summary(classes[sec.start_bar:sec.end_bar], slots, meter)
+            rendered, confidence, repeat, explained = section_summary(classes[sec.start_bar:sec.end_bar], slots, meter)
             long_enough = sec.end_bar - sec.start_bar >= MIN_SECTION_BARS
             patterns[i] = SectionPattern(
                 section=i, slots=rendered, confidence=confidence, bar_repeat=repeat,
-                uncertain=confidence < UNCERTAIN_BELOW or not long_enough,
-                no_instrument=False, inherited_from=None,
+                uncertain=confidence < UNCERTAIN_BELOW or explained < EXPLAINED_BELOW or not long_enough,
+                no_instrument=False, inherited_from=None, explained=explained,
             )
             if not long_enough:
                 short.append(i)
@@ -117,7 +118,7 @@ class StrumsStage(Stage):
             src = patterns[j]
             patterns[i] = SectionPattern(
                 section=i, slots=list(src.slots), confidence=src.confidence, bar_repeat=src.bar_repeat,
-                uncertain=True, no_instrument=False, inherited_from=j,
+                uncertain=True, no_instrument=False, inherited_from=j, explained=src.explained,
             )
 
         uncertain = fit < STAGE_UNCERTAIN_GRID_FIT

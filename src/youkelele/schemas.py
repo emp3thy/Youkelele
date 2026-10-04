@@ -151,6 +151,7 @@ class SectionPattern(_Artifact):
     uncertain: bool
     no_instrument: bool
     inherited_from: int | None
+    explained: float = 0.0  # share of the section's detected strokes on struck slots
 
 
 class Strums(_Artifact):
@@ -240,6 +241,7 @@ class ScoreSection(_Artifact):
     bar_repeat: float
     no_instrument: bool
     inherited_from: int | None = None
+    explained: float = 0.0
     shifted: int = 0  # bars the start moved from grid.json to sit in phase with the chords
 
 

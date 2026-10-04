@@ -21,6 +21,7 @@ G = Shape(frets=[0, 2, 3, 2], fingers=[0, 1, 3, 2], base_fret=1, barres=[])
 
 def _section(
     label, n_bars, start, uncertain=False, no_instrument=False, pattern=ISLAND, inherited_from=None,
+    explained=0.85,
     names=("C",),
 ):
     bars = [
@@ -32,7 +33,7 @@ def _section(
     ]
     return ScoreSection(
         label=label, pattern=list(pattern), uncertain=uncertain, bars=bars, bar_repeat=0.875,
-        no_instrument=no_instrument, inherited_from=inherited_from,
+        no_instrument=no_instrument, inherited_from=inherited_from, explained=explained,
     )
 
 
@@ -113,7 +114,7 @@ def test_html_uncertain_section_has_heading_note_and_no_strum_box():
     html = render_html(score)
     verse = _section_html(html, "Verse 1")
     assert "(uncertain)" in verse
-    assert "Strum as played, 88% repeatable" in verse
+    assert "Strum heard in this section; covers 85% of detected strokes. Up and down follow the beat (uncertain)" in verse
     assert 'class="strum-box"' not in verse and "<svg" not in verse
     assert 'class="row"' in verse
     chorus = _section_html(html, "Chorus")
@@ -208,8 +209,23 @@ def test_html_names_the_section_a_pattern_was_inherited_from():
         [_section("Verse", 4, 0), _section("Pre-chorus", 2, 4, inherited_from=0)]
     )
     html = render_html(score)
-    assert html.count("inherited from") == 1
-    assert "inherited from Verse" in _section_html(html, "Pre-chorus")
+    assert html.count("same as") == 1
+    assert "same as Verse" in _section_html(html, "Pre-chorus")
+    assert "inherited from" not in html
+
+
+def test_html_prints_explained_not_repeatable():
+    html = render_html(_two_sections())
+    verse = _section_html(html, "Verse 1")
+    assert "Strum heard in this section; covers 85% of detected strokes. Up and down follow the beat" in verse
+    assert "(uncertain)" not in verse
+    assert "repeatable" not in html
+    assert "Strum as played" not in html
+
+
+def test_html_explained_percentage_truncates_not_rounds():
+    score = _score([_section("Verse 1", 2, 0, explained=0.859)])
+    assert "covers 85% of detected strokes" in render_html(score)
 
 
 B = Shape(frets=[4, 3, 2, 2], fingers=[3, 2, 1, 1], base_fret=1, barres=[2])

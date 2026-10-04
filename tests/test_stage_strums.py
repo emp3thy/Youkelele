@@ -13,6 +13,7 @@ from youkelele.music.onsets import Onsets
 from youkelele.options import RunOptions
 from youkelele.schemas import Bar, Grid, Meter, Section, Strums
 from youkelele.stage import StageContext
+import youkelele.stages.strums as strums_module
 from youkelele.stages.strums import StrumsStage
 
 SR = 8000
@@ -232,3 +233,61 @@ def test_strums_stage_marks_stage_uncertain_on_poor_grid_fit(tmp_path):
     assert strums.grid_fit < 0.6
     assert strums.uncertain
     assert float(ctx.notes["grid_fit"]) < 0.6
+
+
+def _with_explained(monkeypatch, explained_for_bars):
+    """Run the real section summary but replace its explained figure by section length."""
+    real = strums_module.section_summary
+
+    def fake(bars, slots_per_bar, meter):
+        rendered, confidence, repeat, _ = real(bars, slots_per_bar, meter)
+        return rendered, confidence, repeat, explained_for_bars(len(bars))
+
+    monkeypatch.setattr(strums_module, "section_summary", fake)
+
+
+def test_strums_stage_records_explained_on_each_pattern(tmp_path):
+    strums, _, _ = _run(tmp_path, _grid([4, 8]), _detector(_island(12)))
+    assert [p.explained for p in strums.patterns] == [1.0, 1.0]
+
+
+def test_strums_stage_no_instrument_section_has_zero_explained(tmp_path):
+    other = np.concatenate([_tone(8 * BAR_SECONDS, 0.3), np.zeros(int(8 * BAR_SECONDS * SR))])
+    strums, _, _ = _run(tmp_path, _grid([8, 8]), _detector(_island(16)), other=other)
+    assert strums.patterns[1].explained == 0.0
+
+
+def test_stage_marks_uncertain_when_explained_low(tmp_path, monkeypatch):
+    _with_explained(monkeypatch, lambda n: 0.59)
+    strums, _, _ = _run(tmp_path, _grid([8]), _detector(_island(8)))
+    pattern = strums.patterns[0]
+    assert pattern.confidence == 1.0
+    assert pattern.explained == 0.59
+    assert pattern.uncertain
+
+
+def test_stage_explained_at_the_threshold_is_not_uncertain(tmp_path, monkeypatch):
+    _with_explained(monkeypatch, lambda n: 0.6)
+    strums, _, _ = _run(tmp_path, _grid([8]), _detector(_island(8)))
+    assert not strums.patterns[0].uncertain
+
+
+def test_inherited_pattern_copies_explained(tmp_path, monkeypatch):
+    _with_explained(monkeypatch, lambda n: 0.7 if n == 6 else 0.2)
+    times = (
+        [t for b in range(4) for t in _bar_times(b, ISLAND)]
+        + [t for b in range(4, 6) for t in _bar_times(b, (0,))]
+        + [t for b in range(6, 12) for t in _bar_times(b, range(8))]
+    )
+    strums, _, _ = _run(tmp_path, _grid([4, 2, 6]), _detector(times))
+    first, short, last = strums.patterns
+    assert (first.explained, last.explained) == (0.2, 0.7)
+    assert short.inherited_from == 2
+    assert short.explained == 0.7
+
+
+def test_strums_stage_keeps_a_strike_played_in_half_the_bars(tmp_path):
+    # slot 4 is struck in 4 of 8 bars: the old more-than-half vote erased it
+    times = [t for b in range(8) for t in _bar_times(b, ISLAND + ((4,) if b % 2 == 0 else ()))]
+    strums, _, _ = _run(tmp_path, _grid([8]), _detector(times))
+    assert strums.patterns[0].slots[4] != "-"
