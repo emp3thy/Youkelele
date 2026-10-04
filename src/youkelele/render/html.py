@@ -10,7 +10,7 @@ from markupsafe import Markup
 from youkelele.render.diagrams import chord_diagram_svg
 from youkelele.music.arrange import _SHARPS
 from youkelele.render.grid import Cell, SectionGrid, fret_notation, section_grid
-from youkelele.render.strum_box import strum_pattern_svg
+from youkelele.render.strum_box import example_bars, slot_px, strum_pattern_svg, worked_example_svg
 from youkelele.schemas import Score
 
 _ENV = Environment(
@@ -58,6 +58,7 @@ def render_html(score: Score) -> str:
     )
     sections = []
     any_filled = False
+    per_slot = slot_px(score.slots_per_bar)  # the box and its example share one column width
     for section in score.sections:
         source = section.inherited_from
         inherited = (
@@ -75,7 +76,18 @@ def render_html(score: Score) -> str:
                 "explained": section.explained,
                 "no_instrument": section.no_instrument,
                 "inherited_from": inherited,
-                "svg": Markup(strum_pattern_svg(section.pattern, score.meter)) if show_box else None,
+                "svg": (
+                    Markup(strum_pattern_svg(section.pattern, score.meter, per_slot=per_slot))
+                    if show_box
+                    else None
+                ),
+                "example": (
+                    Markup(
+                        worked_example_svg(section.pattern, example_bars(section), score.meter, per_slot)
+                    )
+                    if show_box
+                    else None
+                ),
                 "grid": grid,
             }
         )

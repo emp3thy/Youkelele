@@ -1,14 +1,25 @@
-"""Strum pattern box SVG: one 28 px column per slot with beat labels and arrows."""
+"""Strum pattern box SVG, and the worked example that lays a section's chords under its pattern.
+
+Both draw one column per slot with beat labels and arrows; a song uses one slot width for both,
+so their columns line up.
+"""
 
 from __future__ import annotations
 
 from collections.abc import Sequence
+from html import escape
 
-from youkelele.schemas import Meter, Slot
+from youkelele.render.grid import NC
+from youkelele.schemas import Meter, ScoreBar, ScoreSection, Slot
 
 _PER_SLOT = 28
+_NARROW_SLOT = 20  # sixteenths: a two-bar example of 16 slots must fit the 688 px text width
 _H = 60
 _INK = "#111"
+_BAR_GAP = 12  # between the bars of the worked example, with the bar line in the middle
+_CHORD_H = 30  # the chord row under the example's strokes
+_CHORD_INSET = 3  # a chord name starts this far right of its slot's left edge
+_CHAR_PX = 9  # rough advance of a 14 px bold Arial character, for keeping dots clear of names
 _SUBDIVISIONS = {1: ("",), 2: ("", "&"), 3: ("", "&", "a"), 4: ("", "e", "&", "a")}
 
 
@@ -45,22 +56,27 @@ def _muted(x: int) -> str:
 _ARROWS = {"D": _down, "U": _up, "x": _muted}
 
 
-def strum_pattern_svg(slots: Sequence[Slot], meter: Meter) -> str:
+def slot_px(slots_per_bar: int) -> int:
+    """Pixels per slot for a song: the box width up to eighths, narrower for sixteenths."""
+    return _PER_SLOT if slots_per_bar <= 8 else _NARROW_SLOT
+
+
+def _stroke_parts(slots: Sequence[Slot], meter: Meter, per_slot: int, ox: int = 0) -> list[str]:
+    """One bar of the pattern: a framed row of beat labels and arrows, starting at x = ``ox``."""
     n = len(slots)
-    width = n * _PER_SLOT
+    width = n * per_slot
     per_beat = max(1, n // meter.numerator)
     parts = [
-        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{_H}" '
-        f'viewBox="0 0 {width} {_H}" font-family="Arial, Helvetica, sans-serif">',
-        f'<rect x="0.5" y="0.5" width="{width - 1}" height="{_H - 1}" fill="none" stroke="#bbb"/>',
+        f'<rect x="{ox + 0.5}" y="0.5" width="{width - 1}" height="{_H - 1}" fill="none" stroke="#bbb"/>'
     ]
     for i, slot in enumerate(slots):
-        x = i * _PER_SLOT + _PER_SLOT // 2
+        left = ox + i * per_slot
+        x = left + per_slot // 2
         on_beat = i % per_beat == 0
         parts.append('<g class="slot">')
         if on_beat and i > 0:
             parts.append(
-                f'<line x1="{i * _PER_SLOT}" y1="4" x2="{i * _PER_SLOT}" y2="{_H - 4}" stroke="#ddd"/>'
+                f'<line x1="{left}" y1="4" x2="{left}" y2="{_H - 4}" stroke="#ddd"/>'
             )
         style = 'font-size="10" font-weight="bold" fill="#111"' if on_beat else 'font-size="9" fill="#666"'
         kind = "beat" if on_beat else "sub"
@@ -71,6 +87,87 @@ def strum_pattern_svg(slots: Sequence[Slot], meter: Meter) -> str:
         draw = _ARROWS.get(slot)
         if draw is not None:
             parts.append(draw(x))
+        parts.append("</g>")
+    return parts
+
+
+def _svg_open(width: int, height: int) -> str:
+    return (
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" '
+        f'viewBox="0 0 {width} {height}" font-family="Arial, Helvetica, sans-serif">'
+    )
+
+
+def strum_pattern_svg(slots: Sequence[Slot], meter: Meter, per_slot: int = _PER_SLOT) -> str:
+    width = len(slots) * per_slot
+    return _svg_open(width, _H) + "".join(_stroke_parts(slots, meter, per_slot)) + "</svg>"
+
+
+def example_bars(section: ScoreSection) -> list[ScoreBar]:
+    """The bars the worked example shows: the first two, unless neither changes chord mid-bar
+    and a later bar does, which then replaces the second; one bar if the section has one."""
+    bars = section.bars[:2]
+    if len(bars) == 2 and all(len(b.chords) <= 1 for b in bars):
+        change = next((b for b in section.bars[2:] if len(b.chords) > 1), None)
+        if change is not None:
+            bars = [bars[0], change]
+    return list(bars)
+
+
+def _chord_parts(bar: ScoreBar, n: int, per_slot: int, ox: int) -> list[str]:
+    """One bar's chord row under its strokes: each name on its start slot, a dot per held slot."""
+    y = _H + 20
+    parts = [
+        f'<rect x="{ox + 0.5}" y="{_H + 0.5}" width="{n * per_slot - 1}" height="{_CHORD_H - 1}" '
+        'fill="none" stroke="#bbb"/>'
+    ]
+    chords = sorted(bar.chords, key=lambda c: c.start_slot)
+    spans = [(c.name, c.start_slot) for c in chords] or [(NC, 0)]  # a bar with no chord prints as N.C.
+    for k, (name, start) in enumerate(spans):
+        start = min(max(start, 0), n - 1)
+        end = spans[k + 1][1] if k + 1 < len(spans) else n
+        x = ox + start * per_slot
+        if k > 0:
+            parts.append(
+                f'<line x1="{x}" y1="{_H + 2}" x2="{x}" y2="{_H + _CHORD_H - 2}" stroke="#ddd" '
+                'class="change"/>'
+            )
+        parts.append(
+            f'<text x="{x + _CHORD_INSET}" y="{y}" font-size="14" font-weight="bold" fill="{_INK}" '
+            f'class="chord">{escape(name)}</text>'
+        )
+        name_end = x + _CHORD_INSET + _CHAR_PX * len(name)
+        for slot in range(start + 1, min(end, n)):
+            cx = ox + slot * per_slot + per_slot // 2
+            if cx - 3 > name_end:  # a long name covers the first held slots; no dot under it
+                parts.append(
+                    f'<text x="{cx}" y="{y}" text-anchor="middle" font-size="14" fill="#666" '
+                    'class="held">·</text>'
+                )
+    return parts
+
+
+def worked_example_svg(
+    pattern: Sequence[Slot], bars: Sequence[ScoreBar], meter: Meter, per_slot: int
+) -> str:
+    """The section's pattern once per bar with the bar's chords beneath, so each change sits
+    under the stroke it falls on; bars are 12 px apart with a bar line between them."""
+    n = len(pattern)
+    bar_w = n * per_slot
+    width = len(bars) * bar_w + _BAR_GAP * (len(bars) - 1)
+    height = _H + _CHORD_H
+    parts = [_svg_open(width, height)]
+    for b, bar in enumerate(bars):
+        ox = b * (bar_w + _BAR_GAP)
+        if b > 0:
+            lx = ox - _BAR_GAP // 2
+            parts.append(
+                f'<line x1="{lx}" y1="2" x2="{lx}" y2="{height - 2}" stroke="{_INK}" stroke-width="2" '
+                'class="bar-line"/>'
+            )
+        parts.append('<g class="bar">')
+        parts.extend(_stroke_parts(pattern, meter, per_slot, ox))
+        parts.extend(_chord_parts(bar, n, per_slot, ox))
         parts.append("</g>")
     parts.append("</svg>")
     return "".join(parts)

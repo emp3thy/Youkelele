@@ -28,6 +28,7 @@
   .no-instrument { font-size: 9pt; color: var(--muted); font-style: italic; }
   .strum-box { margin: 2px 0 0 0; break-inside: avoid; }
   .strum-box svg { display: block; }
+  .worked-example { margin-top: 3px; }
   .row { display: grid; grid-template-columns: repeat(4, 1fr) auto; break-inside: avoid; }
   .row { gap: 1.5mm; margin-bottom: 1.5mm; }
   .cell { border: 1px solid; padding: 2mm; font-size: 12pt; }
@@ -97,7 +98,10 @@
           {% endif %}
         </div>
         {% if section.svg is not none %}
-        <div class="strum-box">{{ section.svg }}</div>
+        <div class="strum-box">
+          {{ section.svg }}
+          {% if section.example is not none %}<div class="worked-example">{{ section.example }}</div>{% endif %}
+        </div>
         {% endif %}
       </div>
       {% set grid = section.grid %}

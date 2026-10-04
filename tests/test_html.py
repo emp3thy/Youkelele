@@ -325,3 +325,38 @@ def test_pickup_is_narrow_leading_cell_not_its_own_row():
     assert 'class="lead"' in rows[1] and "pickup" not in rows[1]
     verse_html = _section_html(html, "Verse")
     assert "has-pickup" not in verse_html and 'class="lead"' not in verse_html
+
+
+def test_html_prints_worked_example_under_each_box():
+    score = _score(
+        [
+            _section("Verse 1", 4, 0, names=("C", "G")),
+            _section("Pre-chorus", 2, 4, uncertain=True),
+            _section("Chorus", 4, 6),
+        ]
+    )
+    html = render_html(score)
+    boxed = [s for s in score.sections if not (s.uncertain or s.no_instrument)]
+    assert html.count('class="worked-example"') == len(boxed) == 2
+    verse = _section_html(html, "Verse 1")
+    box = verse[verse.index('class="strum-box"'):]
+    # the pattern svg first, then the example inside the same box, before the grid
+    assert box.index("<svg") < box.index('class="worked-example"') < box.index('class="grid')
+    example = box[box.index('class="worked-example"'):]
+    assert re.findall(r'class="chord">([^<]*)<', example)[:2] == ["C", "G"]
+    assert 'class="worked-example"' not in _section_html(html, "Pre-chorus")
+
+
+def test_html_no_example_without_instrument():
+    score = _score([_section("Intro", 2, 0, no_instrument=True), _section("Verse", 2, 2)])
+    html = render_html(score)
+    assert 'class="worked-example"' not in _section_html(html, "Intro")
+    assert html.count('class="worked-example"') == 1
+
+
+def test_html_box_and_example_share_the_slot_width():
+    sixteenths = list("D-DU-UDU" * 2)
+    score = _score([_section("Verse", 2, 0, pattern=sixteenths)], slots_per_bar=16)
+    verse = _section_html(render_html(score), "Verse")
+    widths = re.findall(r'<svg [^>]*width="(\d+)"', verse)
+    assert widths == ["320", "652"]  # 16 * 20, then 2 * 16 * 20 + 12
