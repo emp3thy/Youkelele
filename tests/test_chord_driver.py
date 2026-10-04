@@ -44,6 +44,11 @@ def test_beat_positions_numbers_short_pickup_from_the_end():
     assert [p for _, p in chords.beat_positions(grid)] == [3, 4, 1, 2, 3, 4]
 
 
+def test_beat_positions_numbers_short_final_bar_from_one():
+    grid = _grid([[0, 1, 2, 3], [4, 5]], 6)
+    assert [p for _, p in chords.beat_positions(grid)] == [1, 2, 3, 4, 1, 2]
+
+
 def test_write_beat_file_three_tab_columns(tmp_path):
     path = tmp_path / "beats.lab"
     chords.write_beat_file([(0.25, 4), (0.75, 1), (1.25, 2)], path)
@@ -94,3 +99,10 @@ def test_recognise_chords_without_beats_runs_the_models_own_script(monkeypatch, 
 def test_chord_driver_is_valid_python():
     driver = Path(chords.__file__).with_name("chord_driver.py")
     ast.parse(driver.read_text(encoding="utf-8"))
+
+
+def test_recognise_chords_with_empty_beats_runs_the_models_own_script(monkeypatch, tmp_path):
+    seen = _capture_run(monkeypatch, tmp_path)
+    chords.recognise_chords(tmp_path / "a.wav", tmp_path, lambda m: None, beats=[])
+    assert seen[0][:2] == [sys.executable, "chord_recognition.py"] and len(seen[0]) == 5
+    assert not (tmp_path / "beats.lab").exists()

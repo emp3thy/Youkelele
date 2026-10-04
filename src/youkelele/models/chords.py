@@ -31,13 +31,14 @@ def parse_lab(path: Path) -> list[LabelSpan]:
 def beat_positions(grid: Grid) -> list[tuple[float, int]]:
     """Every gap-filled beat with its 1-based position in its bar.
 
-    A bar with fewer beats than the meter's numerator (the pickup) numbers them from the
-    end, so a lone pickup beat is the last position and is not read as a downbeat.
+    A pickup bar with fewer beats than the meter's numerator numbers them from the end, so
+    a lone pickup beat is the last position and is not read as a downbeat. Every other bar,
+    including a short final one, numbers from 1.
     """
     numerator = grid.meter.numerator
     out: list[tuple[float, int]] = []
     for bar in grid.bars:
-        offset = max(numerator - len(bar.beats), 0)
+        offset = max(numerator - len(bar.beats), 0) if bar.pickup else 0
         for pos, beat_index in enumerate(bar.beats):
             out.append((grid.beats[beat_index], offset + pos + 1))
     return out
@@ -61,7 +62,7 @@ def recognise_chords(
     # The child runs in the model directory, so hand it absolute paths.
     wav = Path(wav).resolve()
     out_lab = (Path(work_dir) / "out.lab").resolve()
-    if beats is None:
+    if not beats:
         argv = [sys.executable, "chord_recognition.py", str(wav), str(out_lab), "submission"]
     else:
         beats_lab = (Path(work_dir) / "beats.lab").resolve()

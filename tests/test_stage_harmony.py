@@ -97,6 +97,17 @@ def test_harmony_stage_passes_beats_and_notes_decoding(tmp_path):
     assert ctx.notes["decoding"] == "beats+downbeats"
 
 
+def test_harmony_stage_notes_plain_decoding_without_beats(tmp_path, monkeypatch):
+    from youkelele.stages import harmony
+
+    monkeypatch.setattr(harmony, "beat_positions", lambda grid: [])
+    spans = [LabelSpan(0.0, 2.0, "C:maj")]
+    stage = HarmonyStage(recogniser=_recogniser(spans), chroma=lambda wav: np.eye(12)[0] + 0.1)
+    ctx, out = _ctx(tmp_path, stage, 1, 2.0, lambda p: write_chord_loop(p, ["C:maj"], 2.0, bars=1))
+    stage.run(ctx)
+    assert ctx.notes["decoding"] == "plain"
+
+
 def test_harmony_stage_keeps_raw_spans(tmp_path):
     from youkelele.models.chords import parse_lab
 

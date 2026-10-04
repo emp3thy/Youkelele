@@ -65,9 +65,10 @@ class HarmonyStage(Stage):
         stems = [ctx.input(f"separate/stems/{s}.wav") for s in HARMONIC_STEMS]
         out = ctx.output("harmony/chords.json")
         out.parent.mkdir(parents=True, exist_ok=True)
+        beats = beat_positions(grid)
         work_dir = Path(tempfile.mkdtemp(dir=out.parent, prefix="work-"))
         try:
-            spans = self._recogniser(wav, work_dir, ctx.log, beats=beat_positions(grid))
+            spans = self._recogniser(wav, work_dir, ctx.log, beats=beats)
             shutil.copyfile(work_dir / "out.lab", ctx.output("harmony/spans.lab"))  # the raw model output
         finally:
             shutil.rmtree(work_dir, ignore_errors=True)
@@ -86,4 +87,4 @@ class HarmonyStage(Stage):
         prefixes = ",".join(h[:8] for h in CHORD_MODEL_CHECKPOINT_SHA256.values())
         ctx.note("checkpoints", prefixes)
         ctx.note("filled", str(filled))
-        ctx.note("decoding", "beats+downbeats")
+        ctx.note("decoding", "beats+downbeats" if beats else "plain")
