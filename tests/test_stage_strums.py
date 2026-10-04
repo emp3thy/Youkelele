@@ -512,3 +512,150 @@ def test_trimmed_n_outro_with_a_strike_is_still_inherited(tmp_path):
     assert outro.inherited_from == 0
     assert outro.uncertain
 
+
+# version 1.5: the section plan, the structure test and the riff marker (spec 3.3, 4.1, 4.3)
+
+
+def _labelled_grid(spans: Sequence[tuple[str, int]]) -> Grid:
+    """A grid whose sections carry the given labels and lengths in bars."""
+    grid = _grid([n for _, n in spans])
+    sections = [s.model_copy(update={"label": label}) for s, (label, _) in zip(grid.sections, spans)]
+    return grid.model_copy(update={"sections": sections})
+
+
+def _grid_with_fragment() -> Grid:
+    # verse 0-16 and a six-bar verse 16-22 on the same chords: the plan makes them one verse
+    return _labelled_grid([("verse", 16), ("verse", 6)])
+
+
+def _per_bar(bar_slots: Sequence[Sequence[int]], n_slots: int = 8) -> list[float]:
+    """Onset times striking the given slots in each bar, bar by bar."""
+    return [t for b, slots in enumerate(bar_slots) for t in _bar_times(b, slots, n_slots=n_slots)]
+
+
+# eight bars of four random strikes each (random.Random(0)): a vote that is not full and a chance p near 0.45
+SPRAY = [(0, 3, 6, 7), (3, 4, 5, 7), (2, 3, 4, 7), (1, 2, 3, 4), (0, 2, 4, 6), (4, 5, 6, 7), (0, 2, 5, 7), (0, 3, 4, 5)]
+
+
+def _notes(freqs_per_onset: Sequence[Sequence[float]], onsets: Sequence[float], seconds: float) -> np.ndarray:
+    """Decaying sines (six harmonics at 1/k) from each onset, as tests/test_riff.py's `tone` builds them."""
+    y = np.zeros(int(seconds * SR))
+    t = np.arange(int(0.2 * SR)) / SR
+    env = np.exp(-6.0 * t)
+    for freqs, onset in zip(freqs_per_onset, onsets, strict=True):
+        start = int(round(onset * SR))
+        for f in freqs:
+            for k in range(1, 7):
+                y[start : start + t.size] += env * np.sin(2 * np.pi * f * k * t) / k
+    return 0.5 * y / max(1.0, float(np.abs(y).max()))
+
+
+def _run_notes(tmp_path, grid, detector, chords=None, other=None, mix_amp=0.5):
+    lines: list[str] = []
+    strums, ctx, _ = _run(
+        tmp_path, grid, detector, chords=chords, other=other, mix_amp=mix_amp, log=lines.append
+    )
+    return strums, ctx.notes, lines
+
+
+def test_strums_stage_writes_the_plan_and_one_pattern_per_planned_section(tmp_path):
+    strums, _, _ = _run_notes(tmp_path, _grid_with_fragment(), _detector(_island(22)))
+    assert [p.members for p in strums.plan] == [[0, 1]] and len(strums.patterns) == 1
+    assert strums.patterns[0].section == 0
+    assert (strums.plan[0].start_bar, strums.plan[0].end_bar, strums.plan[0].label) == (0, 22, "verse")
+    assert len(strums.bar_onsets) == 22  # still one entry per grid bar
+
+
+def test_merged_section_pattern_comes_from_its_longest_member(tmp_path):
+    # member 0-16 strikes every eighth, member 16-22 only downbeats: the pattern is the 0-16 vote
+    eighths_then_downbeats = _per_bar([range(8)] * 16 + [(0,)] * 6)
+    strums, _, _ = _run_notes(tmp_path, _grid_with_fragment(), _detector(eighths_then_downbeats))
+    assert strums.patterns[0].slots == ["D", "U"] * 4
+    # a vote over all 22 bars prints the same slots, but the downbeat bars would lower these
+    assert strums.patterns[0].confidence == 1.0 and strums.patterns[0].strike_density == 1.0
+    assert "".join(strums.bar_onsets[16]) == "D-------"
+
+
+def test_patterns_record_chance_p_and_density_and_a_random_section_is_uncertain(tmp_path):
+    pattern_then_spray = _per_bar([ISLAND] * 8 + SPRAY)
+    strums, _, _ = _run_notes(tmp_path, _grid([8, 8]), _detector(pattern_then_spray))
+    certain, spray = strums.patterns
+    assert certain.chance_p is not None and certain.chance_p <= 0.05 and not certain.uncertain
+    assert certain.strike_density == 0.75
+    assert spray.chance_p is not None and spray.chance_p > 0.05 and spray.uncertain
+    assert spray.strike_density == 0.5
+
+
+def test_full_vote_section_records_density_and_no_p(tmp_path):
+    every_eighth = _per_bar([range(8)] * 8)
+    strums, _, _ = _run_notes(tmp_path, _grid([8]), _detector(every_eighth))
+    assert strums.patterns[0].chance_p is None and strums.patterns[0].strike_density == 1.0
+    assert not strums.patterns[0].uncertain
+
+
+def test_full_vote_below_the_density_floor_is_uncertain(tmp_path):
+    # half the bars strike every eighth, the other half only the downbeat: the vote is full,
+    # the density (8 + 1) / 16 = 0.5625 is under FULL_VOTE_DENSITY
+    sparse_full = _per_bar([range(8), (0,)] * 4)
+    strums, _, _ = _run_notes(tmp_path, _grid([8]), _detector(sparse_full))
+    pattern = strums.patterns[0]
+    assert pattern.slots == ["D", "U"] * 4
+    assert pattern.chance_p is None and pattern.strike_density == 0.5625
+    assert pattern.uncertain
+
+
+def test_riff_flag_and_features_are_recorded_per_section(tmp_path):
+    times = _island(16)
+    seconds = 16 * BAR_SECONDS
+    half = len(times) // 2
+    g7 = [196.0, 246.9, 293.7, 349.2]  # four pitch classes, no doubled root
+    # each half is scaled on its own, so the single notes are as loud as the chords
+    single_notes_then_chords = (
+        _notes([[196.0]] * half, times[:half], seconds) + _notes([g7] * half, times[half:], seconds)
+    )
+    strums, _, _ = _run_notes(
+        tmp_path, _grid([8, 8]), _detector(times), other=single_notes_then_chords, mix_amp=0.1
+    )
+    assert not any(p.no_instrument for p in strums.patterns)
+    riff, strum = strums.patterns
+    assert riff.riff and not strum.riff
+    assert riff.riff_entropy is not None and riff.riff_single_share is not None
+    assert strum.riff_entropy is not None and strum.riff_entropy > riff.riff_entropy
+
+
+def test_no_instrument_section_has_no_riff_features_and_no_p(tmp_path):
+    other = np.concatenate([_tone(8 * BAR_SECONDS, 0.3), np.zeros(int(8 * BAR_SECONDS * SR))])
+    strums, _, _ = _run_notes(tmp_path, _grid([8, 8]), _detector(_island(16)), other=other)
+    silent = next(p for p in strums.patterns if p.no_instrument)
+    assert (silent.riff, silent.riff_entropy, silent.chance_p) == (False, None, None)
+    assert (silent.riff_single_share, silent.strike_density) == (None, None)
+
+
+def test_inherited_section_has_no_riff_features_and_no_p(tmp_path):
+    times = (
+        [t for b in range(4) for t in _bar_times(b, ISLAND)]
+        + [t for b in range(4, 6) for t in _bar_times(b, (0,))]
+        + [t for b in range(6, 12) for t in _bar_times(b, range(8))]
+    )
+    strums, _, _ = _run_notes(tmp_path, _grid([4, 2, 6]), _detector(times))
+    short = strums.patterns[1]
+    assert short.inherited_from == 2
+    assert (short.riff, short.riff_entropy, short.riff_single_share) == (False, None, None)
+    assert (short.chance_p, short.strike_density) == (None, None)
+    assert strums.patterns[2].strike_density == 1.0
+
+
+def test_manifest_notes_merged_and_one_loop(tmp_path):
+    _, notes, lines = _run_notes(tmp_path, _grid_with_fragment(), _detector(_island(22)))
+    assert notes["merged"] == "2 grid sections into 1" and float(notes["one_loop"]) >= 0.85
+    assert any("verse and chorus share their chords (share 1.00)" in line for line in lines)
+
+
+def test_manifest_notes_no_merge_and_no_one_loop_line(tmp_path):
+    grid = _labelled_grid([("verse", 8), ("chorus", 8)])
+    chords = _chords(grid, (0, 8, "C"), (8, 16, "G"))
+    strums, notes, lines = _run_notes(tmp_path, grid, _detector(_island(16)), chords=chords)
+    assert [p.members for p in strums.plan] == [[0], [1]]
+    assert notes["merged"] == "none" and notes["one_loop"] == "0.50"
+    assert not any("share their chords" in line for line in lines)
+

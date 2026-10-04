@@ -15,8 +15,10 @@ from youkelele.music.as_played import (
     STAGE_UNCERTAIN_GRID_FIT,
     UNCERTAIN_BELOW,
     UNCERTAIN_BELOW_SIXTEENTH,
+    _topped_vote,
     eighth_grid,
     section_summary,
+    structure_test,
 )
 from youkelele.music.onsets import (
     Onsets,
@@ -31,6 +33,8 @@ from youkelele.music.onsets import (
     section_has_instrument,
 )
 from youkelele.music.recall import HIGH_BAND_FMIN, gate_section
+from youkelele.music.relabel import ONE_LOOP_SHARE, longest_member, one_loop_share, section_plan
+from youkelele.music.riff import is_riff, onset_chroma, riff_features
 from youkelele.music.trailing import NO_CHORD, trailing_silent_bars
 from youkelele.schemas import Bar, Chords, Grid, SectionPattern, Strums
 from youkelele.stage import Stage, StageContext
@@ -38,6 +42,19 @@ from youkelele.stage import Stage, StageContext
 
 _NO_ONSETS = Onsets(times=np.zeros(0), centroid=np.zeros(0), zcr=np.zeros(0))
 _EPS = 1e-6
+# the riff thresholds were measured on the source signal at this rate (riff-thresholds.md)
+_RIFF_SR = 22050
+
+
+def _onset_chroma_at_riff_rate(y: np.ndarray, sr: int, times: np.ndarray) -> np.ndarray:
+    """`onset_chroma` of every onset on `y` resampled once to the rate the riff thresholds assume."""
+    if len(times) == 0:
+        return np.zeros((0, 12))
+    if sr != _RIFF_SR:
+        import librosa
+
+        y = librosa.resample(np.asarray(y, dtype=np.float32), orig_sr=sr, target_sr=_RIFF_SR)
+    return onset_chroma(y, _RIFF_SR, times)
 
 
 def _bar_has_chord(chords: Chords, bar: Bar) -> bool:
@@ -63,7 +80,8 @@ def _onsets_label_track(onsets: Onsets, muted: np.ndarray, added: np.ndarray) ->
 def _splice(base: Onsets, pieces: list[Onsets]) -> tuple[Onsets, np.ndarray]:
     """Today's onsets plus the onsets each accepted section added, sorted by time, and the added mask.
 
-    Sections partition the bars, so the added pieces never overlap one another.
+    Each piece lies inside one planned section's longest member, a whole grid section, and
+    no grid section belongs to two planned sections, so the pieces never overlap one another.
     """
     parts = [base, *pieces]
     times = np.concatenate([p.times for p in parts])
@@ -117,18 +135,29 @@ class StrumsStage(Stage):
         # bars after the last chord are silence or noise: the last section's vote and gate ignore them.
         # The score builder calls trailing_silent_bars the same way; the two calls must stay in step,
         # or the sheet would print bars whose strokes the pattern never saw.
-        last = len(grid.sections) - 1
-        last_sec = grid.sections[last]
+        last_sec = grid.sections[-1]
         drop = trailing_silent_bars(chords, bars, cap=last_sec.end_bar - last_sec.start_bar)
         if drop:
             ctx.log(f"  ignoring {drop} trailing bars after the last chord")
 
+        # the section plan (spec 3.3): every per-section figure is read over the bars of the planned
+        # section's longest member; a merged fragment is absorbed for naming, not for strumming
+        plan = section_plan(grid, chords)
+        members = [longest_member(sec, grid) for sec in plan]
+
+        def ends_song(i: int) -> bool:
+            """The member is the grid's last section (members are whole grid sections)."""
+            return members[i][1] == last_sec.end_bar
+
+        def first_bar(i: int) -> int:
+            return members[i][0]
+
         def analysed_end(i: int) -> int:
-            return grid.sections[i].end_bar - (drop if i == last else 0)
+            return members[i][1] - (drop if ends_song(i) else 0)
 
         has_instrument: list[bool] = []
-        for i, sec in enumerate(grid.sections):
-            a = int(round(bars[sec.start_bar].start * sr))
+        for i in range(len(plan)):
+            a = int(round(bars[first_bar(i)].start * sr))
             b = int(round(bars[analysed_end(i) - 1].end * sr))
             has_instrument.append(section_has_instrument(y[a:b], mix[a:b]))
 
@@ -136,13 +165,13 @@ class StrumsStage(Stage):
         # The gate is off on the sixteenth grid, so the high band is not detected there at all.
         eighths = eighth_grid(slots, meter)
         high = self._detect(y, sr, fmin=HIGH_BAND_FMIN) if eighths else _NO_ONSETS
-        boosted = [False] * len(grid.sections)
+        boosted = [False] * len(plan)
         pieces: list[Onsets] = []
-        for i, sec in enumerate(grid.sections):
+        for i in range(len(plan)):
             if not has_instrument[i]:
                 continue  # nothing is printed for it, so nothing is recovered
             section_onsets, added, decision = gate_section(
-                today, high, y, sr, bars[sec.start_bar:analysed_end(i)], slots, fit, meter
+                today, high, y, sr, bars[first_bar(i):analysed_end(i)], slots, fit, meter
             )
             if decision.accepted:
                 boosted[i] = True
@@ -164,35 +193,49 @@ class StrumsStage(Stage):
 
         # the confidence floor depends on the grid (spec 4.2; the evidence is beside the constants)
         confidence_floor = UNCERTAIN_BELOW if eighths else UNCERTAIN_BELOW_SIXTEENTH
-        patterns: list[SectionPattern | None] = [None] * len(grid.sections)
+        patterns: list[SectionPattern | None] = [None] * len(plan)
         short: list[int] = []
         # a trimmed last section with no chord and no strike has nothing to strum (spec 3.5): it is
         # marked, not inherited from its neighbour
-        last_bars = range(last_sec.start_bar, analysed_end(last))
+        last_bars = range(last_sec.start_bar, last_sec.end_bar - drop)
         empty_outro = (
             not any(_bar_has_chord(chords, bars[b]) for b in last_bars)
             and not any(d != "-" for b in last_bars for d in render_directions(classes[b], slots, meter))
         )
-        for i, sec in enumerate(grid.sections):
-            if not has_instrument[i] or (i == last and empty_outro):
+        # the riff marker (spec 4.3): one constant-Q pass over the whole source, read per section
+        chroma = (
+            _onset_chroma_at_riff_rate(y, sr, onsets.times) if any(has_instrument) else np.zeros((0, 12))
+        )
+        for i in range(len(plan)):
+            if not has_instrument[i] or (ends_song(i) and empty_outro):
                 patterns[i] = SectionPattern(
                     section=i, slots=["-"] * slots, confidence=0.0, bar_repeat=0.0,
                     uncertain=True, no_instrument=True, inherited_from=None,
                 )
                 continue
-            end = analysed_end(i)
-            rendered, confidence, repeat, explained = section_summary(classes[sec.start_bar:end], slots, meter)
-            long_enough = end - sec.start_bar >= MIN_SECTION_BARS
+            start, end = first_bar(i), analysed_end(i)
+            section_classes = classes[start:end]
+            rendered, confidence, repeat, explained = section_summary(section_classes, slots, meter)
+            # the vote the section prints, as strike classes; the seed makes a re-run identical
+            structured, p, density = structure_test(section_classes, _topped_vote(section_classes), seed=start)
+            inside = (onsets.times >= bars[start].start) & (onsets.times < bars[end - 1].end)
+            entropy, single_share = riff_features(chroma[inside])
+            long_enough = end - start >= MIN_SECTION_BARS
             patterns[i] = SectionPattern(
                 section=i, slots=rendered, confidence=confidence, bar_repeat=repeat,
-                uncertain=confidence < confidence_floor or explained < EXPLAINED_BELOW or not long_enough,
+                uncertain=(
+                    confidence < confidence_floor or explained < EXPLAINED_BELOW
+                    or not long_enough or not structured
+                ),
                 no_instrument=False, inherited_from=None, explained=explained, recall_boost=boosted[i],
+                chance_p=p, strike_density=density,
+                riff=is_riff(entropy, single_share), riff_entropy=entropy, riff_single_share=single_share,
             )
             if not long_enough:
                 short.append(i)
 
         def donor(j: int) -> bool:
-            if not 0 <= j < len(grid.sections) or j in short:
+            if not 0 <= j < len(plan) or j in short:
                 return False
             return not patterns[j].no_instrument
 
@@ -200,9 +243,10 @@ class StrumsStage(Stage):
             neighbours = [j for j in (i - 1, i + 1) if donor(j)]
             if not neighbours:
                 continue  # keeps its own majority vector, already uncertain
-            sections = grid.sections
-            j = max(neighbours, key=lambda k: sections[k].end_bar - sections[k].start_bar)
+            j = max(neighbours, key=lambda k: plan[k].end_bar - plan[k].start_bar)
             src = patterns[j]
+            # the chance test and the riff features are the donor's bars' facts, not this
+            # section's, so they are not copied
             patterns[i] = SectionPattern(
                 section=i, slots=list(src.slots), confidence=src.confidence, bar_repeat=src.bar_repeat,
                 uncertain=True, no_instrument=False, inherited_from=j, explained=src.explained,
@@ -211,13 +255,24 @@ class StrumsStage(Stage):
 
         uncertain = fit < STAGE_UNCERTAIN_GRID_FIT
         ctx.log(f"  source {source} (ratio {source_ratio:.2f}), {slots} slots per bar, grid fit {fit:.2f}")
+        merged = (
+            f"{len(grid.sections)} grid sections into {len(plan)}" if len(plan) < len(grid.sections) else "none"
+        )
+        if len(plan) < len(grid.sections):
+            ctx.log(f"  merged {merged}")
+        share = one_loop_share(grid, chords)
+        if share >= ONE_LOOP_SHARE:
+            ctx.log(f"  verse and chorus share their chords (share {share:.2f})")
         save_model(
             ctx.output("strums/strums.json"),
             Strums(
                 slots_per_bar=slots, source=source, source_ratio=source_ratio, grid_fit=fit,
                 uncertain=uncertain, patterns=patterns,
                 bar_onsets=[render_directions(c, slots, meter) for c in classes],
+                plan=plan,
             ),
         )
         ctx.note("source", source)
         ctx.note("grid_fit", f"{fit:.2f}")
+        ctx.note("merged", merged)
+        ctx.note("one_loop", f"{share:.2f}")
