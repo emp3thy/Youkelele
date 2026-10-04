@@ -1,3 +1,4 @@
+import json
 import subprocess
 import sys
 
@@ -162,6 +163,7 @@ def test_rerun_from_zero_prints_overwrite_notice(tmp_path, capsys, monkeypatch):
 
 def test_resume_command_quotes_source_and_keeps_runs_dir(tmp_path, capsys, monkeypatch):
     fake_chain(monkeypatch, fail=True)
+    monkeypatch.setattr(commands, "fetch_metadata", _fake_fetch)
     url = "https://www.youtube.com/watch?v=abcdefghijk&t=5"
     runs = str(tmp_path / "my runs")
     assert main(["run", url, "--runs-dir", runs]) == 1
@@ -250,3 +252,130 @@ def test_run_debug_flag_reaches_options_and_is_saved(tmp_path, monkeypatch):
     assert seen[-1].debug is True
     assert main(["run", "song.wav", "--from", "1", *runs]) == 0
     assert seen[-1].debug is True
+
+
+def _fake_fetch(url):
+    return {"id": "abcdefghijk", "title": "A Song", "uploader": "A Band", "artist": None, "duration": 1.0}
+
+
+def test_run_command_reports_metadata_failure_as_problem(tmp_path, capsys, monkeypatch):
+    from youkelele.models.ytdl import MetadataError
+
+    seen = recording_chain(monkeypatch)
+
+    def fail(url):
+        raise MetadataError(url, RuntimeError("Video unavailable"))
+
+    monkeypatch.setattr(commands, "fetch_metadata", fail)
+    url = "https://youtu.be/abcdefghijk"
+    assert main(["run", url, "--runs-dir", str(tmp_path)]) == 2
+    out = capsys.readouterr().out
+    assert out.splitlines() == [
+        "could not read the video's details: Video unavailable",
+        "  fix: check the link and your connection",
+    ]
+    assert seen == [] and list(tmp_path.iterdir()) == []
+
+
+def test_run_command_checks_stage_names_before_fetching(tmp_path, capsys, monkeypatch):
+    recording_chain(monkeypatch)
+    monkeypatch.setattr(commands, "fetch_metadata", _no_fetch)
+    url = "https://youtu.be/abcdefghijk"
+    assert main(["run", url, "--to", "nope", "--runs-dir", str(tmp_path)]) == 1
+    assert "unknown stage 'nope'" in capsys.readouterr().out
+    assert not tmp_path.exists() or list(tmp_path.iterdir()) == []
+
+
+def _no_fetch(url):
+    raise AssertionError("fetch must not be called")
+
+
+def test_run_command_checks_the_environment_before_fetching(tmp_path, capsys, monkeypatch):
+    recording_chain(monkeypatch)
+    monkeypatch.setattr(
+        commands, "check_environment", lambda *a, **k: [Problem("Deno is not installed", "uv sync")]
+    )
+    monkeypatch.setattr(commands, "fetch_metadata", _no_fetch)
+    url = "https://youtu.be/abcdefghijk"
+    assert main(["run", url, "--runs-dir", str(tmp_path)]) == 2
+    assert "Deno is not installed" in capsys.readouterr().out
+    assert not tmp_path.exists() or list(tmp_path.iterdir()) == []
+
+
+def test_run_command_refuses_a_cut_link_before_naming_a_folder(tmp_path, capsys, monkeypatch):
+    from youkelele.preflight import Probes, check_environment
+
+    recording_chain(monkeypatch)
+    probes = Probes(
+        ffmpeg_dir=lambda: tmp_path, deno_bin=lambda: tmp_path,
+        chromium_state=lambda: "present", chord_model_present=lambda: True,
+        source_exists=lambda path: False,
+    )
+    monkeypatch.setattr(
+        commands, "check_environment", lambda options, names: check_environment(options, names, probes)
+    )
+    monkeypatch.setattr(commands, "fetch_metadata", _no_fetch)
+    # cmd.exe cut the link at the = sign; yt-dlp would have fetched the front page
+    assert main(["run", "https://www.youtube.com/watch?v", "--runs-dir", str(tmp_path)]) == 2
+    assert capsys.readouterr().out.splitlines() == [
+        "YouTube link has no 11-character video id",
+        "  fix: paste the whole link, for example https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+    ]
+    assert not tmp_path.exists() or list(tmp_path.iterdir()) == []
+
+
+def test_run_command_names_the_folder_after_the_song(tmp_path, capsys, monkeypatch):
+    recording_chain(monkeypatch)
+    calls = []
+    monkeypatch.setattr(commands, "fetch_metadata", lambda url: calls.append(url) or _fake_fetch(url))
+    url = "https://youtu.be/abcdefghijk"
+    runs = ["--runs-dir", str(tmp_path)]
+    assert main(["run", url, *runs]) == 0
+    manifest = load_manifest(tmp_path / "a-song")
+    assert (manifest.video_id, manifest.title_slug, manifest.slug) == ("abcdefghijk", "a-song", "a-song")
+    assert main(["run", url, "--from", "1", *runs]) == 0
+    assert main(["run", url, *runs]) == 0
+    assert "Existing run a-song will be overwritten from stage 0" in capsys.readouterr().out
+    assert calls == [url]
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["a-song"]
+
+
+def test_status_and_evaluate_accept_folder_name_or_id(tmp_path, capsys, monkeypatch):
+    from youkelele import evaluate
+
+    fake_chain(monkeypatch)
+    monkeypatch.setattr(commands, "fetch_metadata", _fake_fetch)
+    runs = ["--runs-dir", str(tmp_path)]
+    assert main(["run", "https://youtu.be/abcdefghijk", *runs]) == 0
+    old = tmp_path / "zyxwvutsrqp"  # a pre-1.4 folder: named by id, no video_id recorded
+    old.mkdir()
+    saved = json.loads((tmp_path / "a-song" / "manifest.json").read_text(encoding="utf-8"))
+    for field in ("video_id", "title_slug"):
+        del saved[field]
+    saved.update(slug="zyxwvutsrqp", source="https://www.youtube.com/watch?v=zyxwvutsrqp")
+    (old / "manifest.json").write_text(json.dumps(saved), encoding="utf-8")
+    capsys.readouterr()
+    for name in ("a-song", "abcdefghijk"):
+        assert main(["status", name, *runs]) == 0
+        assert capsys.readouterr().out.splitlines() == ["00 ingest  done", "01 grid  done"]
+
+    seen = []
+    monkeypatch.setattr(evaluate, "evaluate_run", lambda run_dir, truth: seen.append(run_dir) or "report")
+    monkeypatch.setattr(evaluate, "format_report", lambda report: report)
+    monkeypatch.setattr(evaluate, "compare_runs", lambda a, b: seen.append(b) or "cmp")
+    monkeypatch.setattr(evaluate, "format_comparison", lambda c: c)
+    assert main(["evaluate", "abcdefghijk", "--compare", "zyxwvutsrqp", *runs]) == 0
+    assert main(["evaluate", "a-song", "--compare", "ZYXWVUTSRQP", *runs]) == 0
+    assert seen == [tmp_path / "a-song", old, tmp_path / "a-song", old]
+    assert main(["evaluate", "nothing-here", *runs]) == 1
+    assert f"no run folder at {tmp_path / 'nothing-here'}" in capsys.readouterr().out
+
+
+def test_status_and_evaluate_help_names_folder_or_id():
+    from youkelele.cli import build_parser
+
+    parser = build_parser()
+    sub = next(a for a in parser._actions if a.dest == "command")
+    for name in ("status", "evaluate"):
+        help_text = sub.choices[name].format_help()
+        assert "run folder name (or video id)" in help_text

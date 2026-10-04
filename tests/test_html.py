@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 
-from youkelele.render.html import render_html
+from youkelele.render.html import display_names, render_html
 from youkelele.schemas import (
     ChordDiagram,
     Instrument,
@@ -148,6 +148,22 @@ def test_html_no_capo_shows_key_once():
     head = head[head.index('<header class="sheet-head">'):head.index("</header>")]
     assert head.count("C# major") == 1
     assert "(shapes)" not in head
+
+
+def _head(html: str) -> str:
+    return html[html.index('<header class="sheet-head">'):html.index("</header>")]
+
+
+def test_header_hedges_key_and_shape_key_under_capo():
+    score = _two_sections().model_copy(update={"key": "G major", "key_hedge": "D major"})
+    head = _head(render_html(score))
+    assert "<b>Key</b> G major (or D major)" in head
+    capo = _two_sections(capo=2).model_copy(update={"key": "G major", "key_hedge": "D major"})
+    head = _head(render_html(capo))
+    assert "F major (or C major) (shapes)" in head
+    assert "Sounding key: G major (or D major)" in head
+    plain = _head(render_html(_two_sections().model_copy(update={"key": "G major"})))
+    assert "(or" not in plain
 
 
 def test_html_fixed_sheet_width_for_print():
@@ -305,6 +321,75 @@ def test_passing_line_lists_every_passing_chord():
     assert "Passing: B 4322, E7 1202" in render_html(score)
 
 
+def _power_score(tier: str) -> Score:
+    split = ScoreBar(
+        index=1,
+        chords=[
+            ScoreChord(name="C#m", diagram=0, start_slot=0, slots=ISLAND[:4], power=True),
+            ScoreChord(name="G", diagram=1, start_slot=4, slots=ISLAND[4:]),
+        ],
+    )
+    whole = ScoreBar(
+        index=0,
+        chords=[ScoreChord(name="C#m", diagram=0, start_slot=0, slots=ISLAND, power=True)],
+    )
+    plain = ScoreBar(
+        index=2, chords=[ScoreChord(name="G", diagram=1, start_slot=0, slots=ISLAND)]
+    )
+    section = ScoreSection(
+        label="Verse", pattern=ISLAND, uncertain=False, bars=[whole, split, plain],
+        bar_repeat=1.0, no_instrument=False,
+    )
+    return _score([section]).model_copy(
+        update={
+            "tier": tier,
+            "chord_diagrams": [
+                ChordDiagram(name="C#m", shape=C, power=True),
+                ChordDiagram(name="G", shape=G),
+            ],
+        }
+    )
+
+
+def test_html_power_badge_and_legend_line():
+    html = render_html(_power_score("full"))
+    assert re.findall(r'<div class="cell">([^<]*(?:<sup>5</sup>[^<]*)*)</div>', html) == [
+        "C#m<sup>5</sup>", "C#m<sup>5</sup> / G", "G",
+    ]
+    assert "<sup>5</sup>" in html
+    legend_line = "C#m is a power chord on the record"
+    assert html.count(legend_line) == 1
+    assert html.index('class="legend"') < html.index(legend_line) < html.index('class="sections"')
+    assert "sup {" in html  # the badge is styled small and raised
+
+
+def test_html_power_legend_line_follows_the_passing_line():
+    score = _power_score("full")
+    diagrams = [*score.chord_diagrams, ChordDiagram(name="B", shape=B, passing=True)]
+    html = render_html(score.model_copy(update={"chord_diagrams": diagrams}))
+    assert html.index("Passing: B 4322") < html.index("C#m is a power chord on the record")
+
+
+def test_html_easy_tier_prints_the_plain_name_without_badge_or_legend_line():
+    html = render_html(_power_score("easy"))
+    assert "<sup>5</sup>" not in html
+    assert "power chord" not in html
+    assert re.findall(r'<div class="cell">([^<]*)</div>', html) == ["C#m", "C#m / G", "G"]
+
+
+def test_html_power_legend_line_once_per_name():
+    # two shapes of one name, both used as a power chord: one legend line
+    score = _power_score("full")
+    diagrams = [*score.chord_diagrams, ChordDiagram(name="C#m", shape=B, power=True)]
+    html = render_html(score.model_copy(update={"chord_diagrams": diagrams}))
+    assert html.count("C#m is a power chord on the record") == 1
+
+
+def test_html_without_power_has_no_badge_markup():
+    html = render_html(_two_sections())
+    assert "<sup>5</sup>" not in html and "power chord" not in html
+
+
 def test_filled_cell_italic_and_header_note():
     bars = _bars(["C", "G"]) + _bars(["G"], start=2, filled=True)
     html = render_html(_score([_plain_section("Verse", bars)]))
@@ -385,3 +470,67 @@ def test_html_sixteen_slot_strip_uses_the_narrow_slot_width():
     verse = _section_html(render_html(score), "Verse")
     widths = re.findall(r'<svg [^>]*width="(\d+)"', verse)
     assert widths == ["652"]  # 2 * 16 * 20 + 12, within the 688 px text width
+
+
+def test_display_names_number_by_occurrence():
+    assert display_names(["verse", "chorus", "verse", "bridge"]) == [
+        "Verse 1", "Chorus", "Verse 2", "Bridge",
+    ]
+    assert display_names(
+        ["intro", "verse", "chorus", "verse", "instrumental", "chorus", "instrumental", "outro"]
+    ) == [
+        "Intro", "Verse 1", "Chorus 1", "Verse 2", "Instrumental 1", "Chorus 2", "Instrumental 2",
+        "Outro",
+    ]
+    assert display_names([]) == []
+    # a hand-capitalised label counts as the same label
+    assert display_names(["Verse", "verse"]) == ["Verse 1", "Verse 2"]
+
+
+def test_html_headings_and_strum_as_in_use_display_names():
+    score = _score(
+        [
+            _section("verse", 4, 0),
+            _section("chorus", 4, 4),
+            _section("verse", 4, 8),
+            _section("bridge", 4, 12),
+            _section("verse", 2, 16, uncertain=True, inherited_from=2),
+        ]
+    )
+    html = render_html(score)
+    headings = re.findall(r"<h2>(.*?)</h2>", html)
+    assert headings == ["Verse 1", "Chorus", "Verse 2", "Bridge", "Verse 3"]
+    assert "Strum as in Verse 2 (uncertain)" in _section_html(html, "Verse 3")
+
+
+CSHARP = Shape(frets=[1, 1, 1, 4], fingers=[1, 1, 1, 4], base_fret=1, barres=[1])
+FSHARP = Shape(frets=[3, 1, 2, 4], fingers=[3, 1, 2, 4], base_fret=1, barres=[])
+
+
+def _alternative_score(capo: int) -> Score:
+    return _two_sections(capo=capo).model_copy(
+        update={
+            "alternative_diagrams": [
+                ChordDiagram(name="C#", shape=CSHARP),
+                ChordDiagram(name="F#", shape=FSHARP),
+                ChordDiagram(name="B", shape=B),
+            ]
+        }
+    )
+
+
+def test_html_no_capo_line_in_fret_notation_with_barre_marks():
+    html = render_html(_alternative_score(3))
+    assert "Without a capo: C# 1114 (barre), F# 3124, B 4322 (barre)" in html
+    assert html.index('class="legend"') < html.index("Without a capo:") < html.index('class="sections"')
+    # under the Passing line when there is one
+    passing = _alternative_score(3).model_copy(
+        update={"chord_diagrams": [ChordDiagram(name="C", shape=C), ChordDiagram(name="B", shape=B, passing=True)]}
+    )
+    shown = render_html(passing)
+    assert shown.index("Passing:") < shown.index("Without a capo:")
+
+
+def test_html_no_capo_line_absent_without_a_capo():
+    assert "Without a capo" not in render_html(_alternative_score(0))
+    assert "Without a capo" not in render_html(_two_sections(capo=3))

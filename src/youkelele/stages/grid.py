@@ -1,4 +1,4 @@
-"""Stage 3: beats, tempo, bars and sections from the mixed audio."""
+"""Stage 3: beats, tempo, bars and sections from the mixed audio, with the drums and vocals stems."""
 
 from __future__ import annotations
 
@@ -14,10 +14,15 @@ from youkelele.models.beats import CHECKPOINT, BeatResult, detect_beats
 from youkelele.music.sections import (
     LOW_MARGIN_DB,
     bar_features,
+    bar_stem_db,
     beat_chroma,
     boundaries_from_clusters,
+    insert_vocal_boundaries,
     label_sections,
+    runs_text,
     segment_bars,
+    vocal_flags,
+    vocal_runs,
 )
 from youkelele.music.tempo import (
     bpm_from_beats,
@@ -42,7 +47,7 @@ def _backbeat_text(ratio: float | None) -> str:
 
 class GridStage(Stage):
     name = "grid"
-    requires = ("ingest/audio.wav", "separate/stems/drums.wav")
+    requires = ("ingest/audio.wav", "separate/stems/drums.wav", "separate/stems/vocals.wav")
     produces = ("grid/grid.json", "grid/beats_raw.json")
 
     def __init__(self, detector: Callable[[Path], BeatResult] = detect_beats) -> None:
@@ -92,7 +97,15 @@ class GridStage(Stage):
         features, loudness = bar_features(y, sr, bars, beats)
         cluster_ids, k, share = segment_bars(features, ctx.options.sections_k)
         boundaries, merged_ids = boundaries_from_clusters(cluster_ids, min_bars=MIN_SECTION_BARS)
-        sections, margin = label_sections(boundaries, merged_ids, loudness)
+        vocals_signal, vocals_sr = sf.read(
+            str(ctx.input("separate/stems/vocals.wav")), dtype="float32", always_2d=True
+        )
+        vocal_db = bar_stem_db(vocals_signal.mean(axis=1), vocals_sr, bars)
+        flags = vocal_flags(vocal_db)
+        runs = vocal_runs(flags, keep_trailing=True)  # the trailing run only pins boundaries
+        boundaries = insert_vocal_boundaries(boundaries, runs, len(bars), min_bars=MIN_SECTION_BARS)
+        sections, margin = label_sections(boundaries, merged_ids, loudness, vocal=flags)
+        ctx.log(f"  vocal runs {runs_text(runs, len(bars))}")
 
         full_bars = [bar for bar in bars if len(bar.beats) == meter.numerator] or bars
         bar_len = float(np.median([bar.end - bar.start for bar in full_bars]))
@@ -118,6 +131,7 @@ class GridStage(Stage):
             labels_low_confidence=margin is not None and margin < LOW_MARGIN_DB,
             backbeat_ratio=ratio,
             drums_silent=silent,
+            bar_vocal_db=vocal_db,
         )
         save_model(ctx.output("grid/grid.json"), grid)
         save_model(

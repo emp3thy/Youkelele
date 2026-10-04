@@ -71,6 +71,7 @@ class Grid(_Artifact):
     labels_low_confidence: bool
     backbeat_ratio: float | None = None
     drums_silent: bool = False
+    bar_vocal_db: list[float] = []  # vocals-stem level per bar; empty in files before 1.4
 
     @model_validator(mode="after")
     def _check_structure(self) -> Grid:
@@ -82,6 +83,8 @@ class Grid(_Artifact):
             raise ValueError("bars must be indexed 0..n-1 in order")
         if len(self.bar_loudness_db) != len(self.bars):
             raise ValueError("bar_loudness_db must have one value per bar")
+        if self.bar_vocal_db and len(self.bar_vocal_db) != len(self.bars):
+            raise ValueError("bar_vocal_db must be empty or have one value per bar")
         if self.sections:
             if self.sections[0].start_bar != 0:
                 raise ValueError("sections must start at bar 0")
@@ -109,7 +112,17 @@ class BeatsRaw(_Artifact):
 class Key(_Artifact):
     tonic: str
     mode: Literal["major", "minor"]
-    confidence: float
+    confidence: float  # the mode margin for a chords_stems key
+    # chords_stems: tonic from the chord stream, mode from the harmonic stems (1.4);
+    # mix_krumhansl: the 24-way profile search on the mix (1.3 files, or too few chords)
+    method: Literal["mix_krumhansl", "chords_stems"] = "mix_krumhansl"
+    margin: float | None = None  # the deciding tonic margin (by score, or by the pair rule)
+    mode_margin: float | None = None  # major minus minor correlation at the tonic, absolute
+    runner_up: str | None = None  # the runner-up tonic under the deciding rule
+    mix: Key | None = None  # the mix estimate, kept for comparison
+    # the mode of the other tonic a hedged key names, from the chroma at that tonic; None
+    # when not hedged and in files written before it was stored
+    hedge_mode: Literal["major", "minor"] | None = None
 
 
 class ChordEvent(_Artifact):
@@ -121,6 +134,7 @@ class ChordEvent(_Artifact):
     triad: str
     confidence: float
     filled: bool = False  # inferred from the harmonic stems for a bar the recogniser left N
+    power: bool = False  # the minor tonic played as root and fifth: label `X:5`, triad the key's
 
     @field_validator("label", "triad")
     @classmethod
@@ -188,6 +202,7 @@ class ArrangedChord(_Artifact):
     name: str
     shape: Shape
     passing: bool = False  # rare and short: named in the grid, no full diagram
+    power: bool = False  # copied from the chord event: a power chord on the record
 
 
 class Substitution(_Artifact):
@@ -217,6 +232,7 @@ class ChordDiagram(_Artifact):
     name: str
     shape: Shape
     passing: bool = False  # every use of this chord is a passing chord
+    power: bool = False  # some use of this chord is a power chord on the record
 
 
 class ScoreChord(_Artifact):
@@ -226,12 +242,14 @@ class ScoreChord(_Artifact):
     slots: list[Slot]
     filled: bool = False  # copied from the chord event
     passing: bool = False  # copied from the arranged chord
+    power: bool = False  # copied from the arranged chord
 
 
 class ScoreBar(_Artifact):
     index: int
     chords: list[ScoreChord]
     pickup: bool = False
+    struck: bool = False  # at least one strike was detected in the bar; the worked example prefers these
 
 
 class ScoreSection(_Artifact):
@@ -251,6 +269,7 @@ class Score(_Artifact):
     title: str
     artist: str | None
     key: str
+    key_hedge: str | None = None  # "D major" when the key is a close call: printed "(or D major)"
     bpm: float
     meter: Meter
     tier: str
@@ -258,5 +277,6 @@ class Score(_Artifact):
     strum_source: Literal["guitar_stem", "other_stem", "mix"]
     strums_uncertain: bool
     chord_diagrams: list[ChordDiagram]
+    alternative_diagrams: list[ChordDiagram] = []  # the no-capo shapes, only under a capo
     sections: list[ScoreSection]
     trailing_bars_dropped: int = 0  # bars after the last chord left off the sheet

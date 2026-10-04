@@ -89,16 +89,18 @@ def test_cli_evaluate_prints_report(tmp_path, capsys):
     code = main(["evaluate", "demo", "--truth", str(EXAMPLE), "--runs-dir", str(tmp_path / "runs")])
     out = capsys.readouterr().out.splitlines()
     assert code == 0
-    assert out[:7] == [
+    assert out[:9] == [
         "N share: 0.0%",
         "All-N bars: 0",
         "Filled bars: 0",
         "Changes on bar: 100.0%",
         "Sub-beat events: 0",
+        "Key: C major (mix_krumhansl, margin n/a, mode margin n/a, runner-up n/a)",
         "Key confidence: 0.90",
         "Boxes mostly rests: n/a",
+        "Vocal runs: n/a",
     ]
-    assert out[7:] == [
+    assert out[9:] == [
         "Beat F-measure: 100.0%",
         "Downbeat F-measure: 100.0%",
         "Chord root: 100.0%",
@@ -311,6 +313,19 @@ def test_format_report_prints_na_for_missing():
     assert "Beat F-measure" not in text
 
 
+def test_evaluate_prints_key_method_and_margins(tmp_path):
+    key = Key(
+        tonic="D", mode="major", confidence=0.302, method="chords_stems", margin=0.052,
+        mode_margin=0.302, runner_up="A", mix=Key(tonic="A", mode="major", confidence=0.05),
+    )
+    chords = _chords().model_copy(update={"key": key})
+    text = format_report(evaluate_run(_run_with(tmp_path / "new", chords=chords)))
+    assert "Key: D major (chords_stems, margin 0.052, mode margin 0.302, runner-up A, mix A major)" in text
+    old = format_report(evaluate_run(_run_with(tmp_path / "old")))
+    assert "Key: C major (mix_krumhansl, margin n/a, mode margin n/a, runner-up n/a)" in old
+    assert "Key: n/a" in format_report(Report(None, None, None, None, None))
+
+
 def test_format_report_prints_section_lines(tmp_path):
     bar_onsets = [["D", "-", "U", "-"]] * 4
     patterns = [_pattern(0, ["D", "-", "U", "-"]), _pattern(1, ["D", "-", "U", "-"])]
@@ -457,3 +472,95 @@ def test_evaluate_with_empty_truth_dir_prints_na_truth_lines(tmp_path):
         "Chord major/minor: n/a",
         "Chord triads: n/a",
     ]
+
+
+def test_evaluate_prints_vocal_runs_and_labels(tmp_path):
+    # 12 bars: no vocals in bars 0-4, vocals from bar 5 on
+    beats = [i * 0.5 for i in range(48)]
+    bars = [
+        Bar(index=i, start=i * 2.0, end=(i + 1) * 2.0, beats=list(range(4 * i, 4 * i + 4)))
+        for i in range(12)
+    ]
+    grid = Grid(
+        bpm=120.0, meter=Meter(numerator=4, denominator=4), beats=beats,
+        downbeats=list(range(0, 48, 4)), bars=bars,
+        sections=[
+            Section(label="intro", start_bar=0, end_bar=5, confidence=0.5),
+            Section(label="verse", start_bar=5, end_bar=12, confidence=0.5),
+        ],
+        octave_decision="none", bar_loudness_db=[-20.0] * 12, sections_k=1,
+        largest_cluster_share=1.0, chorus_margin_db=None, labels_low_confidence=False,
+        bar_vocal_db=[-120.0] * 5 + [-20.0] * 7,
+    )
+    bar_onsets = [["D", "-", "U", "-"]] * 12
+    patterns = [_pattern(0, ["D", "-", "U", "-"]), _pattern(1, ["D", "-", "U", "-"])]
+    text = format_report(evaluate_run(_run_with(tmp_path / "run", grid=grid,
+                                                strums=_strums(bar_onsets, patterns))))
+    assert "Vocal runs: (0, 5)" in text
+    assert "  0 intro bars 0-5: strikes/bar 2.0" in text
+    assert "  1 verse bars 5-12: strikes/bar 2.0" in text
+    # a 1.3 grid has no vocal levels
+    assert "Vocal runs: n/a" in format_report(evaluate_run(_run_with(tmp_path / "old")))
+    sung = grid.model_copy(update={"bar_vocal_db": [-20.0] * 12})
+    assert "Vocal runs: none" in format_report(evaluate_run(_run_with(tmp_path / "all", grid=sung)))
+    # a trailing run is listed and marked, not silently left out
+    faded = grid.model_copy(update={"bar_vocal_db": [-120.0] * 5 + [-20.0] * 3 + [-120.0] * 4})
+    text = format_report(evaluate_run(_run_with(tmp_path / "fade", grid=faded)))
+    assert "Vocal runs: (0, 5), (8, 12) trailing" in text.splitlines()
+
+
+def _power_chords() -> Chords:
+    # the C:maj tonic relabelled as a power chord: label C:5, the key's quality as its triad
+    events = list(_chords().events)
+    events[0] = events[0].model_copy(update={"label": "C:5", "triad": "C:min", "power": True})
+    return Chords(key=Key(tonic="C", mode="minor", confidence=0.9), events=events)
+
+
+def test_power_events_are_scored_by_their_triad(tmp_path):
+    truth = tmp_path / "truth"
+    truth.mkdir()
+    (truth / "chords.lab").write_text("0.0 2.0 C:min\n2.0 4.0 G:maj\n4.0 6.0 A:min\n6.0 8.0 F:maj\n")
+    report = evaluate_run(_run_with(tmp_path / "run", chords=_power_chords()), truth)
+    assert (report.chord_root, report.chord_majmin, report.chord_triads) == (1.0, 1.0, 1.0)
+
+
+def test_compare_scores_power_events_by_their_triad(tmp_path):
+    plain = list(_chords().events)
+    plain[0] = plain[0].model_copy(update={"label": "C:min", "triad": "C:min"})
+    power = _run_with(tmp_path / "a", chords=_power_chords())
+    minor = _run_with(tmp_path / "b", chords=_chords().model_copy(update={"events": plain}))
+    assert compare_runs(power, minor).majmin == 1.0  # a power run as the reference
+    assert compare_runs(minor, power).majmin == 1.0
+
+
+def test_section_lines_print_the_refined_label_beside_the_grids(tmp_path):
+    # the middle verse plays chords no other section plays: the sheet calls it the bridge
+    bars = [
+        Bar(index=i, start=i * 2.0, end=(i + 1) * 2.0, beats=list(range(4 * i, 4 * i + 4)))
+        for i in range(6)
+    ]
+    grid = _grid().model_copy(
+        update={
+            "beats": [i * 0.5 for i in range(24)], "downbeats": list(range(0, 24, 4)),
+            "bars": bars, "bar_loudness_db": [-20.0] * 6,
+            "sections": [
+                Section(label="verse", start_bar=0, end_bar=2, confidence=0.5),
+                Section(label="verse", start_bar=2, end_bar=4, confidence=0.5),
+                Section(label="chorus", start_bar=4, end_bar=6, confidence=0.5),
+            ],
+        }
+    )
+    labels = ["C:maj", "G:maj", "D:min", "E:min", "C:maj", "G:maj"]
+    chords = Chords(
+        key=Key(tonic="C", mode="major", confidence=0.9),
+        events=[_event(i, 0, i * 2.0, (i + 1) * 2.0, label) for i, label in enumerate(labels)],
+    )
+    patterns = [_pattern(i, ["D", "-", "U", "-"]) for i in range(3)]
+    run = _run_with(tmp_path / "run", grid=grid, chords=chords,
+                    strums=_strums([["D", "-", "U", "-"]] * 6, patterns))
+    lines = format_report(evaluate_run(run)).splitlines()
+    assert any(line.startswith("  0 verse bars 0-2:") for line in lines)
+    assert any(line.startswith("  1 verse -> bridge bars 2-4:") for line in lines)
+    assert any(line.startswith("  2 chorus bars 4-6:") for line in lines)
+    text = format_comparison(compare_runs(run, run))
+    assert "  1 verse -> bridge: A " in text

@@ -31,6 +31,54 @@ class Probes:
     source_exists: Callable[[str], bool] = lambda path: Path(path).is_file()
 
 
+_YOUTUBE_HOSTS = frozenset(
+    {
+        "youtube.com", "www.youtube.com", "m.youtube.com", "music.youtube.com",
+        "youtu.be", "www.youtu.be", "youtube-nocookie.com", "www.youtube-nocookie.com",
+    }
+)
+_WHOLE_LINK = "paste the whole link, for example https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+
+
+def youtube_link_problem(source: str, exists: Callable[[str], bool]) -> Problem | None:
+    """A YouTube link that cannot work as given, or None.
+
+    A watch link on a YouTube host without an 11-character `v=` id is refused (a link cut at
+    the `=` sign fetches YouTube's front page instead), as is the link's tail alone
+    (`watch?v...`). Without `https://`, a YouTube link that is not an existing file is
+    named as a link rather than reported as a missing file. Every other link is left to
+    the download, which takes live, embed, shorts and youtu.be links."""
+    from urllib.parse import urlsplit
+
+    from youkelele.layout import video_id_for
+
+    text = source.strip()
+    if text.lower().startswith(("http://", "https://")):
+        try:
+            parts = urlsplit(text)
+            host = (parts.hostname or "").lower()
+        except ValueError:  # `https://[bad`: not a link anything can open
+            return Problem("the link cannot be read as a web address", _WHOLE_LINK)
+        if host in _YOUTUBE_HOSTS and parts.path.rstrip("/") == "/watch" and not video_id_for(text):
+            return Problem("YouTube link has no 11-character video id", _WHOLE_LINK)
+        return None
+    lowered = text.lower()
+    host = lowered.split("/", 1)[0]
+    looks_like_youtube = lowered.startswith("watch?v") or host in _YOUTUBE_HOSTS
+    if not looks_like_youtube or exists(source):
+        return None
+    if video_id_for(text) is None:
+        return Problem("YouTube link has no 11-character video id", _WHOLE_LINK)
+    return Problem("YouTube link must start with https://", _WHOLE_LINK)
+
+
+def metadata_problem(cause: BaseException) -> Problem:
+    """The video's details could not be read before the run folder was chosen."""
+    return Problem(
+        f"could not read the video's details: {cause}", "check the link and your connection"
+    )
+
+
 def _ffmpeg_dir() -> Path | None:
     import static_ffmpeg.run
 
@@ -93,7 +141,11 @@ def check_environment(
     if options.chord_model == "chordmini":
         problems.append(Problem("chord_model 'chordmini' is unsupported", _NOT_IMPLEMENTED))
     is_url = options.source.startswith("http")
-    if "ingest" in stages and not is_url and not probes.source_exists(options.source):
+    # whatever stage the run starts at: a new run's folder is named from the link
+    link = youtube_link_problem(options.source, probes.source_exists)
+    if link is not None:
+        problems.append(link)
+    elif "ingest" in stages and not is_url and not probes.source_exists(options.source):
         problems.append(
             Problem(
                 f"source file not found: {options.source}",

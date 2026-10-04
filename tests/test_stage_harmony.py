@@ -9,9 +9,11 @@ from youkelele.jsonio import load_model, save_model
 from youkelele.layout import RunLayout
 from youkelele.models.chords import LabelSpan
 from youkelele.options import RunOptions
-from youkelele.schemas import Bar, Chords, Grid, Meter, Section
+from youkelele.music.key import key_text
+from youkelele.music.triads import to_triad
+from youkelele.schemas import Bar, ChordEvent, Chords, Grid, Meter, Section
 from youkelele.stage import StageContext
-from youkelele.stages.harmony import HarmonyStage
+from youkelele.stages.harmony import HarmonyStage, relabel_power
 
 
 def _grid(n_bars: int, bar_seconds: float) -> Grid:
@@ -148,6 +150,99 @@ def test_harmony_stage_requires_harmonic_stems_and_fills(tmp_path):
     ]
     assert ctx.notes["filled"] == "1"
     assert sorted(p.name for p in out.rglob("*") if p.is_file()) == ["chords.json", "spans.lab"]
+
+
+def test_harmony_stage_key_from_chords_and_notes(tmp_path):
+    labels = ["D:maj", "G:maj", "A:maj", "D:maj", "B:min", "G:maj", "A:maj", "D:maj"]
+    spans = [LabelSpan(i * 2.0, (i + 1) * 2.0, lab) for i, lab in enumerate(labels)]
+    logged: list[str] = []
+    stage = HarmonyStage(
+        recogniser=_recogniser(spans),
+        chroma=lambda wav: np.eye(12)[0] + 0.1,  # the mix estimate points away from D
+    )
+
+    def guitar(stem_path):
+        write_chord_loop(stem_path("guitar"), labels, 2.0)
+
+    ctx, out = _ctx(
+        tmp_path, stage, 8, 2.0, lambda p: write_chord_loop(p, labels, 2.0), guitar
+    )
+    ctx.log = logged.append
+    stage.run(ctx)
+    chords = load_model(ctx.output("harmony/chords.json"), Chords)
+    key = chords.key
+    assert not any(e.power for e in chords.events)
+    assert ctx.notes["power_chords"] == "0"
+    assert (key.tonic, key.mode, key.method) == ("D", "major", "chords_stems")
+    assert key.mix is not None and key.mix.tonic != "D"
+    assert key.runner_up is not None and key.margin is not None and key.mode_margin > 0.05
+    assert key.confidence == key.mode_margin
+    assert ctx.notes["key_method"] == "chords_stems"
+    assert ctx.notes["key_margin"] == f"{key.margin:.3f}"
+    assert ctx.notes["tonic_pair_rule"].startswith("D by ")
+    assert any("key D major (or" in line and "chords+stems, margin" in line for line in logged)
+    # the hedge's own mode is stored, and the log prints it
+    assert key.hedge_mode in ("major", "minor")
+    assert any(f"key {key_text(key)} (chords+stems" in line for line in logged)
+
+
+def test_relabel_power_takes_only_plain_major_labels():
+    labels = ["C#:maj", "C#:7", "C#:maj7", "C#/3", "C#:maj(9)", "C#"]
+    events = [
+        ChordEvent(bar=i, beat=0, start=float(i), end=i + 1.0, label=label,
+                   triad=to_triad(label), confidence=0.9)
+        for i, label in enumerate(labels)
+    ]
+    out = relabel_power(events, list(range(len(events))))
+    assert [(e.label, e.triad, e.power) for e in out] == [
+        ("C#:5", "C#:min", True),
+        ("C#:7", "C#:maj", False),
+        ("C#:maj7", "C#:maj", False),
+        ("C#/3", "C#:maj", False),
+        ("C#:maj(9)", "C#:maj", False),
+        ("C#:5", "C#:min", True),
+    ]
+    for event in out:  # every label still passes the schema's own check
+        ChordEvent.model_validate(event.model_dump())
+
+
+def test_harmony_stage_relabels_power_events(tmp_path):
+    # the model hears the riff as C#:maj; the guitar stem plays C# minor
+    labels = ["C#:maj", "B:maj", "C#:maj", "E:maj", "C#:maj", "B:maj", "A:maj", "C#:maj"]
+    played = [label.replace("C#:maj", "C#:min") for label in labels]
+    spans = [LabelSpan(i * 2.0, (i + 1) * 2.0, lab) for i, lab in enumerate(labels)]
+    logged: list[str] = []
+    stage = HarmonyStage(recogniser=_recogniser(spans), chroma=lambda wav: np.eye(12)[0] + 0.1)
+
+    def guitar(stem_path):
+        write_chord_loop(stem_path("guitar"), played, 2.0)
+
+    ctx, out = _ctx(tmp_path, stage, 8, 2.0, lambda p: write_chord_loop(p, played, 2.0), guitar)
+    ctx.log = logged.append
+    stage.run(ctx)
+    chords = load_model(ctx.output("harmony/chords.json"), Chords)
+    assert (chords.key.tonic, chords.key.mode) == ("C#", "minor")
+    got = [(e.label, e.triad, e.power) for e in chords.events]
+    power = ("C#:5", "C#:min", True)
+    assert got == [
+        power, ("B:maj", "B:maj", False), power, ("E:maj", "E:maj", False), power,
+        ("B:maj", "B:maj", False), ("A:maj", "A:maj", False), power,
+    ]
+    assert ctx.notes["power_chords"] == "4"
+    assert any("4 power chord events" in line for line in logged)
+    # the raw model output is not touched
+    assert "C#:maj" in ctx.output("harmony/spans.lab").read_text(encoding="utf-8")
+
+
+def test_harmony_stage_key_falls_back_to_the_mix_with_few_chords(tmp_path):
+    spans = [LabelSpan(0.0, 2.0, "C:maj"), LabelSpan(2.0, 4.0, "G:maj")]
+    stage = HarmonyStage(recogniser=_recogniser(spans), chroma=lambda wav: np.eye(12)[0] + 0.1)
+    ctx, out = _ctx(tmp_path, stage, 2, 2.0, lambda p: write_chord_loop(p, ["C:maj"], 2.0, bars=2))
+    stage.run(ctx)
+    key = load_model(ctx.output("harmony/chords.json"), Chords).key
+    assert key.method == "mix_krumhansl" and key.margin is None and key.mix is None
+    assert ctx.notes["key_method"] == "mix_krumhansl"
+    assert ctx.notes["tonic_pair_rule"] == "none"
 
 
 @pytest.mark.slow

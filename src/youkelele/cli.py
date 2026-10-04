@@ -16,6 +16,9 @@ HANDLERS = {
 }
 
 
+_RUN_NAME_HELP = "run folder name (or video id)"
+
+
 def _add_instrument(parser: argparse.ArgumentParser, default: str | None = "ukulele") -> None:
     parser.add_argument("--instrument", choices=sorted(PROFILES), default=default)
 
@@ -58,7 +61,7 @@ def build_parser() -> argparse.ArgumentParser:
     _add_instrument(stages)
 
     status = subparsers.add_parser("status", help="show stage status for a run")
-    status.add_argument("slug")
+    status.add_argument("slug", metavar="name", help=_RUN_NAME_HELP)
     _add_instrument(status)
     _add_runs_dir(status)
     subparsers.add_parser("setup", help="fetch the chord model and ffmpeg")
@@ -67,9 +70,12 @@ def build_parser() -> argparse.ArgumentParser:
         "evaluate",
         help="report a run's diagnostics, score it against truth, or compare it with another run",
     )
-    evaluate.add_argument("slug")
+    evaluate.add_argument("slug", metavar="name", help=_RUN_NAME_HELP)
     evaluate.add_argument("--truth", default=None)
-    evaluate.add_argument("--compare", default=None, help="slug of a run to score against this one")
+    evaluate.add_argument(
+        "--compare", default=None, metavar="name",
+        help="a run to score against this one: its run folder name (or video id)",
+    )
     _add_runs_dir(evaluate)
     return parser
 

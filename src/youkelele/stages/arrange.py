@@ -6,6 +6,7 @@ from statistics import median
 
 from youkelele.jsonio import load_model, save_model
 from youkelele.music.arrange import (
+    capo_scores,
     choose_capo,
     passing_labels,
     select_voicings,
@@ -54,12 +55,13 @@ class ArrangeStage(Stage):
 
         real = [label for label in labels if label not in _BLANK]
         capo, transpose = choose_capo(real, db)
+        scores = capo_scores(real, db)
         played = [label if label in _BLANK else transpose_label(label, transpose) for label in labels]
         played_shapes = select_voicings(played, db)
         arranged = [
             ArrangedChord(
                 event=i, name=display_name_for(label, db), shape=played_shapes[label],
-                passing=labels[i] in passing,
+                passing=labels[i] in passing, power=chords.events[i].power,
             )
             for i, label in enumerate(played)
             if label not in _BLANK
@@ -71,7 +73,7 @@ class ArrangeStage(Stage):
             no_capo = [
                 ArrangedChord(
                     event=i, name=display_name_for(label, db), shape=open_shapes[label],
-                    passing=label in passing,
+                    passing=label in passing, power=chords.events[i].power,
                 )
                 for i, label in enumerate(labels)
                 if label not in _BLANK
@@ -85,4 +87,9 @@ class ArrangeStage(Stage):
             ),
         )
         ctx.note("capo", str(capo))
+        # how clear the capo call was: the best other position's score minus the chosen one's
+        others = [s for c, s in enumerate(scores) if c != capo]
+        if others:
+            ctx.note("capo_margin", f"{min(others) - scores[capo]:.2f}")
+        ctx.note("capo_scores", ",".join(f"{s:.2f}" for s in scores))
         ctx.note("tier", tier)

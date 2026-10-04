@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from youkelele.music.arrange import (
+    capo_scores,
     choose_capo,
     score_capo,
     select_voicings,
@@ -167,6 +168,11 @@ def test_simplify_unknown_quality_falls_back_to_triad(db):
     assert simplify_for_tier("E:maj(9)", "full", db) == ("E:maj", "no shape in chords-db for maj(9)")
 
 
+@pytest.mark.parametrize("tier", ["easy", "full"])
+def test_simplify_for_tier_maps_power_to_key_quality(db, tier):
+    assert simplify_for_tier("C#:5", tier, db) == ("C#:min", "power chord: quality from key")
+
+
 def test_simplify_left_blank_when_nothing_found(db):
     assert simplify_for_tier("Q:weird", "full", db) == ("N", "no shape; left blank")
 
@@ -234,3 +240,11 @@ def test_passing_ignores_blank_events_and_counts_filled_ones():
     assert passing_labels(events, 2.0) == {"B:maj"}
     filled = events[-1].model_copy(update={"filled": True})
     assert passing_labels(events[:-1] + [filled], 2.0) == {"B:maj"}
+
+
+def test_capo_scores_are_the_per_capo_scores_choose_capo_minimises(db):
+    scores = capo_scores(EB_LABELS, db)
+    assert len(scores) == 6
+    assert scores == [score_capo(EB_LABELS, c, db) for c in range(6)]
+    assert scores.index(min(scores)) == choose_capo(EB_LABELS, db)[0] == 3
+    assert len(capo_scores(EB_LABELS, db, max_capo=2)) == 3

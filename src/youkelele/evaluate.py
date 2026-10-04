@@ -11,8 +11,10 @@ import numpy as np
 
 from youkelele.jsonio import load_model
 from youkelele.music.as_played import explained_onsets
+from youkelele.music.relabel import refine_labels
+from youkelele.music.sections import runs_text, vocal_flags, vocal_runs
 from youkelele.music.trailing import trailing_silent_bars
-from youkelele.schemas import Chords, Grid, Strums
+from youkelele.schemas import ChordEvent, Chords, Grid, Key, Strums
 
 BAR_START_TOLERANCE = 0.06  # a chord change this close to a bar start counts as on the bar
 MOSTLY_RESTS = 0.75  # a printed-as-certain pattern with at least this share of rests
@@ -35,6 +37,19 @@ class SectionDiag:
     rest_share: float
     uncertain: bool
     recall_boost: bool
+    start_bar: int = 0
+    end_bar: int = 0  # exclusive
+    refined: str | None = None  # the label the sheet prints (`refine_labels`)
+
+
+def _label_text(d: SectionDiag) -> str:
+    """`verse`, or `verse -> bridge` when the sheet prints another label."""
+    return f"{d.label} -> {d.refined}" if d.refined and d.refined != d.label else d.label
+
+
+def _scored_label(event: ChordEvent) -> str:
+    """The label mir_eval scores: a power event's triad (`C#:min`), since `C#:5` has no third."""
+    return event.triad if event.power else event.label
 
 
 @dataclass
@@ -51,7 +66,10 @@ class Report:
     changes_on_bar_share: float | None = None
     sub_beat_events: int | None = None
     key_confidence: float | None = None
+    key: Key | None = None
     boxes_mostly_rests: int | None = None
+    vocal_runs: list[tuple[int, int]] | None = None  # None when the grid has no vocal levels
+    vocal_bars: int | None = None  # the bar count, so a trailing run prints marked
     sections: list[SectionDiag] = field(default_factory=list)
     truth_given: bool = False  # a truth directory was supplied: print the truth lines (n/a if absent)
 
@@ -176,6 +194,7 @@ def _chord_diagnostics(grid: Grid, chords: Chords) -> dict[str, float | int | No
         "changes_on_bar_share": changes_on_bar,
         "sub_beat_events": sub_beat,
         "key_confidence": chords.key.confidence,
+        "key": chords.key,
     }
 
 
@@ -191,6 +210,7 @@ def _section_diags(grid: Grid, strums: Strums, chords: Chords) -> list[SectionDi
     if grid.sections:
         tail = grid.sections[last]
         drop = trailing_silent_bars(chords, grid.bars, cap=tail.end_bar - tail.start_bar)
+    refined = refine_labels(grid, chords)  # the labels the sheet prints
     for pattern in strums.patterns:
         if not 0 <= pattern.section < len(grid.sections):
             continue
@@ -208,6 +228,9 @@ def _section_diags(grid: Grid, strums: Strums, chords: Chords) -> list[SectionDi
                 rest_share=rests / len(pattern.slots) if pattern.slots else 0.0,
                 uncertain=pattern.uncertain,
                 recall_boost=bool(getattr(pattern, "recall_boost", False)),
+                start_bar=section.start_bar,
+                end_bar=section.end_bar,
+                refined=refined[pattern.section],
             )
         )
     return diags
@@ -232,6 +255,9 @@ def _diagnose(run_dir: Path) -> tuple[Report, Strums | None]:
     chords = load_model(run_dir / "03_harmony" / "chords.json", Chords)
     strums = _load_strums(run_dir)
     report = Report(None, None, None, None, None, **_chord_diagnostics(grid, chords))
+    if grid.bar_vocal_db:
+        report.vocal_runs = vocal_runs(vocal_flags(grid.bar_vocal_db), keep_trailing=True)
+        report.vocal_bars = len(grid.bar_vocal_db)
     if strums is not None:
         report.sections = _section_diags(grid, strums, chords)
         report.boxes_mostly_rests = _boxes_mostly_rests(strums, report.sections)
@@ -265,7 +291,7 @@ def evaluate_run(run_dir: Path, truth_dir: Path | None = None) -> Report:
         est_intervals = np.array([[e.start, e.end] for e in chords.events], dtype=float)
         est_intervals = est_intervals.reshape(-1, 2)
         root, majmin, triads = _chord_scores(
-            ref_intervals, ref_labels, est_intervals, [e.label for e in chords.events]
+            ref_intervals, ref_labels, est_intervals, [_scored_label(e) for e in chords.events]
         )
     report.beat_f, report.downbeat_f = beat_f, downbeat_f
     report.chord_root, report.chord_majmin, report.chord_triads = root, majmin, triads
@@ -281,13 +307,13 @@ def _segmentation_scores(
     est_intervals = np.array([[e.start, e.end] for e in b.events], dtype=float).reshape(-1, 2)
     est_intervals, est_labels = mir_eval.util.adjust_intervals(
         est_intervals,
-        [e.label for e in b.events],
+        [_scored_label(e) for e in b.events],
         float(ref_intervals.min()),
         float(ref_intervals.max()),
         mir_eval.chord.NO_CHORD,
         mir_eval.chord.NO_CHORD,
     )
-    ref_labels = [e.label for e in a.events]
+    ref_labels = [_scored_label(e) for e in a.events]
     majmin = mir_eval.chord.evaluate(ref_intervals, ref_labels, est_intervals, est_labels)["majmin"]
     return (
         float(mir_eval.chord.overseg(ref_intervals, est_intervals)),
@@ -347,9 +373,22 @@ def _num(value: float | int | None, spec: str = "") -> str:
 def _section_line(d: SectionDiag) -> str:
     flags = (" uncertain" if d.uncertain else "") + (" recall-boost" if d.recall_boost else "")
     return (
-        f"  {d.index} {d.label}: strikes/bar {d.strikes_per_bar:.1f}, "
+        f"  {d.index} {_label_text(d)} bars {d.start_bar}-{d.end_bar}: strikes/bar {d.strikes_per_bar:.1f}, "
         f"explained {_pct(d.explained)}, rests {_pct(d.rest_share)}{flags}"
     )
+
+
+def _key_line(key: Key | None) -> str:
+    """`Key: tonic mode (method, margin, mode margin, runner-up[, mix tonic mode])`."""
+    if key is None:
+        return "Key: n/a"
+    figures = (
+        f"{key.method}, margin {_num(key.margin, '.3f')}, "
+        f"mode margin {_num(key.mode_margin, '.3f')}, runner-up {key.runner_up or 'n/a'}"
+    )
+    if key.mix is not None:
+        figures += f", mix {key.mix.tonic} {key.mix.mode}"
+    return f"Key: {key.tonic} {key.mode} ({figures})"
 
 
 def format_report(r: Report) -> str:
@@ -359,8 +398,10 @@ def format_report(r: Report) -> str:
         f"Filled bars: {_num(r.filled_bars)}",
         f"Changes on bar: {_pct(r.changes_on_bar_share)}",
         f"Sub-beat events: {_num(r.sub_beat_events)}",
+        _key_line(r.key),
         f"Key confidence: {_num(r.key_confidence, '.2f')}",
         f"Boxes mostly rests: {_num(r.boxes_mostly_rests)}",
+        f"Vocal runs: {'n/a' if r.vocal_runs is None else runs_text(r.vocal_runs, r.vocal_bars)}",
     ]
     lines.extend(_section_line(d) for d in r.sections)
     truth = [r.beat_f, r.downbeat_f, r.chord_root, r.chord_majmin, r.chord_triads]
@@ -402,6 +443,6 @@ def format_comparison(c: Comparison) -> str:
     for i, (left, right) in enumerate(c.sections):
         side = left if left is not None else right
         delta = c.deltas[i] if i < len(c.deltas) else None
-        lines.append(f"  {side.index} {side.label}: A {_cell(left)}  B {_cell(right)}  B-A {_delta(delta)}")
+        lines.append(f"  {side.index} {_label_text(side)}: A {_cell(left)}  B {_cell(right)}  B-A {_delta(delta)}")
     lines.extend(f"note: {note}" for note in c.notes)
     return "\n".join(lines)

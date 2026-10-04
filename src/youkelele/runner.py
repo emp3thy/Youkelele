@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Literal
 
 from youkelele import __version__
-from youkelele.layout import DEFAULT_RUNS_DIR, RunLayout, slug_for
+from youkelele.layout import DEFAULT_RUNS_DIR, RunLayout, video_id_for
 from youkelele.manifest import (
     Manifest,
     StageRecord,
@@ -126,12 +126,16 @@ def run_chain(
             raise ValueError("no saved options: pass options for the first run")
         options = manifest.options
     if manifest is None:
+        # the folder name is the one layout.resolve_run_dir chose; a later run keeps these
+        # fields as saved, so a manifest from before 1.4 leaves them unset
         manifest = Manifest(
-            slug=slug_for(options.source),
+            slug=run_dir.name,
             source=options.source,
             instrument=options.instrument,
             options=options,
             stages={},
+            video_id=video_id_for(options.source),
+            title_slug=run_dir.name,
         )
     else:
         manifest = manifest.model_copy(

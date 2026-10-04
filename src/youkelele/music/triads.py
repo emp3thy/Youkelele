@@ -15,10 +15,17 @@ TRIAD_TEMPLATES: dict[str, frozenset[int]] = {
 
 
 def to_triad(label: str) -> str:
+    """The triad of a Harte label; no-chord labels and power chords (`X:5`) come back as they are.
+
+    The harmony stage relabels a minor tonic played as root and fifth as `X:5` and writes the
+    key's quality as the event's triad itself; collapsing it to major here would undo that.
+    """
     if label in ("N", "X"):
         return label
     try:
         root, quality, _degrees, _bass = mir_eval.chord.split(label, reduce_extended_chords=True)
+        if quality == "5":
+            return label
         bitmap = mir_eval.chord.quality_to_bitmap(quality)
     except mir_eval.chord.InvalidChordException:
         root = label.split(":", 1)[0].split("/", 1)[0]

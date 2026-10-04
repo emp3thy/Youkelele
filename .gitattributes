@@ -1,0 +1,6 @@
+# cmd.exe misreads labels in batch files with LF-only line endings, and GitHub's
+# "Download ZIP" honours these settings, so the Windows scripts arrive as CRLF and
+# the shell scripts as LF whatever the checkout's core.autocrlf.
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+*.sh text eol=lf

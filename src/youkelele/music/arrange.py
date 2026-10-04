@@ -46,8 +46,14 @@ def score_capo(labels: Sequence[str], capo: int, db: ShapeDB) -> float:
     return mean + CAPO_FRET_PENALTY * capo
 
 
+def capo_scores(labels: Sequence[str], db: ShapeDB, max_capo: int = 5) -> list[float]:
+    """The score of every capo position from 0 to max_capo: what choose_capo minimises."""
+    return [score_capo(labels, capo, db) for capo in range(max_capo + 1)]
+
+
 def choose_capo(labels: Sequence[str], db: ShapeDB, max_capo: int = 5) -> tuple[int, int]:
-    best = min(range(max_capo + 1), key=lambda c: (score_capo(labels, c, db), c))
+    scores = capo_scores(labels, db, max_capo)
+    best = min(range(max_capo + 1), key=lambda c: (scores[c], c))
     return best, -best
 
 
@@ -124,6 +130,11 @@ def simplify_for_tier(label: str, tier: str, db: ShapeDB) -> tuple[str, str | No
     if label in ("N", "X"):
         return label, None
     reason = None
+    root, _, quality = label.partition(":")
+    if quality == "5":
+        # a power chord on the record: the harmony stage only writes it for a minor tonic, so
+        # the key's quality is minor, in both tiers
+        label, reason = f"{root}:min", "power chord: quality from key"
     if tier == "easy":
         triad = to_triad(label)
         if triad != label:

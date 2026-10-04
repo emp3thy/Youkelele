@@ -101,3 +101,65 @@ def test_default_source_probe_checks_the_file_system(tmp_path):
     probes = default_probes()
     assert probes.source_exists(str(tmp_path / "song.wav"))
     assert not probes.source_exists(str(tmp_path / "nope.wav"))
+
+
+NO_ID = "YouTube link has no 11-character video id"
+NO_ID_FIX = "paste the whole link, for example https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+
+
+def test_preflight_refuses_a_youtube_watch_link_without_a_video_id():
+    probes = make_probes(source=False)
+    for source in (
+        "https://www.youtube.com/watch?v",  # a link cut at the = sign
+        "https://www.youtube.com/watch?v=short",
+        "https://m.youtube.com/watch?v=",
+        "https://music.youtube.com/watch",
+        "watch?v",  # the link's tail alone, without a scheme
+        "youtu.be/",  # a host without an id, without a scheme
+    ):
+        for stages in (["ingest"], ["harmony"]):  # whatever stage the run starts at
+            problems = check_environment(RunOptions(source=source), stages, probes)
+            assert [(p.what, p.fix) for p in problems] == [(NO_ID, NO_ID_FIX)], (source, stages)
+
+
+def test_preflight_reports_an_unreadable_link_as_a_problem():
+    probes = make_probes(source=False)
+    problems = check_environment(RunOptions(source="https://[bad"), ["ingest"], probes)
+    assert [(p.what, p.fix) for p in problems] == [
+        ("the link cannot be read as a web address", NO_ID_FIX)
+    ]
+
+
+def test_preflight_accepts_every_youtube_link_yt_dlp_downloads():
+    probes = make_probes(source=False)
+    for source in (
+        "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+        "https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=RDdQw4w9WgXcQ&start_radio=1",
+        "https://m.youtube.com/watch?v=dQw4w9WgXcQ",
+        "https://music.youtube.com/watch?v=dQw4w9WgXcQ",
+        "https://youtu.be/dQw4w9WgXcQ",
+        "https://www.youtube.com/shorts/dQw4w9WgXcQ",
+        "https://www.youtube.com/live/dQw4w9WgXcQ",
+        "https://www.youtube.com/embed/dQw4w9WgXcQ",
+        "https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ",
+        "https://example.com/song.mp3",  # not YouTube: left to the download
+    ):
+        assert check_environment(RunOptions(source=source), ["ingest"], probes) == [], source
+
+
+def test_preflight_names_a_youtube_link_without_https():
+    probes = make_probes(source=False)
+    for source in (
+        "youtube.com/watch?v=dQw4w9WgXcQ",
+        "www.youtube.com/watch?v=dQw4w9WgXcQ",
+        "youtu.be/dQw4w9WgXcQ",
+        "watch?v=dQw4w9WgXcQ",
+    ):
+        problems = check_environment(RunOptions(source=source), ["ingest"], probes)
+        assert [(p.what, p.fix) for p in problems] == [
+            ("YouTube link must start with https://", NO_ID_FIX)
+        ], source
+    # a file of that name that does exist is a file
+    assert check_environment(
+        RunOptions(source="youtube.com/watch?v=dQw4w9WgXcQ"), ["ingest"], make_probes()
+    ) == []

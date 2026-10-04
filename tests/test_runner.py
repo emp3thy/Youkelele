@@ -1,7 +1,7 @@
 import pytest
 
 from tests.fakes import make_fake_stage as fake
-from youkelele.manifest import load_manifest
+from youkelele.manifest import Manifest, load_manifest
 from youkelele.options import RunOptions
 from youkelele.profiles import get_profile
 from youkelele.runner import (
@@ -166,3 +166,39 @@ def test_resume_command_omits_defaults(tmp_path):
     with pytest.raises(StageFailed) as e:
         run_chain(tmp_path, chain, RunOptions(source="song.wav"), log=quiet)
     assert e.value.resume_command == 'youkelele run "song.wav" --from 0'
+
+
+def test_manifest_records_video_id_and_title_slug(tmp_path):
+    run_dir = tmp_path / "summer-of-69"
+    opts = RunOptions(source="https://www.youtube.com/watch?v=eFjjO_lhf9c")
+    m = run_chain(run_dir, two_stages(), opts, log=quiet)
+    assert (m.slug, m.video_id, m.title_slug) == ("summer-of-69", "eFjjO_lhf9c", "summer-of-69")
+    saved = load_manifest(run_dir)
+    assert (saved.video_id, saved.title_slug) == ("eFjjO_lhf9c", "summer-of-69")
+    run_chain(run_dir, two_stages(), None, start=1, log=quiet)
+    assert (load_manifest(run_dir).video_id, load_manifest(run_dir).title_slug) == (
+        "eFjjO_lhf9c", "summer-of-69",
+    )
+    local = run_chain(tmp_path / "clip", two_stages(), RunOptions(source="clip.wav"), log=quiet)
+    assert (local.video_id, local.title_slug) == (None, "clip")
+
+
+def test_manifest_without_new_fields_loads():
+    old = {
+        "schema": 1,
+        "slug": "9f06qzcvuhg",
+        "source": "https://www.youtube.com/watch?v=9f06QZCVUHg",
+        "instrument": "ukulele",
+        "options": {"source": "https://www.youtube.com/watch?v=9f06QZCVUHg"},
+        "stages": {},
+    }
+    m = Manifest.model_validate(old)
+    assert (m.video_id, m.title_slug, m.schema_version) == (None, None, 1)
+
+
+def test_runner_leaves_source_meta_alone(tmp_path, opts):
+    (tmp_path / "source_meta.json").write_text("{}", encoding="utf-8")
+    run_chain(tmp_path, two_stages(), opts, log=quiet)
+    run_chain(tmp_path, two_stages(), opts, start=1, log=quiet)
+    assert (tmp_path / "source_meta.json").read_text(encoding="utf-8") == "{}"
+    assert status(tmp_path, two_stages()) == [("a", "done"), ("b", "done")]

@@ -18,7 +18,8 @@
   h3.legend-head { font-size: 11pt; margin: 0 0 2px 0; }
   .legend { display: flex; flex-wrap: wrap; gap: 6px 10px; margin: 2mm 0 5mm 0; break-inside: avoid; }
   .legend svg { display: block; }
-  .passing { font-size: 10pt; margin: -3mm 0 5mm 0; }
+  .passing, .power-note { font-size: 10pt; margin: -3mm 0 5mm 0; }
+  .cell sup { font-size: 0.6em; line-height: 0; }
   .section { margin-bottom: 5mm; }
   .section-head { margin: 0 0 1.5mm 0; break-inside: avoid; }
   .section-head { break-after: avoid }
@@ -55,7 +56,9 @@
 </head>
 <body>
 {% macro cell_class(cell) %}cell{% if cell.nc %} nc{% endif %}{% if cell.crowded %} crowded{% endif %}{% if cell.filled %} filled{% endif %}{% endmacro %}
-{% macro pickup_cell(cell) %}<div class="{{ cell_class(cell) }} pickup"><span class="pickup-label">pickup</span>{{ cell.text }}</div>{% endmacro %}
+{# the full tier raises a small 5 after the name of a power chord on the record; the easy tier prints the plain name #}
+{% macro cell_text(cell) %}{% if cell.power and power_badge %}{% for name in cell.text.split(" / ") %}{{ name }}{% if cell.badges[loop.index0] %}<sup>5</sup>{% endif %}{% if not loop.last %} / {% endif %}{% endfor %}{% else %}{{ cell.text }}{% endif %}{% endmacro %}
+{% macro pickup_cell(cell) %}<div class="{{ cell_class(cell) }} pickup"><span class="pickup-label">pickup</span>{{ cell_text(cell) }}</div>{% endmacro %}
 <div class="sheet">
   <div class="no-print">Screen preview. Print this page, or open sheet.pdf, for the A4 layout.</div>
   <header class="sheet-head">
@@ -83,6 +86,12 @@
   {% if passing is not none %}
   <p class="passing">Passing: {{ passing }}</p>
   {% endif %}
+  {% if without_capo is not none %}
+  <p class="passing without-capo">Without a capo: {{ without_capo }}</p>
+  {% endif %}
+  {% for line in power_lines %}
+  <p class="power-note">{{ line }}</p>
+  {% endfor %}
 
   <div class="sections">
   {% for section in sections %}
@@ -124,7 +133,7 @@
             {% endif %}
             {% endif %}
             {% for cell in row %}
-            <div class="{{ cell_class(cell) }}">{{ cell.text }}</div>
+            <div class="{{ cell_class(cell) }}">{{ cell_text(cell) }}</div>
             {% endfor %}
             <div class="repeat">{% if loop.last and block.repeat > 1 %}×{{ block.repeat }}{% endif %}</div>
           </div>

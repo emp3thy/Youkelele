@@ -6,6 +6,7 @@ from dataclasses import dataclass
 
 from youkelele.schemas import ScoreBar, ScoreSection, Shape
 
+_RowKey = tuple[tuple[str, tuple[bool, ...]], ...]
 NC = "N.C."
 MAX_UNIT = 4  # the longest run of rows a repeated block may span
 
@@ -17,6 +18,10 @@ class Cell:
     pickup: bool
     crowded: bool = False
     filled: bool = False  # every chord in the bar was inferred to fill a no-chord gap
+    power: bool = False  # a chord in the bar is a power chord on the record
+    # per chord, in the order of `text`'s names, whether it takes the power badge; only set
+    # when `power` is
+    badges: tuple[bool, ...] = ()
 
 
 @dataclass
@@ -43,15 +48,18 @@ def cell_for(bar: ScoreBar) -> Cell:
         pickup=bar.pickup,
         crowded=len(names) >= 3,
         filled=all(c.filled for c in chords),
+        power=any(c.power for c in chords),
+        badges=tuple(c.power for c in chords) if any(c.power for c in chords) else (),
     )
 
 
-def _key(row: list[Cell]) -> tuple[str, ...]:
-    """What makes two rows the same: their cell texts, which also fixes their length."""
-    return tuple(c.text for c in row)
+def _key(row: list[Cell]) -> _RowKey:
+    """What makes two rows the same: their cell texts and badges, which also fixes their
+    length."""
+    return tuple((c.text, c.badges) for c in row)
 
 
-def _repeats(keys: list[tuple[str, ...]], start: int, unit: int) -> int:
+def _repeats(keys: list[_RowKey], start: int, unit: int) -> int:
     """How many times rows ``start:start+unit`` occur back to back from ``start``."""
     pattern = keys[start : start + unit]
     if len(pattern) < unit:

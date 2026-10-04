@@ -31,12 +31,21 @@ from youkelele.music.onsets import (
     section_has_instrument,
 )
 from youkelele.music.recall import HIGH_BAND_FMIN, gate_section
-from youkelele.music.trailing import trailing_silent_bars
-from youkelele.schemas import Chords, Grid, SectionPattern, Strums
+from youkelele.music.trailing import NO_CHORD, trailing_silent_bars
+from youkelele.schemas import Bar, Chords, Grid, SectionPattern, Strums
 from youkelele.stage import Stage, StageContext
 
 
 _NO_ONSETS = Onsets(times=np.zeros(0), centroid=np.zeros(0), zcr=np.zeros(0))
+_EPS = 1e-6
+
+
+def _bar_has_chord(chords: Chords, bar: Bar) -> bool:
+    """True when a chord (any event not labelled "N") sounds during the bar."""
+    return any(
+        e.label != NO_CHORD and e.start < bar.end - _EPS and e.end > bar.start + _EPS
+        for e in chords.events
+    )
 
 
 def _onset_label(muted: bool, added: bool = False) -> str:
@@ -157,8 +166,15 @@ class StrumsStage(Stage):
         confidence_floor = UNCERTAIN_BELOW if eighths else UNCERTAIN_BELOW_SIXTEENTH
         patterns: list[SectionPattern | None] = [None] * len(grid.sections)
         short: list[int] = []
+        # a trimmed last section with no chord and no strike has nothing to strum (spec 3.5): it is
+        # marked, not inherited from its neighbour
+        last_bars = range(last_sec.start_bar, analysed_end(last))
+        empty_outro = (
+            not any(_bar_has_chord(chords, bars[b]) for b in last_bars)
+            and not any(d != "-" for b in last_bars for d in render_directions(classes[b], slots, meter))
+        )
         for i, sec in enumerate(grid.sections):
-            if not has_instrument[i]:
+            if not has_instrument[i] or (i == last and empty_outro):
                 patterns[i] = SectionPattern(
                     section=i, slots=["-"] * slots, confidence=0.0, bar_repeat=0.0,
                     uncertain=True, no_instrument=True, inherited_from=None,

@@ -4,11 +4,20 @@ import numpy as np
 import pytest
 
 from youkelele.music.sections import (
+    EDGE_INSTRUMENTAL_BELOW,
     HOP,
+    INSTRUMENTAL_BELOW,
+    VOCAL_BELOW_MEDIAN_DB,
+    VOCAL_RUN_MIN_BARS,
     bar_features,
+    bar_stem_db,
     boundaries_from_clusters,
+    insert_vocal_boundaries,
     label_sections,
+    runs_text,
     segment_bars,
+    vocal_flags,
+    vocal_runs,
 )
 from youkelele.schemas import Bar, Grid, Meter
 
@@ -162,6 +171,19 @@ def test_boundaries_blip_takes_the_following_segment_cluster():
     assert [(s.start_bar, s.end_bar) for s in sections] == [(0, 3), (3, 10)]
 
 
+def test_label_sections_no_cluster_numbering():
+    # recurring and once-only clusters beyond the verse and chorus are all plain `verse`
+    bounds = [0, 4, 12, 20, 24, 32, 40, 44, 48, 52, 60]
+    clusters = [0, 1, 2, 6, 1, 2, 3, 4, 6, 2, 5]
+    ids = _segments(bounds, 64, clusters)
+    db = {0: -25.0, 1: -20.0, 2: -10.0, 3: -25.0, 4: -25.0, 5: -25.0, 6: -22.0}
+    sections, _ = label_sections(bounds, ids, [db[c] for c in ids])
+    labels = [s.label for s in sections]
+    assert not any(label[-1].isdigit() for label in labels)
+    assert "bridge" not in labels
+    assert set(labels) == {"intro", "verse", "chorus", "outro"}
+
+
 def test_label_sections_chorus_is_loudest_recurring_bar_weighted():
     # V C V C V C(3-bar quiet fade): the segment-mean rule would pick V, bar-weighted picks C
     bounds = [0, 8, 16, 24, 32, 40]
@@ -177,7 +199,7 @@ def test_label_sections_chorus_is_loudest_recurring_bar_weighted():
     assert all(s.confidence == 0.3 for s in sections)  # margin under 1.5 dB
 
 
-def test_label_sections_order_intro_bridge_outro():
+def test_label_sections_order_intro_verse_outro():
     bounds = [0, 4, 12, 20, 24, 32, 40, 44, 48, 52, 60]
     clusters = [0, 1, 2, 6, 1, 2, 3, 4, 6, 2, 5]
     n_bars = 64
@@ -186,8 +208,8 @@ def test_label_sections_order_intro_bridge_outro():
     loud = [db[c] for c in ids]
     sections, margin = label_sections(bounds, ids, loud)
     assert [s.label for s in sections] == [
-        "intro", "verse", "chorus", "verse 2", "verse", "chorus",
-        "bridge", "bridge 2", "verse 2", "chorus", "outro",
+        "intro", "verse", "chorus", "verse", "verse", "chorus",
+        "verse", "verse", "verse", "chorus", "outro",
     ]
     assert [(s.start_bar, s.end_bar) for s in sections] == list(
         zip(bounds, bounds[1:] + [n_bars])
@@ -228,3 +250,195 @@ def test_sections_cover_all_bars_contiguously():
     )
     assert grid.sections[0].start_bar == 0
     assert grid.sections[-1].end_bar == 32
+
+
+def test_vocal_flags_threshold_from_median_and_median_filter():
+    assert VOCAL_BELOW_MEDIAN_DB == 12.0 and VOCAL_RUN_MIN_BARS == 4
+    # median over bars above -60 dB is -20, so the threshold is -32
+    db = [-20.0, -20.0, -35.0, -20.0, -20.0, -35.0, -35.0, -35.0, -20.0, -120.0]
+    # raw:      T T F T T F F F T F; the 3-bar median fills the lone gap at bar 2 and drops the
+    # lone vocal bar 8; the edge bars keep their own flag
+    assert vocal_flags(db) == [True] * 5 + [False] * 5
+    # within 12 dB counts as vocal; the last bar keeps its own flag
+    assert vocal_flags([-20.0, -20.0, -20.0, -32.0]) == [True] * 4
+    assert vocal_flags([-20.0, -20.0, -20.0, -32.5]) == [True] * 3 + [False]
+    # silent bars do not pull the median down: with them the median would be -77.5 and bar 4 vocal
+    db = [-20.0] * 4 + [-35.0] + [-120.0] * 5
+    assert vocal_flags(db) == [True] * 4 + [False] * 6
+
+
+def test_vocal_flags_all_true_when_stem_silent():
+    # an instrumental track: a silent vocals stem must not make every section instrumental
+    sr = 8000
+    bars = [Bar(index=i, start=2.0 * i, end=2.0 * i + 2.0, beats=[]) for i in range(8)]
+    db = bar_stem_db(np.zeros(16 * sr, dtype=np.float32), sr, bars)
+    assert db == [-120.0] * 8
+    flags = vocal_flags(db)
+    assert flags == [True] * 8
+    assert vocal_runs(flags) == []
+    bounds = [0, 4]
+    ids = [0] * 4 + [1] * 4
+    loud = [-20.0] * 8
+    assert label_sections(bounds, ids, loud, vocal=flags) == label_sections(bounds, ids, loud)
+
+
+def test_bar_stem_db_is_rms_level_per_bar():
+    sr = 8000
+    t = np.arange(4 * sr) / sr
+    y = np.concatenate([0.5 * np.sin(2 * np.pi * 440.0 * t[: 2 * sr]), np.zeros(2 * sr)])
+    bars = [Bar(index=0, start=0.0, end=2.0, beats=[]), Bar(index=1, start=2.0, end=4.0, beats=[])]
+    db = bar_stem_db(y.astype(np.float32), sr, bars)
+    assert db[0] == pytest.approx(20 * np.log10(0.5 / np.sqrt(2)), abs=0.01)
+    assert db[1] == -120.0
+
+
+def test_vocal_runs_skip_short_runs_and_trailing_run():
+    T, F = True, False
+    flags = [F] * 4 + [T] * 3 + [F] * 3 + [T] * 2 + [F] * 5 + [T] * 2 + [F] * 4
+    # (0, 4) counts at exactly four bars; (7, 10) is too short; (19, 23) is the trailing run
+    assert vocal_runs(flags) == [(0, 4), (12, 17)]
+    assert vocal_runs(flags, keep_trailing=True) == [(0, 4), (12, 17), (19, 23)]
+    assert vocal_runs([T] * 10) == []
+    assert vocal_runs([F] * 10) == []  # one run that is the trailing run
+    assert runs_text(vocal_runs(flags, keep_trailing=True), len(flags)) == (
+        "(0, 4), (12, 17), (19, 23) trailing"
+    )
+    assert runs_text([]) == "none"
+
+
+def test_vocal_runs_run_followed_by_fewer_than_four_bars_is_trailing():
+    T, F = True, False
+    # Summer of '69-shaped: a run, then three fading vocal bars to the end
+    flags = [T] * 6 + [F] * 4 + [T] * 3
+    assert vocal_runs(flags) == []
+    assert vocal_runs(flags, keep_trailing=True) == [(6, 10)]
+    # four vocal bars after it: the run is inside the song
+    flags = [T] * 6 + [F] * 4 + [T] * 4
+    assert vocal_runs(flags) == [(6, 10)]
+    assert vocal_runs(flags, keep_trailing=True) == [(6, 10)]
+
+
+def test_insert_vocal_boundaries_treats_run_near_the_end_as_trailing():
+    # Summer of '69: run (114, 118) with three vocal bars after it leaves 111 alone
+    assert insert_vocal_boundaries([0, 95, 111], [(114, 118)], 121) == [0, 95, 111]
+    # with four bars after it the run is inside: edge 114 moves 111 by three bars
+    assert insert_vocal_boundaries([0, 95, 111], [(114, 118)], 122) == [0, 95, 114, 118]
+
+
+def test_insert_vocal_boundaries_adds_edges_when_pieces_keep_four_bars():
+    # Chelsea-shaped: the end of the opening run splits the first chorus
+    assert insert_vocal_boundaries([0, 9, 38, 61], [(0, 20), (45, 50)], 80) == [
+        0, 9, 20, 38, 45, 50, 61,
+    ]
+    # a piece of three bars is not enough: edge 23 moves boundary 20 instead; edge 30 is added
+    assert insert_vocal_boundaries([0, 20, 40], [(23, 30)], 60) == [0, 23, 30, 40]
+    assert insert_vocal_boundaries([0, 20], [(10, 30)], 40, min_bars=12) == [0, 20]
+
+
+def test_insert_vocal_boundaries_moves_nearest_within_three_bars():
+    # edge 24 would leave 2 bars before 26: boundary 26 moves onto it; edge 40 is inserted
+    assert insert_vocal_boundaries([0, 10, 26, 50], [(24, 40)], 60) == [0, 10, 24, 40, 50]
+    # edge 10 sits 2 bars from both 8 and 12, and either move leaves a 2-bar neighbour
+    assert insert_vocal_boundaries([0, 8, 12, 30], [(10, 20)], 40) == [0, 8, 12, 20, 30]
+    # a boundary on one run's edge is not moved off it by the next run: 20 stays, 30 moves to 27
+    assert insert_vocal_boundaries([0, 30, 50], [(10, 20), (22, 27)], 60) == [0, 10, 20, 27, 50]
+    # nor off a later run's edge: 22 is already the start of (22, 30), so edge 20 cannot take it
+    assert insert_vocal_boundaries([0, 22, 50], [(12, 20), (22, 30)], 60) == [0, 12, 22, 30, 50]
+
+
+def test_insert_vocal_boundaries_never_moves_first_boundary():
+    # edge 2 is 2 bars from bar 0 (which never moves) and 5 from 7 (too far)
+    assert insert_vocal_boundaries([0, 7, 30], [(2, 6)], 40) == [0, 6, 30]
+    assert insert_vocal_boundaries([0, 12, 30], [(2, 8)], 40) == [0, 8, 12, 30]
+    # nor any boundary at or after the trailing run's start: 34 would otherwise move to 32
+    assert insert_vocal_boundaries([0, 20, 34], [(26, 32), (34, 44)], 44) == [0, 20, 26, 34]
+
+
+def _chelsea_shaped() -> tuple[list[int], list[int], list[float], list[bool]]:
+    bounds = [0, 9, 20, 38, 61, 71, 93, 108]
+    n_bars = 120
+    ids = _segments(bounds, n_bars, [0, 1, 1, 0, 1, 0, 1, 1])
+    loud = [-20.0 if c == 0 else -15.0 for c in ids]
+    vocal = [False] * 20 + [True] * 73 + [False] * 15 + [True] * 12
+    return bounds, ids, loud, vocal
+
+
+def test_label_sections_instrumental_intro_and_merge():
+    assert INSTRUMENTAL_BELOW == 0.25 and EDGE_INSTRUMENTAL_BELOW == 0.5
+    bounds, ids, loud, vocal = _chelsea_shaped()
+    sections, margin = label_sections(bounds, ids, loud, vocal=vocal)
+    assert [(s.label, s.start_bar, s.end_bar) for s in sections] == [
+        ("intro", 0, 20),  # two non-vocal segments of different clusters merge
+        ("chorus", 20, 38),
+        ("verse", 38, 61),
+        ("chorus", 61, 71),
+        ("verse", 71, 93),
+        ("instrumental", 93, 108),
+        ("chorus", 108, 120),
+    ]
+    assert margin == pytest.approx(5.0)
+    assert all(s.confidence == 0.5 for s in sections)
+
+    # the first and last segments need half vocal, a middle one only a quarter
+    bounds = [0, 8, 16, 24, 32, 40, 48]
+    ids = _segments(bounds, 56, [0, 1, 3, 2, 1, 2, 4])
+    loud = [-15.0 if c == 2 else -20.0 for c in ids]
+    part = [True] * 3 + [False] * 5  # a vocal share of 0.375
+    vocal = part + [True] * 8 + [False] * 8 + [True] * 8 + part + [True] * 8 + part
+    sections, _ = label_sections(bounds, ids, loud, vocal=vocal)
+    assert [s.label for s in sections] == [
+        "intro", "verse", "instrumental", "chorus", "verse", "chorus", "outro",
+    ]
+    # a non-vocal segment next to the low-vocal last one merges into the outro
+    vocal = vocal[:32] + [True] * 8 + [False] * 8 + part
+    sections, _ = label_sections(bounds, ids, loud, vocal=vocal)
+    assert [(s.label, s.start_bar, s.end_bar) for s in sections][-1] == ("outro", 40, 56)
+
+
+def test_label_sections_split_section_counts_once():
+    # A C B C D C, all vocal, B loudest but once-only: B and D are verses (the score stage
+    # decides the bridge from the chords), C the chorus
+    bounds = [0, 8, 16, 40, 48, 56]
+    ids = _segments(bounds, 64, [0, 2, 1, 2, 3, 2])
+    loud = [{0: -20.0, 1: -10.0, 2: -15.0, 3: -20.0}[c] for c in ids]
+    sections, _ = label_sections(bounds, ids, loud, vocal=[True] * 64)
+    assert [s.label for s in sections] == ["intro", "chorus", "verse", "chorus", "verse", "chorus"]
+    # a non-vocal run (24, 32) inside B cuts it into sung, instrumental, sung: still one B
+    vocal = [True] * 24 + [False] * 8 + [True] * 32
+    split = insert_vocal_boundaries(bounds, vocal_runs(vocal), 64)
+    assert split == [0, 8, 16, 24, 32, 40, 48, 56]
+    sections, _ = label_sections(split, ids, loud, vocal=vocal)
+    assert [(s.label, s.start_bar, s.end_bar) for s in sections] == [
+        ("intro", 0, 8),
+        ("chorus", 8, 16),
+        ("verse", 16, 24),
+        ("instrumental", 24, 32),
+        ("verse", 32, 40),
+        ("chorus", 40, 48),
+        ("verse", 48, 56),
+        ("chorus", 56, 64),
+    ]
+
+
+def test_label_sections_chorus_needs_half_vocal_share():
+    # cluster 1 is loudest and recurs but carries vocals in only 3 of 8 bars per segment
+    bounds = [0, 8, 16, 24, 32]
+    ids = _segments(bounds, 40, [0, 1, 2, 1, 2])
+    loud = [{0: -20.0, 1: -10.0, 2: -15.0}[c] for c in ids]
+    third = [True, True, True] + [False] * 5
+    vocal = [True] * 8 + third + [True] * 8 + third + [True] * 8
+    sections, _ = label_sections(bounds, ids, loud, vocal=vocal)
+    assert [s.label for s in sections] == ["intro", "verse", "chorus", "verse", "chorus"]
+    sections, _ = label_sections(bounds, ids, loud)
+    assert [s.label for s in sections] == ["intro", "chorus", "verse", "chorus", "verse"]
+
+
+def test_label_sections_unchanged_without_vocal():
+    bounds = [0, 4, 12, 20, 24, 32, 40, 44, 48, 52, 60]
+    ids = _segments(bounds, 64, [0, 1, 2, 6, 1, 2, 3, 4, 6, 2, 5])
+    db = {0: -25.0, 1: -20.0, 2: -10.0, 3: -25.0, 4: -25.0, 5: -25.0, 6: -22.0}
+    loud = [db[c] for c in ids]
+    expected = label_sections(bounds, ids, loud)
+    assert [s.label for s in expected[0]][:3] == ["intro", "verse", "chorus"]
+    assert label_sections(bounds, ids, loud, vocal=None) == expected
+    assert label_sections(bounds, ids, loud, vocal=[True] * 64) == expected

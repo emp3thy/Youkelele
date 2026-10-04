@@ -138,3 +138,35 @@ def test_slot_px_narrows_for_sixteenths():
     width = int(re.search(r'width="(\d+)"', svg).group(1))
     assert width == 2 * 16 * 20 + 12
     assert width <= TEXT_WIDTH_PX
+
+
+def _struck(bar: ScoreBar, struck: bool = True) -> ScoreBar:
+    return bar.model_copy(update={"struck": struck})
+
+
+def test_example_bars_skip_unstruck_leading_bars():
+    # Chelsea-shaped: the guitar is not in for bars 9 and 10, so the strip starts at the first struck bar
+    bars = [_struck(_bar(i, ("Am", 0)), i >= 11) for i in range(9, 17)]
+    assert [b.index for b in example_bars(_section(bars))] == [11, 12]
+    # an unstruck bar between struck ones is passed over
+    mixed = [_struck(_bar(0, ("C", 0))), _struck(_bar(1, ("C", 0)), False), _struck(_bar(2, ("C", 0)))]
+    assert [b.index for b in example_bars(_section(mixed))] == [0, 2]
+    # the mid-bar-change substitution still applies, among the struck bars
+    changing = [
+        _struck(_bar(0, ("C", 0)), False), _struck(_bar(1, ("C", 0))), _struck(_bar(2, ("G", 0))),
+        _struck(_bar(3, ("D", 0), ("A", 4)), False), _struck(_bar(4, ("D", 0), ("A", 4))),
+    ]
+    assert [b.index for b in example_bars(_section(changing))] == [1, 4]
+    # a single struck bar gives a one-bar strip
+    assert [b.index for b in example_bars(_section([_bar(0, ("C", 0)), _struck(_bar(1, ("C", 0)))]))] == [1]
+
+
+def test_example_bars_may_show_struck_bars_that_are_not_neighbours():
+    # bars 22 to 24 have no detected strike: the strip shows bars 21 and 25 side by side
+    bars = [_struck(_bar(i, ("C", 0)), i not in (22, 23, 24)) for i in range(21, 28)]
+    assert [b.index for b in example_bars(_section(bars))] == [21, 25]
+
+
+def test_example_bars_fallback_when_no_bar_struck():
+    bars = [_struck(_bar(i, ("C", 0)), False) for i in range(4)]
+    assert [b.index for b in example_bars(_section(bars))] == [0, 1]

@@ -3,11 +3,16 @@
 from __future__ import annotations
 
 import hashlib
+import http.client
 import os
 import re
 import shutil
 import stat
 import subprocess
+import time
+import urllib.request
+import zipfile
+import zlib
 from collections.abc import Callable
 from pathlib import Path
 
@@ -15,6 +20,14 @@ from youkelele.paths import cache_dir
 
 CHORD_MODEL_REPO = "https://github.com/music-x-lab/ISMIR2019-Large-Vocabulary-Chord-Recognition"
 CHORD_MODEL_COMMIT = "481f4ce703f8822b99f4037e9104ba1760e21ea3"
+# GitHub's zip of the pinned commit: its checkpoints hash identically to a clone's
+CHORD_MODEL_ARCHIVE = f"{CHORD_MODEL_REPO}/archive/{CHORD_MODEL_COMMIT}.zip"
+# written by the archive fetch: the commit the folder holds, since a zip has no git history
+COMMIT_MARKER = "COMMIT"
+_DOWNLOAD_TIMEOUT_S = 60
+# moving the unpacked folder into place: attempts, and the pause between them
+_RENAME_ATTEMPTS = 5
+_RENAME_PAUSE_S = 0.5
 
 _CHECKPOINT = "cache_data/joint_chord_net_ismir_naive_v1.0_reweight(0.0,10.0)_s{n}.best.sdict"
 CHORD_MODEL_CHECKPOINT_SHA256: dict[str, str] = {
@@ -36,6 +49,7 @@ PATCH_SITES: dict[str, int] = {
 _NP_INT = re.compile(r"\bnp\.int\b")
 
 Runner = Callable[..., "subprocess.CompletedProcess[str]"]
+Opener = Callable[..., object]
 
 
 class VendoringError(Exception):
@@ -79,28 +93,49 @@ def verify_checkpoints(root: Path) -> None:
             )
 
 
-def _git(args: list[str], cwd: Path | None, run: Runner) -> str:
+def _start_again(root: Path) -> str:
+    return f"delete the folder {root} and run youkelele setup"
+
+
+def _clone_head(root: Path, run: Runner) -> str:
+    """The commit of a folder cloned by an earlier version; needs git only for such a folder."""
     try:
-        result = run(["git", *args], cwd=cwd, check=True, capture_output=True, text=True)
+        result = run(
+            ["git", "rev-parse", "HEAD"], cwd=root, check=True, capture_output=True, text=True
+        )
     except FileNotFoundError as exc:
-        raise VendoringError("git is not installed or not on PATH; install git and retry") from exc
+        raise VendoringError(
+            f"the chord model at {root} was cloned with git, which is not on PATH, "
+            f"so its commit cannot be checked; {_start_again(root)}"
+        ) from exc
     except subprocess.CalledProcessError as exc:
         detail = (exc.stderr or "").strip()
-        raise VendoringError(f"git {' '.join(args)} failed: {detail}") from exc
-    return result.stdout or ""
-
-
-def _check_commit(root: Path, run: Runner) -> None:
-    head = _git(["rev-parse", "HEAD"], root, run).strip()
-    if head != CHORD_MODEL_COMMIT:
         raise VendoringError(
-            f"chord model at {root} is at {head or 'an unknown commit'}, "
-            f"expected {CHORD_MODEL_COMMIT}; delete the folder and run youkelele setup"
+            f"git rev-parse HEAD failed in {root}: {detail}; {_start_again(root)}"
+        ) from exc
+    return (result.stdout or "").strip()
+
+
+def _check_commit(root: Path, run: Runner = subprocess.run) -> None:
+    """The commit recorded by the archive fetch, or an earlier version's clone's HEAD."""
+    marker = root / COMMIT_MARKER
+    if marker.exists():
+        found = marker.read_text(encoding="ascii", errors="replace").strip()
+    elif (root / ".git").exists():
+        found = _clone_head(root, run)
+    else:
+        raise VendoringError(
+            f"the chord model at {root} has no record of its commit; {_start_again(root)}"
+        )
+    if found != CHORD_MODEL_COMMIT:
+        raise VendoringError(
+            f"chord model at {root} is at {found or 'an unknown commit'}, "
+            f"expected {CHORD_MODEL_COMMIT}; {_start_again(root)}"
         )
 
 
 def _rmtree_force(path: Path) -> None:
-    """Remove a tree including read-only files (git pack files on Windows)."""
+    """Remove a tree including read-only files (an earlier version's git pack files on Windows)."""
 
     def _retry(func, failing, exc):
         os.chmod(failing, stat.S_IWRITE)
@@ -114,31 +149,97 @@ def _rmtree_force(path: Path) -> None:
         raise VendoringError(f"could not remove {path}: {exc}") from exc
 
 
-def _clone(root: Path, run: Runner, log: Callable[[str], None]) -> None:
-    """Clone into a sibling folder and rename, so a partial clone never looks complete."""
-    log(f"cloning {CHORD_MODEL_REPO} into {root}")
+def _unpack_single_folder(archive: Path, dest: Path) -> None:
+    """Extract the archive's one top-level folder so that its contents land directly in dest."""
+    try:
+        with zipfile.ZipFile(archive) as zf:
+            members = zf.infolist()
+            tops = {member.filename.split("/", 1)[0] for member in members}
+            if len(tops) != 1:
+                raise VendoringError(
+                    f"the chord model archive should hold one folder, found {len(tops)} "
+                    "top-level entries; run youkelele setup again"
+                )
+            dest.mkdir()
+            for member in members:
+                inner = member.filename.split("/", 1)[1] if "/" in member.filename else ""
+                if not inner:
+                    continue
+                # zipfile reads by orig_filename and sanitises the new name when extracting
+                member.filename = inner
+                zf.extract(member, dest)
+    except (zipfile.BadZipFile, EOFError, zlib.error) as exc:
+        raise VendoringError(
+            f"the downloaded chord model archive is damaged ({exc}); run youkelele setup again"
+        ) from exc
+    except OSError as exc:
+        raise VendoringError(f"could not unpack the chord model into {dest}: {exc}") from exc
+
+
+def _rename_with_retries(source: Path, target: Path) -> None:
+    """Rename, retrying a few times on PermissionError: on Windows a virus scanner or the
+    search indexer can hold a handle on files just unpacked."""
+    for attempt in range(_RENAME_ATTEMPTS):
+        try:
+            source.rename(target)
+            return
+        except PermissionError:
+            if attempt == _RENAME_ATTEMPTS - 1:
+                raise
+            time.sleep(_RENAME_PAUSE_S)
+
+
+def _fetch_archive(
+    root: Path, log: Callable[[str], None], opener: Opener = urllib.request.urlopen
+) -> None:
+    """Download the pinned commit as a zip and unpack it beside root, then rename into place,
+    so an interrupted fetch never looks complete. Needs no git."""
+    log(f"downloading {CHORD_MODEL_ARCHIVE}")
     root.parent.mkdir(parents=True, exist_ok=True)
+    archive = root.with_name(root.name + ".partial.zip")
     partial = root.with_name(root.name + ".partial")
     _rmtree_force(partial)
+    archive.unlink(missing_ok=True)
     try:
-        _git(["clone", CHORD_MODEL_REPO, str(partial)], None, run)
-        _git(["checkout", CHORD_MODEL_COMMIT], partial, run)
-        _check_commit(partial, run)
+        try:
+            with opener(CHORD_MODEL_ARCHIVE, timeout=_DOWNLOAD_TIMEOUT_S) as response:
+                with archive.open("wb") as out:
+                    shutil.copyfileobj(response, out, 1 << 20)
+        except (OSError, http.client.HTTPException) as exc:
+            raise VendoringError(
+                f"could not download the chord model from {CHORD_MODEL_ARCHIVE}: {exc}; "
+                "check the internet connection and run youkelele setup again"
+            ) from exc
+        log(f"downloaded {archive.stat().st_size / 1e6:.1f} MB, unpacking")
+        _unpack_single_folder(archive, partial)
+        if not (partial / "chord_recognition.py").exists():
+            raise VendoringError(
+                "the chord model archive has no chord_recognition.py; run youkelele setup again"
+            )
+        (partial / COMMIT_MARKER).write_text(CHORD_MODEL_COMMIT + "\n", encoding="ascii")
+        verify_checkpoints(partial)  # a bad checkpoint never reaches the final folder
+        _rmtree_force(root)
+        try:
+            _rename_with_retries(partial, root)
+        except OSError as exc:
+            raise VendoringError(f"could not move the chord model into {root}: {exc}") from exc
     except BaseException:
         _rmtree_force(partial)
+        archive.unlink(missing_ok=True)
         raise
-    _rmtree_force(root)
-    partial.rename(root)
+    archive.unlink(missing_ok=True)
 
 
 def ensure_chord_model(
-    log: Callable[[str], None] = print, run: Runner = subprocess.run
+    log: Callable[[str], None] = print,
+    run: Runner = subprocess.run,
+    opener: Opener = urllib.request.urlopen,
 ) -> Path:
     root = chord_model_dir()
     if (root / "chord_recognition.py").exists():
         _check_commit(root, run)
     else:
-        _clone(root, run, log)
+        _fetch_archive(root, log, opener)
     counts = patch_numpy_aliases(root)
     changed = {rel: n for rel, n in counts.items() if n}
     log(f"patched np.int in {sum(changed.values())} places" if changed else "np.int patch already applied")

@@ -7,10 +7,11 @@ import re
 from pathlib import Path
 
 from youkelele.jsonio import ArtifactError
-from youkelele.layout import slug_for
+from youkelele.layout import find_run_by_name, find_run_dir, resolve_run_dir
 from youkelele.manifest import MANIFEST_NAME, load_manifest
+from youkelele.models.ytdl import MetadataError, fetch_metadata
 from youkelele.options import RunOptions
-from youkelele.preflight import check_environment
+from youkelele.preflight import check_environment, metadata_problem
 from youkelele.profiles import get_profile
 from youkelele.runner import StageFailed, build_chain, resolve_stage, run_chain, status
 from youkelele.stage import MissingArtifact, Stage
@@ -50,10 +51,11 @@ def run_command(args: argparse.Namespace) -> int:
     if isinstance(overrides, str):
         print(overrides)
         return 2
-    slug = slug_for(args.source)
-    run_dir = Path(args.runs_dir) / slug
+    runs_dir = Path(args.runs_dir)
+    # a saved run is found from the manifests alone; its options are the saved ones
+    run_dir = find_run_dir(runs_dir, args.source)
     try:
-        manifest = load_manifest(run_dir)
+        manifest = load_manifest(run_dir) if run_dir is not None else None
     except ArtifactError as exc:
         print(f"cannot read the saved run: {exc}")
         return 1
@@ -66,6 +68,7 @@ def run_command(args: argparse.Namespace) -> int:
     except ValueError as exc:
         print(str(exc))
         return 1
+    # before any folder is named: a failed check spends no network fetch and leaves no folder
     names = [s.name for s in chain[start : end + 1]]
     problems = check_environment(options, names)
     for problem in problems:
@@ -73,6 +76,16 @@ def run_command(args: argparse.Namespace) -> int:
         print(f"  fix: {problem.fix}")
     if problems:
         return 2
+    if run_dir is None:
+        # a new run: name its folder, reading the video's details if the source is a URL
+        try:
+            run_dir, _ = resolve_run_dir(runs_dir, args.source, fetch=fetch_metadata)
+        except MetadataError as exc:
+            problem = metadata_problem(exc.cause)
+            print(problem.what)
+            print(f"  fix: {problem.fix}")
+            return 2
+    slug = run_dir.name
     if not chain:
         print("nothing to run: no stages are registered")
         return 0
@@ -101,9 +114,14 @@ def stages_command(args: argparse.Namespace) -> int:
     return 0
 
 
+def _named_run_dir(runs_dir: str, name: str) -> Path:
+    """A run folder by name or video id; the plain path when neither is found."""
+    return find_run_by_name(Path(runs_dir), name) or Path(runs_dir) / name
+
+
 def status_command(args: argparse.Namespace) -> int:
     chain = _chain(args.instrument)
-    run_dir = Path(args.runs_dir) / args.slug
+    run_dir = _named_run_dir(args.runs_dir, args.slug)
     for number, (name, state) in enumerate(status(run_dir, chain)):
         print(f"{number:02d} {name}  {state}")
     return 0
@@ -133,11 +151,11 @@ def evaluate_command(args: argparse.Namespace) -> int:
     )
     from youkelele.jsonio import ArtifactError
 
-    run_dir = Path(args.runs_dir) / args.slug
+    run_dir = _named_run_dir(args.runs_dir, args.slug)
     if not run_dir.is_dir():
         print(f"no run folder at {run_dir}")
         return 1
-    other_dir = Path(args.runs_dir) / args.compare if args.compare else None
+    other_dir = _named_run_dir(args.runs_dir, args.compare) if args.compare else None
     if other_dir is not None and not other_dir.is_dir():
         print(f"no run folder at {other_dir}")
         return 1

@@ -481,3 +481,34 @@ def test_strums_stage_logs_nothing_about_trailing_bars_when_none_dropped(tmp_pat
     lines: list[str] = []
     _run(tmp_path, _grid([8]), _detector(_island(8)), log=lines.append)
     assert not any("trailing" in line for line in lines)
+
+
+def _wet_leg_outro(strike_in_outro: bool):
+    # an 8-bar verse, then a 4-bar outro whose first bar is the only one analysed: the chords stop
+    # at the end of the verse, so the outro is N and its last 3 bars are trimmed
+    grid = _grid([8, 4])
+    times = _island(8)
+    if strike_in_outro:
+        times = times + _bar_times(8, (0, 4))
+    chords = _chords(grid, (0, 8, "C"), (8, 12, "N"))
+    return grid, times, chords
+
+
+def test_trimmed_all_n_outro_is_no_instrument(tmp_path):
+    grid, times, chords = _wet_leg_outro(strike_in_outro=False)
+    strums, _, _ = _run(tmp_path, grid, _detector(times), chords=chords)
+    verse, outro = strums.patterns
+    assert outro.no_instrument
+    assert outro.inherited_from is None
+    assert outro.slots == ["-"] * 8
+    assert not verse.no_instrument
+
+
+def test_trimmed_n_outro_with_a_strike_is_still_inherited(tmp_path):
+    grid, times, chords = _wet_leg_outro(strike_in_outro=True)
+    strums, _, _ = _run(tmp_path / "struck", grid, _detector(times), chords=chords)
+    outro = strums.patterns[1]
+    assert not outro.no_instrument
+    assert outro.inherited_from == 0
+    assert outro.uncertain
+

@@ -1,5 +1,7 @@
 ﻿from __future__ import annotations
 
+import pytest
+
 from youkelele.jsonio import load_model, save_model
 from youkelele.layout import RunLayout
 from youkelele.options import RunOptions
@@ -10,7 +12,8 @@ from youkelele.stages.arrange import ArrangeStage
 
 def _event(i: int, label: str) -> ChordEvent:
     return ChordEvent(
-        bar=i, beat=0, start=float(i), end=float(i + 1), label=label, triad=label, confidence=0.9
+        bar=i, beat=0, start=float(i), end=float(i + 1), label=label, triad=label, confidence=0.9,
+        power=label.endswith(":5"),  # the harmony stage's power chords, labelled X:5
     )
 
 
@@ -36,7 +39,10 @@ def _events(labels, durations):
     events, t = [], 0.0
     for i, (lab, seconds) in enumerate(zip(labels, durations)):
         events.append(
-            ChordEvent(bar=i, beat=0, start=t, end=t + seconds, label=lab, triad=lab, confidence=0.9)
+            ChordEvent(
+                bar=i, beat=0, start=t, end=t + seconds, label=lab, triad=lab, confidence=0.9,
+                power=lab.endswith(":5"),
+            )
         )
         t += seconds
     return events
@@ -116,6 +122,24 @@ def test_arrange_stage_flags_passing_chords(tmp_path):
     assert [c.passing for c in arr.chords] == [False, False, False, True]
 
 
+@pytest.mark.parametrize("tier", ["easy", "full"])
+def test_arrange_stage_plays_power_chords_as_the_key_chord_and_copies_the_flag(tmp_path, tier):
+    _, arr = _run(tmp_path, ["C#:5", "B:maj", "C#:5", "E:maj"], tier=tier)
+    assert [c.power for c in arr.chords] == [True, False, True, False]
+    assert [s.reason for s in arr.substitutions if s.original == "C#:5"] == [
+        "power chord: quality from key"
+    ] * 2
+    assert {s.chosen for s in arr.substitutions if s.original == "C#:5"} == {"C#:min"}
+
+
+def test_arrange_stage_power_flag_follows_the_capo_alternative(tmp_path):
+    _, arr = _run(tmp_path, ["C#:5", "B:maj", "C#:5", "E:maj"])
+    assert arr.capo > 0
+    assert [c.power for c in arr.chords] == [True, False, True, False]
+    assert [c.power for c in arr.no_capo_alternative] == [True, False, True, False]
+    assert [c.name for c in arr.no_capo_alternative][0] == "C#m"
+
+
 def test_arrange_stage_passing_follows_the_capo_transposition(tmp_path):
     _, arr = _run(
         tmp_path, ["D#:maj", "A#:maj", "C:min", "G#:maj"], durations=[60.0, 60.0, 40.0, 0.9]
@@ -142,3 +166,17 @@ def test_arrange_stage_passing_uses_full_bar_median_not_pickup(tmp_path):
         durations=[60.0, 60.0, 40.0, 1.6], grid=grid,
     )
     assert [c.passing for c in arr.chords] == [False, False, False, True]
+
+
+def test_capo_scores_and_margin_note(tmp_path):
+    from youkelele.music.arrange import capo_scores
+    from youkelele.music.shapes import ShapeDB
+
+    labels = ["D#:maj", "A#:maj", "C:min", "G#:maj"] * 2
+    ctx, arr = _run(tmp_path, labels)
+    scores = capo_scores(labels, ShapeDB.load())
+    assert ctx.notes["capo_scores"] == ",".join(f"{s:.2f}" for s in scores)
+    runner_up = min(s for i, s in enumerate(scores) if i != arr.capo)
+    assert arr.capo == 3
+    assert ctx.notes["capo_margin"] == f"{runner_up - scores[arr.capo]:.2f}"
+    assert float(ctx.notes["capo_margin"]) > 0
