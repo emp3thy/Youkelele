@@ -9,6 +9,12 @@
 $ErrorActionPreference = "Stop"
 Set-Location -LiteralPath $PSScriptRoot
 
+# The tools print UTF-8; read it as such (install.cmd also sets the code page), and keep
+# uv's progress bars out of the window, where each redraw would print as a new line.
+try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch { }
+$env:UV_NO_PROGRESS = "1"
+$env:NO_COLOR = "1"
+
 $script:Step = "starting"
 $UvBin = Join-Path $env:USERPROFILE ".local\bin"
 

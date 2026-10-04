@@ -229,6 +229,69 @@ def test_stale_read_only_partial_is_removed_before_fetch(model_cache):
     assert _leftovers(root) == []
 
 
+def test_rename_into_place_retries_a_held_folder(model_cache, monkeypatch):
+    from pathlib import Path
+
+    real_rename = Path.rename
+    calls, sleeps = [], []
+
+    def flaky(self, target):
+        calls.append(self.name)
+        if len(calls) <= 2:  # a scanner holds a handle for the first two tries
+            raise PermissionError(13, "Access is denied")
+        return real_rename(self, target)
+
+    monkeypatch.setattr(Path, "rename", flaky)
+    monkeypatch.setattr(vendoring.time, "sleep", sleeps.append)
+    root = vendoring.ensure_chord_model(
+        log=lambda m: None, run=_forbid, opener=_Opener(_archive(_model_files()))
+    )
+    assert (root / "chord_recognition.py").exists() and _leftovers(root) == []
+    assert calls == ["chord_cnn_lstm.partial"] * 3
+    assert sleeps == [vendoring._RENAME_PAUSE_S] * 2
+
+
+def test_rename_into_place_gives_up_after_the_last_attempt(model_cache, monkeypatch):
+    from pathlib import Path
+
+    def held(self, target):
+        raise PermissionError(13, "Access is denied")
+
+    monkeypatch.setattr(Path, "rename", held)
+    monkeypatch.setattr(vendoring.time, "sleep", lambda s: None)
+    with pytest.raises(vendoring.VendoringError, match="could not move the chord model"):
+        vendoring.ensure_chord_model(
+            log=lambda m: None, run=_forbid, opener=_Opener(_archive(_model_files()))
+        )
+    root = vendoring.chord_model_dir()
+    assert not root.exists() and _leftovers(root) == []
+
+
+def test_bad_checkpoint_never_reaches_the_model_folder(model_cache):
+    files = _model_files()
+    files[next(iter(vendoring.CHORD_MODEL_CHECKPOINT_SHA256))] = b"tampered"
+    with pytest.raises(vendoring.VendoringError, match="sha256"):
+        vendoring.ensure_chord_model(log=lambda m: None, run=_forbid, opener=_Opener(_archive(files)))
+    root = vendoring.chord_model_dir()
+    assert not root.exists() and _leftovers(root) == []
+
+
+def test_damaged_compressed_data_is_a_damaged_archive(model_cache, monkeypatch):
+    import zipfile
+    import zlib
+
+    def broken(self, member, path=None, pwd=None):
+        raise zlib.error("Error -3 while decompressing data: invalid distance too far back")
+
+    monkeypatch.setattr(zipfile.ZipFile, "extract", broken)
+    with pytest.raises(vendoring.VendoringError, match="archive is damaged"):
+        vendoring.ensure_chord_model(
+            log=lambda m: None, run=_forbid, opener=_Opener(_archive(_model_files()))
+        )
+    root = vendoring.chord_model_dir()
+    assert not root.exists() and _leftovers(root) == []
+
+
 def test_install_scripts_exist_and_reference_each_other():
     from pathlib import Path
 
@@ -248,6 +311,15 @@ def test_install_scripts_exist_and_reference_each_other():
     run_cmd = (repo / "run-youkelele.cmd").read_text(encoding="ascii")
     assert "youkelele run" in run_cmd and "%~dp0runs" in run_cmd
     assert "07_render" in run_cmd and "sheet.pdf" in run_cmd and 'start ""' in run_cmd
+    # the progress output is read as UTF-8, and uv draws no progress bars
+    assert install_cmd.index("chcp 65001") < install_cmd.index("powershell")
+    assert '$env:UV_NO_PROGRESS = "1"' in install_ps1
+    # a link given as an argument reaches the CLI whole (cmd splits an argument at =)
+    assert "set YK_ARGS=%*" in run_cmd and 'set "YK_SOURCE=%~f1"' in run_cmd
+    assert "uv was not found. Run install.cmd first." in run_cmd
+    # only a sheet written by this run is opened
+    pdf_search = next(line for line in run_cmd.splitlines() if "sheet.pdf" in line and "for /f" in line)
+    assert "$env:YK_SINCE" in pdf_search
     for name in ("install.cmd", "run-youkelele.cmd", "install.ps1"):
         data = (repo / name).read_bytes()
         # cmd.exe misreads labels in LF-only batch files; keep the Windows scripts CRLF

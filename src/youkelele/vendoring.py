@@ -9,8 +9,10 @@ import re
 import shutil
 import stat
 import subprocess
+import time
 import urllib.request
 import zipfile
+import zlib
 from collections.abc import Callable
 from pathlib import Path
 
@@ -23,6 +25,9 @@ CHORD_MODEL_ARCHIVE = f"{CHORD_MODEL_REPO}/archive/{CHORD_MODEL_COMMIT}.zip"
 # written by the archive fetch: the commit the folder holds, since a zip has no git history
 COMMIT_MARKER = "COMMIT"
 _DOWNLOAD_TIMEOUT_S = 60
+# moving the unpacked folder into place: attempts, and the pause between them
+_RENAME_ATTEMPTS = 5
+_RENAME_PAUSE_S = 0.5
 
 _CHECKPOINT = "cache_data/joint_chord_net_ismir_naive_v1.0_reweight(0.0,10.0)_s{n}.best.sdict"
 CHORD_MODEL_CHECKPOINT_SHA256: dict[str, str] = {
@@ -163,12 +168,25 @@ def _unpack_single_folder(archive: Path, dest: Path) -> None:
                 # zipfile reads by orig_filename and sanitises the new name when extracting
                 member.filename = inner
                 zf.extract(member, dest)
-    except (zipfile.BadZipFile, EOFError) as exc:
+    except (zipfile.BadZipFile, EOFError, zlib.error) as exc:
         raise VendoringError(
             f"the downloaded chord model archive is damaged ({exc}); run youkelele setup again"
         ) from exc
     except OSError as exc:
         raise VendoringError(f"could not unpack the chord model into {dest}: {exc}") from exc
+
+
+def _rename_with_retries(source: Path, target: Path) -> None:
+    """Rename, retrying a few times on PermissionError: on Windows a virus scanner or the
+    search indexer can hold a handle on files just unpacked."""
+    for attempt in range(_RENAME_ATTEMPTS):
+        try:
+            source.rename(target)
+            return
+        except PermissionError:
+            if attempt == _RENAME_ATTEMPTS - 1:
+                raise
+            time.sleep(_RENAME_PAUSE_S)
 
 
 def _fetch_archive(
@@ -199,9 +217,10 @@ def _fetch_archive(
                 "the chord model archive has no chord_recognition.py; run youkelele setup again"
             )
         (partial / COMMIT_MARKER).write_text(CHORD_MODEL_COMMIT + "\n", encoding="ascii")
+        verify_checkpoints(partial)  # a bad checkpoint never reaches the final folder
         _rmtree_force(root)
         try:
-            partial.rename(root)
+            _rename_with_retries(partial, root)
         except OSError as exc:
             raise VendoringError(f"could not move the chord model into {root}: {exc}") from exc
     except BaseException:
