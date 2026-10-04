@@ -124,17 +124,31 @@ def setup_command(args: argparse.Namespace) -> int:
 
 
 def evaluate_command(args: argparse.Namespace) -> int:
-    from youkelele.evaluate import TruthFormatError, evaluate_run, format_report
+    from youkelele.evaluate import (
+        TruthFormatError,
+        compare_runs,
+        evaluate_run,
+        format_comparison,
+        format_report,
+    )
     from youkelele.jsonio import ArtifactError
 
     run_dir = Path(args.runs_dir) / args.slug
     if not run_dir.is_dir():
         print(f"no run folder at {run_dir}")
         return 1
+    other_dir = Path(args.runs_dir) / args.compare if args.compare else None
+    if other_dir is not None and not other_dir.is_dir():
+        print(f"no run folder at {other_dir}")
+        return 1
     try:
-        report = evaluate_run(run_dir, Path(args.truth))
+        report = evaluate_run(run_dir, Path(args.truth) if args.truth else None)
+        comparison = compare_runs(run_dir, other_dir) if other_dir is not None else None
     except (ArtifactError, TruthFormatError) as exc:
         print(f"cannot evaluate: {exc}")
         return 1
     print(format_report(report))
+    if comparison is not None:
+        print(f"Compared with {args.compare} (reference: {args.slug})")
+        print(format_comparison(comparison))
     return 0

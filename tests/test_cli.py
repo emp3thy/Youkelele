@@ -211,3 +211,12 @@ def test_setup_reports_vendoring_error_in_one_line(monkeypatch, capsys):
 def test_module_entry_point_runs_main(module):
     proc = subprocess.run([sys.executable, "-m", module, "--version"], capture_output=True, text=True, timeout=60)
     assert proc.returncode == 0 and __version__ in proc.stdout
+
+
+def test_evaluate_truth_is_optional_and_compare_accepted():
+    from youkelele.cli import build_parser
+
+    args = build_parser().parse_args(["evaluate", "abc"])
+    assert args.truth is None and args.compare is None
+    args = build_parser().parse_args(["evaluate", "abc", "--compare", "def", "--truth", "t"])
+    assert args.compare == "def" and args.truth == "t"

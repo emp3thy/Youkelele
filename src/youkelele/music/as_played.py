@@ -69,3 +69,21 @@ def section_summary(
     vector = majority_vector(bars)
     confidence = float(np.mean([jaccard(bar, vector) for bar in bars]))
     return render_directions(vector, slots_per_bar, meter), confidence, bar_repeat(bars)
+
+
+def explained_onsets(bars: Sequence[Sequence[str]], vector: Sequence[str]) -> float:
+    """Share of the strikes in `bars` that land on a slot struck in `vector`.
+
+    A strike is any entry other than `-` (`S`, `x`, `D`, `U`); 0.0 when the
+    bars hold no strikes.
+    """
+    strikes = 0
+    explained = 0
+    for bar in bars:
+        for j, cell in enumerate(bar):
+            if cell == "-":
+                continue
+            strikes += 1
+            if j < len(vector) and vector[j] != "-":
+                explained += 1
+    return explained / strikes if strikes else 0.0

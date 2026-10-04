@@ -7,6 +7,7 @@ from youkelele.music.as_played import (
     STAGE_UNCERTAIN_GRID_FIT,
     UNCERTAIN_BELOW,
     bar_repeat,
+    explained_onsets,
     jaccard,
     majority_vector,
     section_summary,
@@ -74,3 +75,17 @@ def test_repeated_vector_absent_from_any_textbook_pattern_is_returned_as_is():
     assert "".join(slots) == "-UDUD-D--UDUD-D-"
     assert confidence == 1.0
     assert repeat == 1.0
+
+
+def test_explained_onsets_share_of_strikes_on_pattern_slots():
+    bars = [["S", "-", "S", "-"], ["S", "-", "-", "S"]]
+    assert explained_onsets(bars, ["S", "-", "S", "-"]) == 0.75  # 3 of 4 strikes on struck slots
+
+
+def test_explained_onsets_zero_without_strikes():
+    assert explained_onsets([["-", "-"], ["-", "-"]], ["S", "S"]) == 0.0
+    assert explained_onsets([], ["S", "S"]) == 0.0
+
+
+def test_explained_onsets_counts_mutes_as_strikes():
+    assert explained_onsets([["x", "-", "S", "-"]], ["S", "-", "-", "-"]) == 0.5

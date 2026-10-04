@@ -60,10 +60,12 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser("setup", help="fetch the chord model and ffmpeg")
 
     evaluate = subparsers.add_parser(
-        "evaluate", help="score a run against ground-truth annotations"
+        "evaluate",
+        help="report a run's diagnostics, score it against truth, or compare it with another run",
     )
     evaluate.add_argument("slug")
-    evaluate.add_argument("--truth", required=True)
+    evaluate.add_argument("--truth", default=None)
+    evaluate.add_argument("--compare", default=None, help="slug of a run to score against this one")
     _add_runs_dir(evaluate)
     return parser
 
