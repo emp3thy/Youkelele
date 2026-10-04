@@ -34,7 +34,8 @@ function Invoke-Native([scriptblock]$Command, [switch]$Silent) {
     $ErrorActionPreference = "Continue"
     $global:LASTEXITCODE = -1
     & $Command | ForEach-Object {
-        $line = "$_"
+        # colour codes (when FORCE_COLOR is set) would print as stray characters here
+        $line = "$_" -replace "\x1b\[[0-9;]*[A-Za-z]", ""
         if (-not $Silent) { Write-Host "    $line" }
         $script:Output.Add($line)
     }
