@@ -108,6 +108,7 @@ def example_bars(section: ScoreSection) -> list[ScoreBar]:
     full = section.bars[1:] if section.bars and section.bars[0].pickup else section.bars
     if not full:
         return list(section.bars)
+    # the struck bars need not be neighbours: bars 21 and 25 when 22 to 24 are unstruck
     full = [b for b in full if b.struck] or full
     bars = full[:2]
     if len(bars) == 2 and all(len(b.chords) <= 1 for b in bars):

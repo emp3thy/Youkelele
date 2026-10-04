@@ -161,6 +161,12 @@ def test_example_bars_skip_unstruck_leading_bars():
     assert [b.index for b in example_bars(_section([_bar(0, ("C", 0)), _struck(_bar(1, ("C", 0)))]))] == [1]
 
 
+def test_example_bars_may_show_struck_bars_that_are_not_neighbours():
+    # bars 22 to 24 have no detected strike: the strip shows bars 21 and 25 side by side
+    bars = [_struck(_bar(i, ("C", 0)), i not in (22, 23, 24)) for i in range(21, 28)]
+    assert [b.index for b in example_bars(_section(bars))] == [21, 25]
+
+
 def test_example_bars_fallback_when_no_bar_struck():
     bars = [_struck(_bar(i, ("C", 0)), False) for i in range(4)]
     assert [b.index for b in example_bars(_section(bars))] == [0, 1]

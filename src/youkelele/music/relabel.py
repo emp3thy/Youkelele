@@ -3,7 +3,7 @@
 The grid stage cannot tell a bridge from a once-only verse: both are a segment whose
 audio matches nothing else. The chords can. A bridge introduces chords the rest of the
 song never plays; a once-only verse reuses the song's own. Measured on five songs, one
-section had novelty 0.73 (Summer of '69's bridge) and the other 56 had 0.00 to 0.05.
+section had novelty 0.73 (Summer of '69's bridge) and the other 56 had 0.00 to 0.12.
 """
 
 from __future__ import annotations
