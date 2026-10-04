@@ -13,7 +13,8 @@
 ## Global Constraints
 
 - Schema version stays 1; version 1.2 files load: every new field defaults (`SectionPattern.explained: float = 0.0`, `SectionPattern.recall_boost: bool = False`, `ScoreSection.explained: float = 0.0`, `Score.trailing_bars_dropped: int = 0`, `RunOptions.debug: bool = False`).
-- Constants, with the spec's values: `STRIKE_SHARE = 1/3` (strictly greater), `DENSITY_FLOOR = 0.6`, `EXPLAINED_BELOW = 0.6`, `UNCERTAIN_BELOW = 0.45` (unchanged), `HIGH_BAND_FMIN = 3000`, `SPARSE_SHARE = 0.4`, `MERGE_MS = 60`, `MIN_GAIN = 1.0`, `FIT_TOLERANCE = 0.05`; `SILENT_BAR_SHARE` and `EXPLAINED_KEEP` are measured in Task 4 with the acceptance criterion in spec 4.3 (accept both Summer of '69 choruses and both Chelsea Dagger choruses, reject Pour Some Sugar On Me's).
+- Constants, with the spec's values, all measured: `STRIKE_SHARE = 1/3` (strictly greater), `DENSITY_FLOOR = 0.6`, `EXPLAINED_BELOW = 0.6`, `UNCERTAIN_BELOW = 0.45` (unchanged), `HIGH_BAND_FMIN = 3000`, `SPARSE_SHARE = 0.4`, `MERGE_MS = 60`, `MIN_GAIN = 1.0`, `FIT_TOLERANCE = 0.05`, `SILENT_BAR_SHARE = 0.25`; the recall gate applies only on the eighth-note grid (`slots_per_bar == meter.numerator * 2`), per spec 4.3.
+- Sheet SVG slot width: `slot_px = 28 if slots_per_bar <= 8 else 20`, used by both the strum box and the worked example so their columns align (measured: 16 slots at 28 px overflow the 688 px text width by 220 px; at 20 px they fit with 36 px spare).
 - The strum source stays song-level (`Strums.source`); no per-section stem switch.
 - Any detector change is gated per section; whole-song onset detection is unchanged.
 - Sheet copy, verbatim: "Strum heard in this section; covers NN% of detected strokes. Up and down follow the beat"; "(uncertain)" and "same as <label>" kept; "repeatable" removed.
@@ -33,7 +34,7 @@
 
 ### Task 1: Truth-free `evaluate` and `--compare`
 
-**Confidence:** 92%
+**Confidence:** 95% (verified on this machine: `mir_eval.chord.overseg/underseg/seg(reference_intervals, estimated_intervals)` and `evaluate(ref_intervals, ref_labels, est_intervals, est_labels)["majmin"]` work between two estimated runs; identity gives 1.0 on all four)
 
 **Files:**
 - Modify: `src/youkelele/evaluate.py` (`Report` lines 23-29, `evaluate_run` lines 101-130, `format_report` lines 136-146), `src/youkelele/commands.py:126-140` (`evaluate_command`), `src/youkelele/cli.py:62-67` (`--truth` becomes optional, add `--compare`), `src/youkelele/music/as_played.py` (add `explained_onsets`)
@@ -73,10 +74,10 @@ def test_evaluate_truth_is_optional_and_compare_accepted(): ...
 
 ### Task 2: Persisted raw output and `--debug`
 
-**Confidence:** 92%
+**Confidence:** 95% (verified: `commands.py:30` collects every None-default flag named in `_CHOICE_FLAGS` into the override dict, so `debug` joins that tuple; `fill_gaps` returns the filled list and `normalise_octave` returns the kept beats, so inserted and dropped beats are set differences)
 
 **Files:**
-- Modify: `src/youkelele/options.py` (`RunOptions.debug: bool = False`), `src/youkelele/cli.py:39-50` (`run.add_argument("--debug", action="store_const", const=True, default=None)` so the manifest merge keeps working), `src/youkelele/stages/grid.py:51-66,117` (write `grid/beats_raw.json`), `src/youkelele/stages/harmony.py:66-72` (copy `work_dir/out.lab` to `harmony/spans.lab` before the `rmtree`), `src/youkelele/stages/strums.py` (write `strums/onsets.txt` when `ctx.options.debug`)
+- Modify: `src/youkelele/options.py` (`RunOptions.debug: bool = False`), `src/youkelele/cli.py:39-50` (`run.add_argument("--debug", action="store_const", const=True, default=None)`), `src/youkelele/commands.py:30` (add `"debug"` to `_CHOICE_FLAGS`), `src/youkelele/stages/grid.py:51-66,117` (write `grid/beats_raw.json`), `src/youkelele/stages/harmony.py:66-72` (copy `work_dir/out.lab` to `harmony/spans.lab` before the `rmtree`), `src/youkelele/stages/strums.py` (write `strums/onsets.txt` when `ctx.options.debug`)
 - Test: `tests/test_stage_grid.py`, `tests/test_stage_harmony.py`, `tests/test_stage_strums.py`, `tests/test_cli.py`
 
 **Interfaces:**
@@ -131,7 +132,7 @@ def test_html_prints_explained_not_repeatable(): ...                            
 
 ### Task 4: Recall gate for loud sustained sections
 
-**Confidence:** 90% (the method is spiked and confirmed by ear; two constants are measured here against a stated acceptance criterion, with a stated fallback if none separates)
+**Confidence:** 95% (the method is spiked and confirmed by ear; every constant is measured; the spike tables in the session scratchpad `spike_recall/summary.md`, `spike_recall/tables_per_section.md` and `spike_recall2/REPORT.md` are copied into the measurements doc)
 
 **Files:**
 - Create: `src/youkelele/music/recall.py`, `tests/test_recall.py`, `docs/superpowers/specs/2026-10-04-v1-3-recall-measurements.md`
@@ -141,7 +142,7 @@ def test_html_prints_explained_not_repeatable(): ...                            
 **Interfaces:**
 - Consumes: `Onsets`, `quantise_bar`, `grid_fit`, `mute_mask` (onsets.py); `majority_vector`, `fill_to_floor`, `jaccard`, `explained_onsets` (Tasks 1 and 3).
 - Produces, in `onsets.py`: `detect_onsets(y, sr, fmin=None)`; with `fmin`, the envelope is `librosa.onset.onset_strength(y=y, sr=sr, hop_length=512, fmin=fmin, aggregate=np.mean)` and peaks come from `librosa.onset.onset_detect(onset_envelope=env, sr=sr, hop_length=512, units="time", backtrack=False)`; centroid and zcr are taken at the same frames as today.
-- Produces, in `recall.py`: constants `HIGH_BAND_FMIN = 3000.0`, `SPARSE_SHARE = 0.4`, `MERGE_MS = 60.0`, `MIN_GAIN = 1.0`, `FIT_TOLERANCE = 0.05`, `SILENT_BAR_SHARE` and `EXPLAINED_KEEP` (measured in Step 4, evidence comment beside each); `merge_onsets(base: Onsets, extra: Onsets, merge_ms: float, keep: np.ndarray) -> tuple[Onsets, np.ndarray]` (union sorted by time, `extra` entries within `merge_ms` of a base entry dropped, `keep` a boolean mask of extra entries allowed; returns the union and a boolean array marking added entries); `silent_bar_mask(y, sr, bars: Sequence[Bar], share: float) -> np.ndarray` (True where the bar's RMS is below `share` times the median bar RMS over the section's bars); `@dataclass SectionDecision(accepted: bool, before: float, after: float, reason: str)`; `gate_section(base: Onsets, extra: Onsets, y, sr, bars: Sequence[Bar], slots_per_bar: int, song_fit: float, meter: Meter) -> tuple[Onsets, np.ndarray, SectionDecision]` applying spec 4.3: try only if base strikes per bar `< SPARSE_SHARE * slots_per_bar`; exclude silent bars; keep the union only if strikes per bar rise by at least `MIN_GAIN`, mean Jaccard to the own vote (the Task 3 vote) does not fall, raw onsets per bar `<= slots_per_bar`, section grid fit `>= song_fit - FIT_TOLERANCE`, and `explained_onsets` of the union's own vote `>= EXPLAINED_KEEP`; `reason` names the first failing check or `"accepted"`. A section with no base onsets and no instrument is skipped (`reason "no onsets"`), never divided by zero (Review Focus 3).
+- Produces, in `recall.py`: constants `HIGH_BAND_FMIN = 3000.0`, `SPARSE_SHARE = 0.4`, `MERGE_MS = 60.0`, `MIN_GAIN = 1.0`, `FIT_TOLERANCE = 0.05`, `SILENT_BAR_SHARE = 0.25`, each with a one-line evidence comment citing the measurements doc; `eighth_grid(slots_per_bar: int, meter: Meter) -> bool` (`slots_per_bar == meter.numerator * 2`), and the gate is skipped entirely when it is false (`reason "sixteenth grid"`); `merge_onsets(base: Onsets, extra: Onsets, merge_ms: float, keep: np.ndarray) -> tuple[Onsets, np.ndarray]` (union sorted by time, `extra` entries within `merge_ms` of a base entry dropped, `keep` a boolean mask of extra entries allowed; returns the union and a boolean array marking added entries); `silent_bar_mask(y, sr, bars: Sequence[Bar], share: float) -> np.ndarray` (True where the bar's RMS is below `share` times the median bar RMS over the section's bars); `@dataclass SectionDecision(accepted: bool, before: float, after: float, reason: str)`; `gate_section(base: Onsets, extra: Onsets, y, sr, bars: Sequence[Bar], slots_per_bar: int, song_fit: float, meter: Meter) -> tuple[Onsets, np.ndarray, SectionDecision]` applying spec 4.3: skip unless `eighth_grid`; try only if base strikes per bar `< SPARSE_SHARE * slots_per_bar`; exclude silent bars; keep the union only if strikes per bar rise by at least `MIN_GAIN`, mean Jaccard to the own vote (the Task 3 vote) does not fall, raw onsets per bar `<= slots_per_bar`, and section grid fit `>= song_fit - FIT_TOLERANCE`; `reason` names the first failing check or `"accepted"`. A section with no base onsets and no instrument is skipped (`reason "no onsets"`), never divided by zero (Review Focus 3).
 - Stage: after today's `onsets = detect(y, sr)`, compute `high = detect(y, sr, fmin=HIGH_BAND_FMIN)` once; per section call `gate_section` over the section's bars and splice accepted unions into the song-level onset list (the per-section pieces do not overlap because bars partition time); then `mute_mask` on the final list, `quantise_bar` as today; `SectionPattern.recall_boost = decision.accepted`; log one line per accepted section (`recall boost: section 4, 2.9 -> 5.2 strikes per bar`); `onsets.txt` marks added onsets with `+`.
 
 - [ ] **Step 1: Write the failing tests**
@@ -153,7 +154,8 @@ def test_detect_onsets_high_band_finds_click_in_sustained_tone(): ...        # s
 def test_merge_onsets_drops_extra_within_60ms_and_marks_added(): ...
 def test_silent_bar_mask_marks_bars_far_below_median(): ...
 def test_gate_accepts_sparse_section_with_regular_union(): ...               # base 2/bar, union 5/bar regular -> accepted, recall_boost
-def test_gate_rejects_when_union_sprays_slots(): ...                         # union explained below EXPLAINED_KEEP -> rejected, reason "explained"
+def test_gate_skips_sixteenth_grid(): ...                                    # 16 slots in 4/4 -> untouched, reason "sixteenth grid"
+def test_gate_rejects_when_jaccard_falls(): ...                              # union less regular than base -> rejected, reason "jaccard"
 def test_gate_skips_dense_section(): ...                                     # base >= SPARSE_SHARE * slots -> untouched
 def test_gate_skips_section_without_onsets(): ...                            # Review Focus 3
 def test_gate_adds_nothing_in_silent_bars(): ...
@@ -162,8 +164,8 @@ def test_stage_sets_recall_boost_and_marks_added_onsets(tmp_path): ...
 ```
 
 - [ ] **Step 2: Run them to verify they fail.**
-- [ ] **Step 3: Implement with provisional `SILENT_BAR_SHARE = 0.25`, `EXPLAINED_KEEP = 0.85`; tests green.**
-- [ ] **Step 4: Measure the two constants on the real runs** (read-only on `C:\Users\gethi\sources\Youkelele\runs`; scripts and tables in the session scratchpad). Run the gate on the `guitar` stems of the five runs with the 1.2 grids. Tabulate per section: base and union strikes per bar, Jaccard before and after, raw onsets per bar, section fit, union `explained`, decision. Acceptance criterion (spec 4.3): Summer of '69 bars 41-53 and 83-95 accepted; Chelsea Dagger bars 9-38 and 105-142 accepted with no onsets added in bars 9-11 (silent before the guitar enters); Pour Some Sugar On Me bars 28-39, 55-67, 84-103 rejected; Wet Leg and Fame unchanged. Choose `EXPLAINED_KEEP` inside the gap between the accepted sections' lowest `explained` and the rejected sections' highest; choose `SILENT_BAR_SHARE` so Chelsea's bars 9-11 are excluded and no struck bar in any accepted section is. If no `EXPLAINED_KEEP` separates them, add the fallback from the spec (the gate also requires `slots_per_bar == 8`), record why, and keep the strictest value that accepts the four. Write the table and the chosen values to `docs/superpowers/specs/2026-10-04-v1-3-recall-measurements.md`; put the values and a one-line citation beside the constants.
+- [ ] **Step 3: Implement with the measured constants; tests green.**
+- [ ] **Step 4: Confirm on the real runs and write the measurements doc.** Run the stage's gate (through the real `StrumsStage` or a thin script calling `gate_section`) on the `guitar` stems of the five runs with the 1.2 grids, read-only on `C:\Users\gethi\sources\Youkelele\runs`. Expected decisions: Summer of '69 bars 41-53 and 83-95 accepted (about 5.2 and 4.6 strikes per bar, pattern `S-SSSSS-`); Chelsea Dagger bars 9-38 and 105-142 accepted with no onsets added in bars 9 to 12; Pour Some Sugar On Me skipped (sixteenth grid); Wet Leg and Fame onsets identical to 1.2. Write `docs/superpowers/specs/2026-10-04-v1-3-recall-measurements.md`: the spike tables copied from the scratchpad (`spike_recall/summary.md`, `spike_recall/tables_per_section.md`, `spike_recall2/REPORT.md`, which hold the candidate comparison, the five regularity guards that failed to separate, and the silent-bar shares), plus the confirmation table from this step. If any expected decision differs, stop and report rather than retune.
 - [ ] **Step 5: Full fast suite green; `uv run pytest -q -m slow tests/test_stage_strums.py` if a slow test exists there.**
 - [ ] **Step 6: Commit** `feat: per-section high-band recall gate for sustained strums` (code, tests, measurements doc together).
 
@@ -171,7 +173,7 @@ def test_stage_sets_recall_boost_and_marks_added_onsets(tmp_path): ...
 
 ### Task 5: Trailing bars that are not music
 
-**Confidence:** 92%
+**Confidence:** 95% (verified: the chain order is `GENERIC_STAGES` in `runner.py:30` (ingest, separate, grid, harmony) followed by the profile's strums, arrange, score, so the strums stage may require `harmony/chords.json`)
 
 **Files:**
 - Create: `src/youkelele/music/trailing.py`, `tests/test_trailing.py`
@@ -203,7 +205,7 @@ def test_score_json_without_trailing_field_loads(): ...
 
 ### Task 6: Beat-aware chord decoding
 
-**Confidence:** 92% (spiked: the decoder accepts our beat file; the driver's gotchas are known)
+**Confidence:** 95% (spiked end to end on Summer of '69: the decoder accepts our beat file, 63 of 75 to 75 of 75 on-bar changes, identical labels; the driver's gotchas are in the Interfaces block; the driver's path is `Path(__file__).with_name("chord_driver.py")` resolved absolute, as `chords.py` already does for the wav)
 
 **Files:**
 - Create: `src/youkelele/models/chord_driver.py`, `tests/test_chord_driver.py`
@@ -233,15 +235,15 @@ def test_harmony_stage_passes_beats_and_notes_decoding(tmp_path): ...
 
 ### Task 7: The worked example on the sheet
 
-**Confidence:** 90%
+**Confidence:** 95% (prototyped: at 28 px per slot an 8-slot two-bar example is 460 px of the 688 px text width; 16 slots need 20 px per slot (652 px); chord names at 14 px bold, dots and arrows legible; half-bar changes read clearly; PNGs in the session scratchpad `spike_example/`)
 
 **Files:**
-- Modify: `src/youkelele/render/strum_box.py` (add `worked_example_svg`), `src/youkelele/render/html.py:49-80`, `src/youkelele/render/templates/sheet.html.j2:99-101`
+- Modify: `src/youkelele/render/strum_box.py` (add `slot_px`, `worked_example_svg`; `strum_pattern_svg` takes the slot width), `src/youkelele/render/html.py:49-80`, `src/youkelele/render/templates/sheet.html.j2:99-101`
 - Test: `tests/test_strum_box.py`, `tests/test_html.py`, `tests/test_stage_render.py`
 
 **Interfaces:**
 - Consumes: `ScoreSection.pattern`, `ScoreBar.chords[].name/start_slot`, `Meter`; the box's `_PER_SLOT = 28`, `_H`, `_ARROWS`.
-- Produces: `example_bars(section: ScoreSection) -> list[ScoreBar]`: the first two bars; if neither has more than one chord and a later bar does, that bar replaces the second; one bar if the section has one; `worked_example_svg(pattern: Sequence[Slot], bars: Sequence[ScoreBar], meter: Meter) -> str`: width `len(bars) * slots * _PER_SLOT` plus bar-line gaps, stroke row drawn with `_ARROWS` per slot, a chord row beneath placing each chord name at `start_slot` and a middle dot at every held slot, a vertical bar line between bars; the chord row uses the same `_INK`, 9 pt. `render_html` sets `"example": Markup(worked_example_svg(...))` when `show_box`, else `None`; the template prints it in the `strum-box` div under the pattern svg with class `worked-example`.
+- Produces: `slot_px(slots_per_bar: int) -> int` (28 when `slots_per_bar <= 8`, else 20); `strum_pattern_svg(slots, meter, per_slot: int = 28)` (existing callers unchanged; `render_html` passes `slot_px`); `example_bars(section: ScoreSection) -> list[ScoreBar]`: the first two bars; if neither has more than one chord and a later bar does, that bar replaces the second; one bar if the section has one; `worked_example_svg(pattern: Sequence[Slot], bars: Sequence[ScoreBar], meter: Meter, per_slot: int) -> str`: width `len(bars) * slots * per_slot + 12 * (len(bars) - 1)`, stroke row drawn with `_ARROWS` per slot, a chord row beneath placing each chord name (14 px bold, left-aligned on its `start_slot`) with a middle dot at every held slot and a light divider line at each chord start after the first, a vertical bar line between bars; the chord row uses `_INK`. `render_html` sets `"example": Markup(worked_example_svg(...))` when `show_box`, else `None`; the template prints it in the `strum-box` div under the pattern svg with class `worked-example`.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -250,6 +252,7 @@ def test_example_bars_prefers_a_bar_with_a_mid_bar_change(): ...
 def test_example_bars_first_two_when_no_change(): ...
 def test_worked_example_svg_places_second_chord_at_its_slot(): ...   # bar D(0) A(4) at 8 slots -> "A" text x = 4 * 28 + bar offset
 def test_worked_example_svg_two_bars_have_a_bar_line(): ...
+def test_slot_px_narrows_for_sixteenths(): ...                        # 8 -> 28, 16 -> 20; the 16-slot two-bar example is at most 688 px wide
 def test_html_prints_worked_example_under_each_box(): ...            # count of 'worked-example' == number of sections with a box
 def test_html_no_example_without_instrument(): ...
 ```
@@ -263,7 +266,7 @@ def test_html_no_example_without_instrument(): ...
 
 ### Task 8: Validation runs and docs
 
-**Confidence:** 90%
+**Confidence:** 93% (the chain already completes on all five songs and the task records whatever the runs show; the residual is operational, such as a changed upload or a download failure, which the task reports rather than fixes)
 
 **Files:**
 - Create: `docs/superpowers/specs/2026-10-04-v1-3-validation.md`
