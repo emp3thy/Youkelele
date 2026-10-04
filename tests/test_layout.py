@@ -164,6 +164,13 @@ def test_video_id_for_youtube_hosts_and_paths():
     assert video_id_for("https://www.youtube.com/watch?v") is None
     # a local folder named live or embed is not a video link
     assert video_id_for(r"C:\music\live\dQw4w9WgXcQ.wav") is None
+    # another host with a YouTube-shaped path is not YouTube
+    assert video_id_for("https://notyoutube.com/live/dQw4w9WgXcQ") is None
+    # embed's playlist forms are eleven letters long but are not video ids
+    assert video_id_for("https://www.youtube.com/embed/videoseries?list=PLx") is None
+    assert video_id_for("https://www.youtube.com/embed/live_stream?channel=UCx") is None
+    # a twelve-character tail is not an id either
+    assert video_id_for("https://www.youtube.com/embed/dQw4w9WgXcQZ") is None
 
 
 URL = "https://www.youtube.com/watch?v=eFjjO_lhf9c"

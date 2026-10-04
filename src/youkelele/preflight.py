@@ -54,8 +54,11 @@ def youtube_link_problem(source: str, exists: Callable[[str], bool]) -> Problem 
 
     text = source.strip()
     if text.lower().startswith(("http://", "https://")):
-        parts = urlsplit(text)
-        host = (parts.hostname or "").lower()
+        try:
+            parts = urlsplit(text)
+            host = (parts.hostname or "").lower()
+        except ValueError:  # `https://[bad`: not a link anything can open
+            return Problem("the link cannot be read as a web address", _WHOLE_LINK)
         if host in _YOUTUBE_HOSTS and parts.path.rstrip("/") == "/watch" and not video_id_for(text):
             return Problem("YouTube link has no 11-character video id", _WHOLE_LINK)
         return None

@@ -122,6 +122,14 @@ def test_preflight_refuses_a_youtube_watch_link_without_a_video_id():
             assert [(p.what, p.fix) for p in problems] == [(NO_ID, NO_ID_FIX)], (source, stages)
 
 
+def test_preflight_reports_an_unreadable_link_as_a_problem():
+    probes = make_probes(source=False)
+    problems = check_environment(RunOptions(source="https://[bad"), ["ingest"], probes)
+    assert [(p.what, p.fix) for p in problems] == [
+        ("the link cannot be read as a web address", NO_ID_FIX)
+    ]
+
+
 def test_preflight_accepts_every_youtube_link_yt_dlp_downloads():
     probes = make_probes(source=False)
     for source in (

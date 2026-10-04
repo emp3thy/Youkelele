@@ -20,10 +20,13 @@ DEFAULT_RUNS_DIR = "runs"
 SOURCE_META_NAME = "source_meta.json"
 
 # `v=` anywhere in the query, youtu.be/ID, shorts/ID, and the live and embed paths of the
-# YouTube hosts (embed also on youtube-nocookie.com), all of which yt-dlp downloads
+# YouTube hosts (embed also on youtube-nocookie.com), all of which yt-dlp downloads. The
+# host is anchored so notyoutube.com does not count, and embed's playlist forms
+# (`embed/videoseries?list=`, `embed/live_stream?channel=`) are not read as ids.
 _YOUTUBE_ID = re.compile(
-    r"(?:[?&]v=|youtu\.be/|shorts/|youtube(?:-nocookie)?\.com/(?:live|embed)/)"
-    r"([A-Za-z0-9_-]{11})"
+    r"(?:[?&]v=|youtu\.be/|shorts/"
+    r"|(?<![\w.-])(?:[\w-]+\.)*youtube(?:-nocookie)?\.com/(?:live/|embed/(?!videoseries\b|live_stream\b)))"
+    r"([A-Za-z0-9_-]{11})(?![A-Za-z0-9_-])"
 )
 # The longest folder name a title gives; Windows paths stay well inside their limit.
 TITLE_SLUG_MAX = 60
