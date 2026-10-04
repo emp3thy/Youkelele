@@ -216,10 +216,11 @@ def _diagnose(run_dir: Path) -> tuple[Report, Strums | None]:
 
 
 def evaluate_run(run_dir: Path, truth_dir: Path | None = None) -> Report:
-    """Score a run against truth, or (no truth) report its own diagnostics."""
+    """Report a run's truth-free diagnostics; the truth fields are filled when truth is given."""
     run_dir = Path(run_dir)
+    report, _ = _diagnose(run_dir)
     if truth_dir is None:
-        return _diagnose(run_dir)[0]
+        return report
     truth_dir = Path(truth_dir)
     grid = load_model(run_dir / "02_grid" / "grid.json", Grid)
     chords = load_model(run_dir / "03_harmony" / "chords.json", Chords)
@@ -242,7 +243,9 @@ def evaluate_run(run_dir: Path, truth_dir: Path | None = None) -> Report:
         root, majmin, triads = _chord_scores(
             ref_intervals, ref_labels, est_intervals, [e.label for e in chords.events]
         )
-    return Report(beat_f, downbeat_f, root, majmin, triads)
+    report.beat_f, report.downbeat_f = beat_f, downbeat_f
+    report.chord_root, report.chord_majmin, report.chord_triads = root, majmin, triads
+    return report
 
 
 def _segmentation_scores(
@@ -316,17 +319,6 @@ def _section_line(d: SectionDiag) -> str:
 
 
 def format_report(r: Report) -> str:
-    truth = [r.beat_f, r.downbeat_f, r.chord_root, r.chord_majmin, r.chord_triads]
-    if any(value is not None for value in truth):
-        return "\n".join(
-            [
-                f"Beat F-measure: {_pct(r.beat_f)}",
-                f"Downbeat F-measure: {_pct(r.downbeat_f)}",
-                f"Chord root: {_pct(r.chord_root)}",
-                f"Chord major/minor: {_pct(r.chord_majmin)}",
-                f"Chord triads: {_pct(r.chord_triads)}",
-            ]
-        )
     lines = [
         f"N share: {_pct(r.n_share)}",
         f"All-N bars: {_num(r.all_n_bars)}",
@@ -337,6 +329,17 @@ def format_report(r: Report) -> str:
         f"Boxes mostly rests: {_num(r.boxes_mostly_rests)}",
     ]
     lines.extend(_section_line(d) for d in r.sections)
+    truth = [r.beat_f, r.downbeat_f, r.chord_root, r.chord_majmin, r.chord_triads]
+    if any(value is not None for value in truth):
+        lines.extend(
+            [
+                f"Beat F-measure: {_pct(r.beat_f)}",
+                f"Downbeat F-measure: {_pct(r.downbeat_f)}",
+                f"Chord root: {_pct(r.chord_root)}",
+                f"Chord major/minor: {_pct(r.chord_majmin)}",
+                f"Chord triads: {_pct(r.chord_triads)}",
+            ]
+        )
     return "\n".join(lines)
 
 

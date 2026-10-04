@@ -63,7 +63,12 @@ def _run(path: Path) -> Path:
 
 def test_evaluate_perfect_match_scores_100(tmp_path):
     report = evaluate_run(_run(tmp_path), EXAMPLE)
-    assert report == Report(1.0, 1.0, 1.0, 1.0, 1.0)
+    truth = (
+        report.beat_f, report.downbeat_f, report.chord_root, report.chord_majmin,
+        report.chord_triads,
+    )
+    assert truth == (1.0, 1.0, 1.0, 1.0, 1.0)
+    assert report.changes_on_bar_share == 1.0  # diagnostics accompany the truth scores
 
 
 def test_evaluate_missing_truth_file_gives_none(tmp_path):
@@ -84,7 +89,16 @@ def test_cli_evaluate_prints_report(tmp_path, capsys):
     code = main(["evaluate", "demo", "--truth", str(EXAMPLE), "--runs-dir", str(tmp_path / "runs")])
     out = capsys.readouterr().out.splitlines()
     assert code == 0
-    assert out == [
+    assert out[:7] == [
+        "N share: 0.0%",
+        "All-N bars: 0",
+        "Filled bars: 0",
+        "Changes on bar: 100.0%",
+        "Sub-beat events: 0",
+        "Key confidence: 0.90",
+        "Boxes mostly rests: n/a",
+    ]
+    assert out[7:] == [
         "Beat F-measure: 100.0%",
         "Downbeat F-measure: 100.0%",
         "Chord root: 100.0%",
