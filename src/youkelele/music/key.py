@@ -58,6 +58,8 @@ FINAL_CHORD_BONUS = 0.10
 SECTION_END_WEIGHT = 0.15
 # Under this score margin the relative-major pair rule decides (Summer of '69: 0.028).
 KEY_TIE_MARGIN = 0.05
+# Pair shares this close are a tie, decided by the stem chroma's Krumhansl fit at each tonic.
+PAIR_TIE = 0.02
 # Under this deciding margin the sheet names the runner-up as well.
 KEY_HEDGE_MARGIN = 0.05
 # Under this mode margin the tonic's own chords decide (Fame: 0.003 at F).
@@ -183,25 +185,42 @@ def tonic_scores(
     return _scores(chords, _section_endings(events, sections), bars, len(sections), TONIC_MIN_SHARE)
 
 
-def pair_shares(events: Sequence[ChordEvent], candidates: Sequence[str]) -> dict[str, float]:
-    """Time-weighted diatonic share of each candidate's relative-major pair.
+def _set_share(chords: Sequence[_Chord], major_tonic: int, total: float) -> float:
+    """Time share of chords diatonic to the major key on `major_tonic`: full credit with the
+    diatonic quality, half for a diatonic root of the wrong quality, none otherwise."""
+    credit = 0.0
+    for chord in chords:
+        quality = _DIATONIC.get((chord.root - major_tonic) % 12)
+        if quality is not None:
+            credit += chord.duration * (1.0 if chord.triad == quality else 0.5)
+    return credit / total if total > 0 else 0.0
 
-    For a candidate X the pair is X major and its relative minor: a chord whose root is
-    diatonic to X major counts in full when its triad has the diatonic quality and half
-    otherwise; any other chord counts nothing.
+
+def pair_shares(events: Sequence[ChordEvent], candidates: Sequence[str]) -> dict[str, float]:
+    """Time-weighted diatonic share of each candidate's better relative pair.
+
+    A candidate X has two pairs: X major with its relative minor (the X-major diatonic set)
+    and X minor with its relative major (the diatonic set of the major key a minor third
+    up). Its share is the larger of the two.
     """
     chords = _chords(events)
     total = sum(c.duration for c in chords)
     shares: dict[str, float] = {}
     for name in candidates:
         tonic = _pitch_class(name)
-        credit = 0.0
-        for chord in chords:
-            quality = _DIATONIC.get((chord.root - tonic) % 12)
-            if quality is not None:
-                credit += chord.duration * (1.0 if chord.triad == quality else 0.5)
-        shares[name] = credit / total if total > 0 else 0.0
+        shares[name] = max(
+            _set_share(chords, tonic, total), _set_share(chords, (tonic + 3) % 12, total)
+        )
     return shares
+
+
+def _profile_fit(tonic: str, chroma_mean: np.ndarray) -> float:
+    """The better of the Krumhansl major and minor correlations at the tonic."""
+    chroma = np.asarray(chroma_mean, dtype=float)
+    pc = _pitch_class(tonic)
+    return max(
+        _corr(chroma, np.roll(KRUMHANSL_MAJOR, pc)), _corr(chroma, np.roll(KRUMHANSL_MINOR, pc))
+    )
 
 
 def _winner(values: dict[str, float]) -> tuple[str, float, str | None]:
@@ -213,12 +232,37 @@ def _winner(values: dict[str, float]) -> tuple[str, float, str | None]:
     return best, value - ranked[1][1], ranked[1][0]
 
 
+def pair_rule(
+    events: Sequence[ChordEvent], candidates: Sequence[str], chroma_mean: np.ndarray
+) -> tuple[str, float, str | None]:
+    """(winner, margin, runner-up) by pair share; shares within `PAIR_TIE` of the best are
+    decided by the stem chroma's better Krumhansl correlation at each tonic.
+
+    The margin is the share difference between the winner and the best other candidate;
+    a sole candidate's margin is its share.
+    """
+    shares = pair_shares(events, candidates)
+    best = max(shares.values())
+    tied = [name for name, share in shares.items() if best - share < PAIR_TIE]
+    winner = max(tied, key=lambda name: (_profile_fit(name, chroma_mean), shares[name]))
+    others = {name: share for name, share in shares.items() if name != winner}
+    if not others:
+        return winner, shares[winner], None
+    runner_up = _winner(others)[0]
+    return winner, abs(shares[winner] - others[runner_up]), runner_up
+
+
 def decide_tonic(
-    events: Sequence[ChordEvent], bars: Sequence[Bar], sections: Sequence[Section]
+    events: Sequence[ChordEvent],
+    bars: Sequence[Bar],
+    sections: Sequence[Section],
+    chroma_mean: np.ndarray,
 ) -> TonicDecision | None:
     """The tonic by score, or by the pair rule when the score margin is under `KEY_TIE_MARGIN`.
 
-    When no root reaches `TONIC_MIN_SHARE`, every root is a candidate. None without chords.
+    The deciding pair rule weighs only the candidates whose score is within `KEY_TIE_MARGIN`
+    of the top; it is also computed over every candidate for the record. When no root
+    reaches `TONIC_MIN_SHARE`, every root is a candidate. None without chords.
     """
     chords = _chords(events)
     if not chords:
@@ -230,11 +274,12 @@ def decide_tonic(
     if not scores:
         return None
     tonic, margin, runner_up = _winner(scores)
-    pair_tonic, pair_margin, pair_runner_up = _winner(pair_shares(events, list(scores)))
+    pair_tonic, pair_margin, _ = pair_rule(events, list(scores), chroma_mean)
     if runner_up is not None and margin < KEY_TIE_MARGIN:
-        return TonicDecision(
-            pair_tonic, pair_margin, pair_runner_up, "pair rule", pair_tonic, pair_margin
-        )
+        top = scores[tonic]
+        close = [name for name, score in scores.items() if top - score < KEY_TIE_MARGIN]
+        tonic, margin, runner_up = pair_rule(events, close, chroma_mean)
+        return TonicDecision(tonic, margin, runner_up, "pair rule", pair_tonic, pair_margin)
     return TonicDecision(tonic, margin, runner_up, "score", pair_tonic, pair_margin)
 
 
@@ -276,6 +321,30 @@ def tonic_chord_mode(
     return None
 
 
+def key_and_decision(
+    events: Sequence[ChordEvent],
+    bars: Sequence[Bar],
+    sections: Sequence[Section],
+    chroma_mean: np.ndarray,
+    mix_key: Key,
+) -> tuple[Key, TonicDecision | None]:
+    """`key_from_chords` with the tonic decision behind it (None when the mix key stands)."""
+    if len(_chords(events)) < MIN_CHORD_EVENTS:
+        return mix_key, None
+    decision = decide_tonic(events, bars, sections, chroma_mean)
+    if decision is None:
+        return mix_key, None
+    mode, mode_margin = mode_at(decision.tonic, chroma_mean)
+    if mode_margin < MODE_TIE_MARGIN:
+        mode = tonic_chord_mode(decision.tonic, events) or mode
+    key = Key(
+        tonic=decision.tonic, mode=mode, confidence=mode_margin, method="chords_stems",
+        margin=decision.margin, mode_margin=mode_margin, runner_up=decision.runner_up,
+        mix=mix_key,
+    )
+    return key, decision
+
+
 def key_from_chords(
     events: Sequence[ChordEvent],
     bars: Sequence[Bar],
@@ -288,34 +357,30 @@ def key_from_chords(
     With fewer than `MIN_CHORD_EVENTS` chord events the mix estimate is returned as it is.
     When the mode margin is under `MODE_TIE_MARGIN`, the tonic's own chords decide.
     """
-    if len(_chords(events)) < MIN_CHORD_EVENTS:
-        return mix_key
-    decision = decide_tonic(events, bars, sections)
-    if decision is None:
-        return mix_key
-    mode, mode_margin = mode_at(decision.tonic, chroma_mean)
-    if mode_margin < MODE_TIE_MARGIN:
-        mode = tonic_chord_mode(decision.tonic, events) or mode
-    return Key(
-        tonic=decision.tonic, mode=mode, confidence=mode_margin, method="chords_stems",
-        margin=decision.margin, mode_margin=mode_margin, runner_up=decision.runner_up,
-        mix=mix_key,
-    )
+    return key_and_decision(events, bars, sections, chroma_mean, mix_key)[0]
+
+
+def _close(key: Key) -> bool:
+    return key.margin is not None and key.margin < KEY_HEDGE_MARGIN
+
+
+def _mix_disagrees(key: Key) -> bool:
+    return key.mix is not None and key.mix.tonic != key.tonic
 
 
 def hedged(key: Key) -> bool:
     """A close call on the tonic, or a mix estimate that names another tonic."""
-    close = key.margin is not None and key.margin < KEY_HEDGE_MARGIN
-    return close or (key.mix is not None and key.mix.tonic != key.tonic)
+    return _close(key) or _mix_disagrees(key)
 
 
 def hedge_tonic(key: Key) -> str | None:
-    """The other tonic a hedged key names: the runner-up, else the mix's tonic."""
-    if not hedged(key):
-        return None
-    if key.runner_up is not None:
+    """The other tonic a hedged key names: the runner-up when the margin is close (whether
+    or not the mix also disagrees), the mix's tonic when only the mix disagrees."""
+    if _close(key) and key.runner_up is not None:
         return key.runner_up
-    return key.mix.tonic if key.mix is not None else None
+    if _mix_disagrees(key):
+        return key.mix.tonic
+    return None
 
 
 def key_text(key: Key) -> str:

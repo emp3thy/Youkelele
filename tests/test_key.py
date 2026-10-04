@@ -9,6 +9,7 @@ from youkelele.music.key import (
     KRUMHANSL_MINOR,
     MODE_TIE_MARGIN,
     SECTION_END_WEIGHT,
+    decide_tonic,
     estimate_key,
     hedge_tonic,
     hedged,
@@ -185,6 +186,68 @@ def test_hedged_when_margin_small_or_mix_disagrees():
     alone = disagrees.model_copy(update={"runner_up": None})  # a sole candidate: the mix's tonic
     assert hedge_tonic(alone) == "D"
     assert not hedged(MIX) and key_text(MIX) == "A minor"
+
+
+def test_hedge_names_the_runner_up_for_a_close_margin_and_the_mix_otherwise():
+    base = Key(tonic="G", mode="major", confidence=0.3, method="chords_stems", margin=0.15,
+               mode_margin=0.3, runner_up="C", mix=Key(tonic="D", mode="major", confidence=0.1))
+    # only the mix disagrees: the mix's tonic, not the score runner-up
+    assert hedge_tonic(base) == "D" and key_text(base) == "G major (or D major)"
+    # the margin is close and the mix disagrees too: the runner-up
+    both = base.model_copy(update={"margin": 0.02})
+    assert hedge_tonic(both) == "C"
+    # only the margin is close
+    close = both.model_copy(update={"mix": Key(tonic="G", mode="major", confidence=0.1)})
+    assert hedge_tonic(close) == "C"
+
+
+def test_pair_tie_is_broken_by_the_stem_chroma():
+    # C and F tie on score (0.4 each, the song and its one section end on D minor) and on
+    # pair share (every chord is diatonic to both C major and F major)
+    labels = ["C:maj", "F:maj"] * 4 + ["A:min", "D:min"]
+    events = _events(labels)
+    bars, sections = _bars(len(labels)), _sections([len(labels)])
+    scores = tonic_scores(events, bars, sections)
+    assert scores["C"] == pytest.approx(scores["F"])
+    shares = pair_shares(events, ["C", "F"])
+    assert shares["C"] == pytest.approx(1.0) and shares["F"] == pytest.approx(1.0)
+    for triad, tonic, other in (((0, 4, 7), "C", "F"), ((5, 9, 0), "F", "C")):
+        key = key_from_chords(events, bars, sections, _triad_chroma(triad), MIX)
+        assert (key.tonic, key.runner_up) == (tonic, other)
+        assert key.margin == pytest.approx(0.0)
+        assert hedged(key)
+
+
+def test_pair_tie_break_weighs_only_candidates_close_on_score():
+    # D and A tie on score (a third each); G is a candidate 0.11 behind whose pair share
+    # (every chord diatonic to G major) beats both
+    labels = ["D:maj", "A:min"] * 3 + ["G:maj"] * 2 + ["E:min"]
+    events = _events(labels)
+    bars, sections = _bars(len(labels)), _sections([len(labels)])
+    scores = tonic_scores(events, bars, sections)
+    assert set(scores) == {"D", "A", "G"}
+    assert scores["D"] == pytest.approx(scores["A"]) and scores["G"] < scores["D"] - KEY_TIE_MARGIN
+    shares = pair_shares(events, ["D", "A", "G"])
+    assert shares["G"] == pytest.approx(1.0)
+    assert shares["D"] == pytest.approx(7.5 / 9) and shares["A"] == pytest.approx(7.5 / 9)
+    chroma = _triad_chroma((2, 6, 9))
+    key = key_from_chords(events, bars, sections, chroma, MIX)
+    assert (key.tonic, key.runner_up) == ("D", "A")  # the D/A pair tie goes to the chroma
+    decision = decide_tonic(events, bars, sections, chroma)
+    assert decision.rule == "pair rule"
+    assert decision.pair_tonic == "G"  # the record over every candidate still names G
+
+
+def test_minor_key_candidate_is_scored_by_its_minor_pair():
+    # shaped like Pour Some Sugar On Me: C# major riff 40%, B 24%, E 20%, A 16%
+    seconds = {"C#:maj": 10, "B:maj": 6, "E:maj": 5, "A:maj": 4}
+    events = _events([label for label, n in seconds.items() for _ in range(n)])
+    shares = pair_shares(events, ["C#", "B"])
+    # C# minor with E major: C# (wrong quality) half, B, E and A full
+    assert shares["C#"] == pytest.approx((5 + 6 + 5 + 4) / 25)
+    # B major with G# minor beats B minor with D major: C# half, B and E full, A outside
+    assert shares["B"] == pytest.approx((5 + 6 + 5) / 25)
+    assert shares["C#"] > shares["B"]
 
 
 def test_key_json_without_new_fields_loads():

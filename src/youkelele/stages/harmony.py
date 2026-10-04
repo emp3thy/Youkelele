@@ -28,9 +28,8 @@ from youkelele.music.fill import (
 from youkelele.music.key import (
     TonicDecision,
     chroma_mean_for,
-    decide_tonic,
     estimate_key,
-    key_from_chords,
+    key_and_decision,
     key_text,
 )
 from youkelele.music.snap import snap_to_beats
@@ -55,7 +54,7 @@ def read_stems(paths: list[Path]) -> tuple[list[np.ndarray], int]:
 
 
 def _key_log(key: Key, decision: TonicDecision | None) -> str:
-    if key.method != "chords_stems" or decision is None:
+    if decision is None:
         return f"key {key_text(key)} (mix)"
     return f"key {key_text(key)} (chords+stems, margin {key.margin:.3f} by {decision.rule})"
 
@@ -106,10 +105,9 @@ class HarmonyStage(Stage):
         chorded = sum(e.label != "N" and not e.filled for e in events)
         # after the fill, so filled chords count
         mix_key = estimate_key(self._chroma(wav))
-        key = key_from_chords(
+        key, decision = key_and_decision(
             events, grid.bars, grid.sections, chroma.mean(loud, grid.bars), mix_key
         )
-        decision = decide_tonic(events, grid.bars, grid.sections)
         ctx.log(f"  {chorded} chord events, {_key_log(key, decision)}")
         ctx.log(f"  {filled} bars filled")
         save_model(out, Chords(key=key, events=events))
@@ -117,9 +115,7 @@ class HarmonyStage(Stage):
         ctx.note("key_margin", "none" if key.margin is None else f"{key.margin:.3f}")
         ctx.note(
             "tonic_pair_rule",
-            "none"
-            if key.method != "chords_stems" or decision is None
-            else f"{decision.pair_tonic} by {decision.pair_margin:.3f}",
+            "none" if decision is None else f"{decision.pair_tonic} by {decision.pair_margin:.3f}",
         )
         ctx.note("model", f"chord_cnn_lstm@{CHORD_MODEL_COMMIT}")
         prefixes = ",".join(h[:8] for h in CHORD_MODEL_CHECKPOINT_SHA256.values())
