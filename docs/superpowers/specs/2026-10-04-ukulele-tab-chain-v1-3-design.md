@@ -1,5 +1,7 @@
 # Youkelele tab chain, version 1.3: design
 
+Amended by version 1.4: `2026-10-04-ukulele-tab-chain-v1-4-design.md`.
+
 Date: 2026-10-04. Status: approved in conversation, awaiting written review. Amends `2026-10-03-ukulele-tab-chain-v1-2-design.md`. Evidence: `2026-10-03-v1-2-validation.md` ("What to improve next", items 1 and 2), `../research/2026-10-03-quality/README.md` (ranks 1, 2, 4 and 18), and two spikes run on this machine on 2026-10-04 (section 8).
 
 ## 1. Purpose
