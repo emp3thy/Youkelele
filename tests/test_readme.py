@@ -78,3 +78,10 @@ def test_readme_command_names_real_subcommand_and_flags(line):
         parser.parse_args(args)
     except SystemExit as exc:  # argparse exits on a bad value or a missing argument
         pytest.fail(f"{line!r} does not parse (exit {exc.code})")
+
+
+def test_readme_states_the_1_5_limitation_and_history():
+    text = _readme()
+    assert "splitting the onsets by pitch register" in text  # the two-guitar limitation, spec 4.2 wording
+    assert "Riff heard in this section" in text
+    assert "1.5" in text and "0.6.0" in text
