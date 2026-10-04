@@ -435,7 +435,7 @@ def test_confidence_floor_depends_on_the_grid(tmp_path, monkeypatch):
     sixteenths, _, _ = _run(tmp_path / "sixteenths", _grid([8]), _detector(_sixteenths(8)))
     assert sixteenths.slots_per_bar == 16
     assert sixteenths.patterns[0].explained == 1.0
-    assert sixteenths.patterns[0].uncertain  # 0.47 is under the sixteenth-grid floor of 0.55
+    assert sixteenths.patterns[0].uncertain  # 0.47 is under the sixteenth-grid floor of 0.53
 
 
 def test_strums_stage_skips_the_high_band_on_the_sixteenth_grid(tmp_path):
