@@ -40,7 +40,7 @@ Out: section truth and strum onset truth files. The harness accepts them in a la
 
 `explained_onsets(bars, vector) -> float` is the share of the section's detected strikes that fall on a slot the pattern strikes. It is the one measure that separates the boxes the validation called wrong (0.31 to 0.57) from the usable ones (0.69 to 1.00); mean Jaccard, today's `confidence`, does not.
 
-`uncertain = confidence < UNCERTAIN_BELOW (0.45) or explained < EXPLAINED_BELOW (0.6) or the section is shorter than four bars`. `bar_repeat` stays in `strums.json` for diagnostics and leaves the sheet.
+`uncertain = confidence < UNCERTAIN_BELOW or explained < EXPLAINED_BELOW (0.6) or the section is shorter than four bars`, where `UNCERTAIN_BELOW` is 0.45 on the eighth-note grid and `UNCERTAIN_BELOW_SIXTEENTH = 0.50` on the sixteenth grid. The second value was measured at validation: with the third-share vote, Pour Some Sugar On Me's two-guitar sections (16 slots) reached confidence 0.453 to 0.472 and would have printed as certain, while every certain section of the other sixteenth-grid song (Fame) sits at 0.625 or above; on the eighth grid the nearest good sections (Wet Leg verse 0.458, Summer of '69 verse 2 0.470) must stay certain, so one threshold for both grids does not exist. At 16 slots a dense two-part spray strikes many slots and inflates the mean Jaccard. Measured on two sixteenth-grid songs; recorded as such. `bar_repeat` stays in `strums.json` for diagnostics and leaves the sheet.
 
 Both changes can only add strikes, so the dense songs (Wet Leg at 8 slots, Fame at 16) cannot get sparser; the harness confirms it.
 
