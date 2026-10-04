@@ -1,4 +1,6 @@
 import json
+import os
+from pathlib import Path
 
 import pytest
 
@@ -205,6 +207,28 @@ def test_resolve_run_dir_collision_gets_suffix(tmp_path):
     assert resolve_run_dir(tmp_path, "https://youtu.be/ccccccccccc", fetch=_no_network) == (
         run_dir, None,
     )
+
+
+def test_resolve_run_dir_local_file_matches_other_spellings_of_its_path(tmp_path, monkeypatch):
+    runs = tmp_path / "runs"
+    clip = tmp_path / "music" / "clip.wav"
+    clip.parent.mkdir()
+    clip.write_bytes(b"x")
+    _write_manifest(runs / "clip", str(clip))
+    monkeypatch.chdir(clip.parent)
+    spellings = [
+        "clip.wav",
+        str(Path(".") / "clip.wav"),
+        str(tmp_path / "music" / ".." / "music" / "clip.wav"),
+        str(clip).upper() if os.name == "nt" else str(clip),
+    ]
+    for spelling in spellings:
+        assert resolve_run_dir(runs, spelling, fetch=_no_network) == (runs / "clip", None), spelling
+    # a manifest saved with a relative spelling is found from the absolute one too
+    _write_manifest(runs / "clip", "clip.wav")
+    assert resolve_run_dir(runs, str(clip), fetch=_no_network) == (runs / "clip", None)
+    # a different file with the same stem still gets its own folder
+    assert resolve_run_dir(runs, str(tmp_path / "clip.wav"), fetch=_no_network)[0] == runs / "clip-2"
 
 
 def test_resolve_run_dir_local_file_uses_stem(tmp_path):

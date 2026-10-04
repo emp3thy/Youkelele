@@ -277,6 +277,19 @@ def test_run_command_reports_metadata_failure_as_problem(tmp_path, capsys, monke
     assert seen == [] and list(tmp_path.iterdir()) == []
 
 
+def test_run_command_checks_stage_names_before_fetching(tmp_path, capsys, monkeypatch):
+    recording_chain(monkeypatch)
+    monkeypatch.setattr(commands, "fetch_metadata", _no_fetch)
+    url = "https://youtu.be/abcdefghijk"
+    assert main(["run", url, "--to", "nope", "--runs-dir", str(tmp_path)]) == 1
+    assert "unknown stage 'nope'" in capsys.readouterr().out
+    assert not tmp_path.exists() or list(tmp_path.iterdir()) == []
+
+
+def _no_fetch(url):
+    raise AssertionError("fetch must not be called")
+
+
 def test_run_command_names_the_folder_after_the_song(tmp_path, capsys, monkeypatch):
     recording_chain(monkeypatch)
     calls = []

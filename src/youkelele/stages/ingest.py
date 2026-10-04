@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from youkelele import jsonio
-from youkelele.layout import SOURCE_META_NAME
+from youkelele.layout import SOURCE_META_NAME, video_id_for
 from youkelele.models.ffmpeg import probe_duration, to_wav
 from youkelele.models.ytdl import DownloadResult, download_audio
 from youkelele.schemas import SourceInfo
@@ -52,8 +52,13 @@ class IngestStage(Stage):
                 ctx.log("downloading audio")
                 result = self._downloader(source, work)
                 self._converter(result.audio_path, wav)
-                # the details fetched to name the run folder, so folder and sheet agree
-                info = _fetched_details(ctx.layout.run_dir) or result.info
+                # the details fetched to name the run folder, so folder and sheet agree,
+                # when they are for this video
+                info = result.info
+                fetched = _fetched_details(ctx.layout.run_dir)
+                known_ids = {info.get("id"), video_id_for(source)} - {None}
+                if fetched is not None and str(fetched.get("id")) in known_ids:
+                    info = fetched
                 stem = result.audio_path.stem
                 video_id = info.get("id")
                 raw_title = info.get("title") or stem

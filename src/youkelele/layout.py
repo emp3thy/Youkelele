@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import unicodedata
 from collections.abc import Callable, Iterator, Sequence
@@ -76,11 +77,28 @@ def _manifest_video_id(manifest: Manifest) -> str | None:
     return manifest.video_id or video_id_for(manifest.source)
 
 
+def _local_key(source: str) -> str:
+    """One spelling for every way of writing a local file's path."""
+    try:
+        return os.path.normcase(str(Path(source).resolve()))
+    except (OSError, RuntimeError, ValueError):
+        return os.path.normcase(os.path.abspath(source))
+
+
+def same_source(a: str, b: str) -> bool:
+    """Whether two sources name the same thing: the same text, or the same local file."""
+    if a == b:
+        return True
+    if is_url(a) or is_url(b):
+        return False
+    return _local_key(a) == _local_key(b)
+
+
 def find_run_dir(runs_dir: Path, source: str) -> Path | None:
     """The saved run for a source: the same source first, then the same video id."""
     saved = list(_saved_runs(Path(runs_dir)))
     for folder, manifest in saved:
-        if manifest.source == source:
+        if same_source(manifest.source, source):
             return folder
     video_id = video_id_for(source)
     if video_id is not None:
@@ -114,7 +132,7 @@ def _taken(folder: Path, source: str, video_id: str | None) -> bool:
     except ArtifactError:
         return True
     if manifest is not None:
-        return manifest.source != source
+        return not same_source(manifest.source, source)
     meta = folder / SOURCE_META_NAME
     if meta.exists():
         # a fetch whose run never started: free again for the same video only
