@@ -157,7 +157,7 @@ def test_continuing_event_repeats_at_slot_0_without_new_diagram():
 
 
 def test_bar_without_chord_gets_nc():
-    score = _score(2, [(0, 1, "C"), (1, 2, "N")], {"C": C, "N": None})
+    score = _score(3, [(0, 1, "C"), (1, 2, "N"), (2, 3, "C")], {"C": C, "N": None})
     (nc,) = _chords(score, 1)
     assert (nc.name, nc.diagram, nc.start_slot, nc.slots) == ("N.C.", -1, 0, ISLAND)
 
@@ -450,3 +450,62 @@ def test_mid_bar_change_followed_by_a_bar_holding_it_is_not_a_phrase_change():
     chorus = score.sections[1]
     assert (chorus.bars[0].index, chorus.shifted) == (8, 0)
     assert [c.name for c in chorus.bars[0].chords] == ["D", "A"]
+
+
+def _trailing_score(n_bars, evs):
+    arranged = [
+        ArrangedChord(event=i, name=ev.label, shape=C) for i, ev in enumerate(evs) if ev.label != "N"
+    ]
+    return _build_events(n_bars, evs, arranged)
+
+
+def test_score_drops_trailing_bars_and_records_count():
+    score = _trailing_score(8, [_ev(0, 6, "C"), _ev(6, 8, "N")])
+    assert [b.index for b in score.sections[0].bars] == list(range(6))
+    assert score.trailing_bars_dropped == 2
+    assert not any(c.name == "N.C." for b in score.sections[0].bars for c in b.chords)
+
+
+def test_score_drops_nothing_when_the_music_runs_to_the_end():
+    score = _trailing_score(8, [_ev(0, 8, "C")])
+    assert len(score.sections[0].bars) == 8
+    assert score.trailing_bars_dropped == 0
+
+
+def test_score_drops_nothing_for_an_all_n_song():
+    score = _trailing_score(4, [_ev(0, 4, "N")])
+    assert len(score.sections[0].bars) == 4
+    assert score.trailing_bars_dropped == 0
+
+
+def test_score_trailing_drop_is_capped_to_leave_the_last_section_a_bar():
+    grid = _grid(10).model_copy(
+        update={
+            "sections": [
+                Section(label="Verse", start_bar=0, end_bar=8, confidence=0.5),
+                Section(label="Outro", start_bar=8, end_bar=10, confidence=0.5),
+            ]
+        }
+    )
+    evs = [_ev(0, 5, "C"), _ev(5, 10, "N")]
+    score = build_score(
+        _source(), grid,
+        Chords(key=Key(tonic="C", mode="major", confidence=0.9), events=evs),
+        _two_section_strums(),
+        Arrangement(
+            capo=0, transpose=0, tier="easy",
+            chords=[ArrangedChord(event=0, name="C", shape=C)], substitutions=[],
+        ),
+        UKULELE_TUNING, "Ukulele",
+    )
+    assert [len(s.bars) for s in score.sections] == [8, 1]
+    assert score.trailing_bars_dropped == 1
+
+
+def test_score_json_without_trailing_field_loads():
+    score = _trailing_score(8, [_ev(0, 6, "C"), _ev(6, 8, "N")])
+    data = score.model_dump(by_alias=True)
+    del data["trailing_bars_dropped"]
+    loaded = type(score).model_validate(data)
+    assert loaded.schema_version == 1
+    assert loaded.trailing_bars_dropped == 0

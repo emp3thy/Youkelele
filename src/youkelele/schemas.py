@@ -259,3 +259,4 @@ class Score(_Artifact):
     strums_uncertain: bool
     chord_diagrams: list[ChordDiagram]
     sections: list[ScoreSection]
+    trailing_bars_dropped: int = 0  # bars after the last chord left off the sheet

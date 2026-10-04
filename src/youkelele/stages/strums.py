@@ -29,7 +29,8 @@ from youkelele.music.onsets import (
     section_has_instrument,
 )
 from youkelele.music.recall import HIGH_BAND_FMIN, gate_section
-from youkelele.schemas import Grid, SectionPattern, Strums
+from youkelele.music.trailing import trailing_silent_bars
+from youkelele.schemas import Chords, Grid, SectionPattern, Strums
 from youkelele.stage import Stage, StageContext
 
 
@@ -74,6 +75,7 @@ class StrumsStage(Stage):
         "separate/stems/other.wav",
         "ingest/audio.wav",
         "grid/grid.json",
+        "harmony/chords.json",
     )
     produces = ("strums/strums.json",)
 
@@ -88,6 +90,7 @@ class StrumsStage(Stage):
         if sr_g != sr or sr_o != sr:
             raise ValueError(f"sample rates differ: guitar {sr_g}, other {sr_o}, mix {sr}")
         grid = load_model(ctx.input("grid/grid.json"), Grid)
+        chords = load_model(ctx.input("harmony/chords.json"), Chords)
         n = min(len(guitar), len(other), len(mix))
         guitar, other, mix = guitar[:n], other[:n], mix[:n]
 
@@ -97,10 +100,20 @@ class StrumsStage(Stage):
         slots = choose_slots_per_bar(today, bars, meter, grid.bpm)
         fit = grid_fit(today, bars, slots)
 
+        # bars after the last chord are silence or noise: the last section's vote and gate ignore them
+        last = len(grid.sections) - 1
+        last_sec = grid.sections[last]
+        drop = trailing_silent_bars(chords, bars, cap=last_sec.end_bar - last_sec.start_bar)
+        if drop:
+            ctx.log(f"  ignoring {drop} trailing bars after the last chord")
+
+        def analysed_end(i: int) -> int:
+            return grid.sections[i].end_bar - (drop if i == last else 0)
+
         has_instrument: list[bool] = []
-        for sec in grid.sections:
+        for i, sec in enumerate(grid.sections):
             a = int(round(bars[sec.start_bar].start * sr))
-            b = int(round(bars[sec.end_bar - 1].end * sr))
+            b = int(round(bars[analysed_end(i) - 1].end * sr))
             has_instrument.append(section_has_instrument(y[a:b], mix[a:b]))
 
         # recall gate (spec 4.3): per section, today's onsets or their union with the high band's
@@ -111,7 +124,7 @@ class StrumsStage(Stage):
             if not has_instrument[i]:
                 continue  # nothing is printed for it, so nothing is recovered
             section_onsets, added, decision = gate_section(
-                today, high, y, sr, bars[sec.start_bar:sec.end_bar], slots, fit, meter
+                today, high, y, sr, bars[sec.start_bar:analysed_end(i)], slots, fit, meter
             )
             if decision.accepted:
                 boosted[i] = True
@@ -140,8 +153,9 @@ class StrumsStage(Stage):
                     uncertain=True, no_instrument=True, inherited_from=None,
                 )
                 continue
-            rendered, confidence, repeat, explained = section_summary(classes[sec.start_bar:sec.end_bar], slots, meter)
-            long_enough = sec.end_bar - sec.start_bar >= MIN_SECTION_BARS
+            end = analysed_end(i)
+            rendered, confidence, repeat, explained = section_summary(classes[sec.start_bar:end], slots, meter)
+            long_enough = end - sec.start_bar >= MIN_SECTION_BARS
             patterns[i] = SectionPattern(
                 section=i, slots=rendered, confidence=confidence, bar_repeat=repeat,
                 uncertain=confidence < UNCERTAIN_BELOW or explained < EXPLAINED_BELOW or not long_enough,

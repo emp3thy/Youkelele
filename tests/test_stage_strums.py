@@ -12,7 +12,7 @@ from youkelele.layout import RunLayout
 from youkelele.music.onsets import Onsets
 from youkelele.music.recall import HIGH_BAND_FMIN
 from youkelele.options import RunOptions
-from youkelele.schemas import Bar, Grid, Meter, Section, Strums
+from youkelele.schemas import Bar, ChordEvent, Chords, Grid, Key, Meter, Section, Strums
 from youkelele.stage import StageContext
 import youkelele.stages.strums as strums_module
 from youkelele.stages.strums import StrumsStage
@@ -46,6 +46,18 @@ def _grid(section_bars: Sequence[int], numerator: int = 4) -> Grid:
     )
 
 
+def _chords(grid: Grid, *spans: tuple[int, int, str]) -> Chords:
+    """Chords over the grid; spans are (first bar, end bar, label), default one C over every bar."""
+    spans = spans or ((0, len(grid.bars), "C"),)
+    events = [
+        ChordEvent(
+            bar=a, beat=0, start=grid.bars[a].start, end=grid.bars[b - 1].end, label=lab, triad=lab, confidence=0.9
+        )
+        for a, b, lab in spans
+    ]
+    return Chords(key=Key(tonic="C", mode="major", confidence=0.9), events=events)
+
+
 def _tone(seconds: float, amp: float) -> np.ndarray:
     t = np.arange(int(seconds * SR)) / SR
     return amp * np.sin(2 * np.pi * 220.0 * t)
@@ -57,7 +69,8 @@ def _write(path: Path, mono: np.ndarray) -> None:
 
 
 def _ctx(
-    tmp_path, stage, grid: Grid, guitar: np.ndarray, other: np.ndarray, mix: np.ndarray, options=None, log=None
+    tmp_path, stage, grid: Grid, guitar: np.ndarray, other: np.ndarray, mix: np.ndarray, options=None, log=None,
+    chords: Chords | None = None,
 ):
     layout = RunLayout(tmp_path / "run", ["ingest", "separate", "grid", "harmony", "strums"])
     _write(layout.path("separate/stems/guitar.wav"), guitar)
@@ -66,6 +79,9 @@ def _ctx(
     grid_path = layout.path("grid/grid.json")
     grid_path.parent.mkdir(parents=True)
     save_model(grid_path, grid)
+    chords_path = layout.path("harmony/chords.json")
+    chords_path.parent.mkdir(parents=True)
+    save_model(chords_path, chords or _chords(grid))
     out = tmp_path / "out"
     out.mkdir()
     ctx = StageContext(layout, options or RunOptions(source="x.mp3"), out, log or (lambda m: None), stage)
@@ -106,13 +122,14 @@ def _island(n_bars: int) -> list[float]:
 
 
 def _run(
-    tmp_path, grid, detector, guitar_amp=0.0, other_amp=0.3, mix_amp=0.5, other=None, options=None, log=None
+    tmp_path, grid, detector, guitar_amp=0.0, other_amp=0.3, mix_amp=0.5, other=None, options=None, log=None,
+    chords=None,
 ):
     seconds = grid.bars[-1].end
     stage = StrumsStage(onset_detector=detector)
     other_wave = _tone(seconds, other_amp) if other is None else other
     ctx, out = _ctx(
-        tmp_path, stage, grid, _tone(seconds, guitar_amp), other_wave, _tone(seconds, mix_amp), options, log
+        tmp_path, stage, grid, _tone(seconds, guitar_amp), other_wave, _tone(seconds, mix_amp), options, log, chords
     )
     stage.run(ctx)
     return load_model(ctx.output("strums/strums.json"), Strums), ctx, out
@@ -345,3 +362,55 @@ def test_strums_stage_without_gain_leaves_recall_boost_off(tmp_path):
     strums, _, _ = _run(tmp_path, _grid([8]), _detector(_island(8), high=_island(8)))
     assert not strums.patterns[0].recall_boost
     assert all("".join(bar) == "D-DU-UDU" for bar in strums.bar_onsets)
+
+
+def test_strums_stage_requires_the_chords():
+    assert "harmony/chords.json" in StrumsStage.requires
+
+
+def _noisy_tail():
+    """Four bars of the island, then four bars of dense eighths that are not music."""
+    return (
+        [t for b in range(4) for t in _bar_times(b, ISLAND)]
+        + [t for b in range(4, 8) for t in _bar_times(b, range(8))]
+    )
+
+
+def test_strums_stage_ignores_trailing_bars_in_last_section(tmp_path):
+    grid = _grid([8])
+    lines: list[str] = []
+    strums, _, _ = _run(
+        tmp_path, grid, _detector(_noisy_tail()), log=lines.append,
+        chords=_chords(grid, (0, 4, "C"), (4, 8, "N")),
+    )
+    assert "".join(strums.patterns[0].slots) == "D-DU-UDU"
+    assert strums.patterns[0].confidence == 1.0
+    # the bar list still has one entry per grid bar, the trailing ones included
+    assert len(strums.bar_onsets) == 8
+    assert all("".join(bar) == "D-DU-UDU" for bar in strums.bar_onsets[:4])
+    assert all("".join(bar) == "DUDUDUDU" for bar in strums.bar_onsets[4:])
+    assert any("trailing" in line and "4" in line for line in lines)
+
+    # with the noise counted as music the pattern is different, so the drop is what protects it
+    noisy, _, _ = _run(tmp_path / "all", grid, _detector(_noisy_tail()))
+    assert "".join(noisy.patterns[0].slots) != "D-DU-UDU"
+
+
+def test_strums_stage_recall_gate_sees_only_the_music_bars(tmp_path, monkeypatch):
+    seen: list[int] = []
+    real = strums_module.gate_section
+
+    def spy(today, high, y, sr, bars, *args, **kwargs):
+        seen.append(len(bars))
+        return real(today, high, y, sr, bars, *args, **kwargs)
+
+    monkeypatch.setattr(strums_module, "gate_section", spy)
+    grid = _grid([8])
+    _run(tmp_path, grid, _detector(_noisy_tail()), chords=_chords(grid, (0, 4, "C"), (4, 8, "N")))
+    assert seen == [4]
+
+
+def test_strums_stage_logs_nothing_about_trailing_bars_when_none_dropped(tmp_path):
+    lines: list[str] = []
+    _run(tmp_path, _grid([8]), _detector(_island(8)), log=lines.append)
+    assert not any("trailing" in line for line in lines)
