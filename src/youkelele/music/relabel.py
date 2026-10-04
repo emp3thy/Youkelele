@@ -101,13 +101,30 @@ def _triad_strings(per_bar: list[set[str]]) -> list[str]:
     return ["+".join(sorted(t)) if t else "N" for t in per_bar]
 
 
-def _levenshtein(a: Sequence[str], b: Sequence[str]) -> int:
-    """Edit distance (insert, delete, substitute, each costing 1) between two sequences."""
-    previous = list(range(len(b) + 1))
+def _triad_set(token: str) -> frozenset[str]:
+    """The triads of a bar-triad token; `N` (no chord) is the empty set."""
+    return frozenset() if token == "N" else frozenset(token.split("+"))
+
+
+def _substitution_cost(x: frozenset[str], y: frozenset[str]) -> float:
+    """1 less the Jaccard similarity of two bars' triad sets; two chordless bars cost 0."""
+    union = x | y
+    return 1.0 - len(x & y) / len(union) if union else 0.0
+
+
+def _edit_distance(a: Sequence[frozenset[str]], b: Sequence[frozenset[str]]) -> float:
+    """Edit distance: insertion and deletion cost 1, substitution `_substitution_cost`."""
+    previous = [float(j) for j in range(len(b) + 1)]
     for i, x in enumerate(a, start=1):
-        current = [i]
+        current = [float(i)]
         for j, y in enumerate(b, start=1):
-            current.append(min(previous[j] + 1, current[j - 1] + 1, previous[j - 1] + (x != y)))
+            current.append(
+                min(
+                    previous[j] + 1.0,
+                    current[j - 1] + 1.0,
+                    previous[j - 1] + _substitution_cost(x, y),
+                )
+            )
         previous = current
     return previous[-1]
 
@@ -115,10 +132,11 @@ def _levenshtein(a: Sequence[str], b: Sequence[str]) -> int:
 def containment_distance(a: Sequence[str], b: Sequence[str]) -> float:
     """How far the shorter sequence is from lying inside the longer (research M2).
 
-    The edit distance of the shorter sequence against every window of its length in the
-    longer, the windows also shifted one bar before the start and one bar past the end
-    (the part of such a window outside the longer sequence is dropped, not padded), the
-    least of them divided by the shorter length. 0.0 when the shorter sequence is empty.
+    Each token is a bar's triad set (`N` the empty set). The edit distance of the shorter
+    sequence (length n) against every contiguous window of the longer of length n-1, n
+    and n+1 (clipped to the longer; windows under one bar skipped), with insertion and
+    deletion costing 1 and substitution 1 less the Jaccard similarity of the two bars'
+    triad sets; the least of them divided by n. 0.0 when the shorter sequence is empty.
     With two sequences of one length, each is tried as the shorter and the lower kept,
     so the distance does not depend on the order of the arguments.
     """
@@ -131,9 +149,13 @@ def _contained(short: Sequence[str], long: Sequence[str]) -> float:
     n, total = len(short), len(long)
     if n == 0:
         return 0.0
+    short_sets = [_triad_set(t) for t in short]
+    long_sets = [_triad_set(t) for t in long]
+    widths = sorted({min(w, total) for w in (n - 1, n, n + 1) if w >= 1})
     best = min(
-        _levenshtein(short, long[max(start, 0) : min(start + n, total)])
-        for start in range(-1, total - n + 2)
+        _edit_distance(short_sets, long_sets[start : start + width])
+        for width in widths
+        for start in range(total - width + 1)
     )
     return best / n
 

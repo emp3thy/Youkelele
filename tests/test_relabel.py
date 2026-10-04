@@ -233,6 +233,18 @@ def test_containment_distance_takes_the_shorter_either_way_and_uses_the_shifted_
     assert containment_distance(a, b) == containment_distance(b, a) == pytest.approx(1 / 3)
 
 
+def test_containment_distance_substitutes_bars_at_one_less_their_triad_jaccard():
+    assert containment_distance(["D"], ["D+G"]) == 0.5
+    assert containment_distance(["N"], ["D"]) == 1.0
+    assert containment_distance(["N"], ["N"]) == 0.0
+    assert containment_distance(["D+G", "Em"], ["G", "Em"]) == pytest.approx(0.25)
+
+
+def test_containment_distance_tries_windows_one_bar_longer_than_the_shorter():
+    # the n+1 window a b X c d holds a b c d with one insertion
+    assert containment_distance(["a", "b", "c", "d"], ["a", "b", "X", "c", "d"]) == 0.25
+
+
 def test_pair_novelty_is_the_share_of_fragment_chord_bars_on_a_triad_the_neighbour_lacks():
     grid = _grid([("verse", 4), ("verse", 4)])
     chords = _chords([C, G, "N", F] + [C, G, C, G])
