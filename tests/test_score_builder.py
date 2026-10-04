@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 from datetime import datetime
+from pathlib import Path
 
 import pytest
 
 from youkelele.music import score_builder
-from youkelele.music.score_builder import build_score
+from youkelele.music.score_builder import build_score, check_strums_match_grid
 from youkelele.profiles.ukulele import UKULELE_TUNING
 from youkelele.schemas import (
     ArrangedChord,
@@ -16,6 +17,7 @@ from youkelele.schemas import (
     Grid,
     Key,
     Meter,
+    PlannedSection,
     ScoreBar,
     Section,
     SectionPattern,
@@ -691,3 +693,124 @@ def test_score_bar_struck_flag_from_bar_onsets():
     # bar 3 has no bar_onsets entry at all: not struck
     assert [b.struck for b in score.sections[0].bars] == [False, True, True, False]
     assert ScoreBar(index=0, chords=[]).struck is False
+
+
+# the section plan (spec 3.3): the score follows the plan strums.json carries
+
+
+def _pattern(section=0, riff=False) -> SectionPattern:
+    return SectionPattern(
+        section=section, slots=list(ISLAND), confidence=0.8, bar_repeat=0.9, uncertain=False,
+        no_instrument=False, inherited_from=None, riff=riff,
+    )
+
+
+def _strums_with_plan(plan, patterns) -> Strums:
+    return Strums(
+        slots_per_bar=8, source="other_stem", source_ratio=0.6, grid_fit=0.9,
+        uncertain=False, patterns=patterns, bar_onsets=[], plan=plan,
+    )
+
+
+def _sectioned(n_bars, bounds) -> Grid:
+    """A grid of n_bars with sections at the given (start, end) bars, all labelled verse."""
+    return _grid(n_bars).model_copy(
+        update={
+            "sections": [
+                Section(label="verse", start_bar=a, end_bar=b, confidence=0.5) for a, b in bounds
+            ]
+        }
+    )
+
+
+_CHORDS = Chords(key=Key(tonic="C", mode="major", confidence=0.9), events=[])
+_ARRANGEMENT = Arrangement(capo=0, transpose=0, tier="easy", chords=[], substitutions=[])
+
+
+def _plan_score(grid, chords, strums, arrangement=_ARRANGEMENT):
+    return build_score(_source(), grid, chords, strums, arrangement, UKULELE_TUNING, "Ukulele")
+
+
+def test_build_score_follows_the_plan_and_records_members():
+    grid_two_sections = _sectioned(16, [(0, 8), (8, 16)])
+    strums = _strums_with_plan(
+        [PlannedSection(start_bar=0, end_bar=16, label="verse", members=[0, 1])], patterns=[_pattern()]
+    )
+    score = _plan_score(grid_two_sections, _CHORDS, strums)
+    assert len(score.sections) == 1 and score.sections[0].members == [0, 1]
+    assert [b.index for b in score.sections[0].bars] == list(range(16))
+    assert score.sections[0].label == "verse"
+
+
+def test_build_score_takes_the_label_from_the_plan():
+    grid = _sectioned(16, [(0, 8), (8, 16)])
+    plan = [
+        PlannedSection(start_bar=0, end_bar=8, label="intro", members=[0]),
+        PlannedSection(start_bar=8, end_bar=16, label="chorus", members=[1]),
+    ]
+    score = _plan_score(grid, _CHORDS, _strums_with_plan(plan, [_pattern(0), _pattern(1)]))
+    assert [s.label for s in score.sections] == ["intro", "chorus"]
+    assert [s.members for s in score.sections] == [[0], [1]]
+
+
+def _fixture(name: str) -> str:
+    return (Path(__file__).parent / "fixtures" / name).read_text(encoding="utf-8")
+
+
+def test_build_score_without_a_plan_uses_one_section_per_grid_section():
+    strums_14 = Strums.model_validate_json(_fixture("v14/strums.json"))
+    chords_for_fixture = Chords.model_validate_json(_fixture("v14/chords.json"))
+    assert strums_14.plan == []
+    n_bars, n_sections = len(strums_14.bar_onsets), len(strums_14.patterns)
+    cuts = [round(k * n_bars / n_sections) for k in range(n_sections + 1)]
+    grid_for_fixture = _sectioned(n_bars, list(zip(cuts, cuts[1:])))
+    score = _plan_score(grid_for_fixture, chords_for_fixture, strums_14)
+    assert [s.members for s in score.sections] == [[i] for i in range(len(grid_for_fixture.sections))]
+    assert not any(s.riff for s in score.sections)
+
+
+def test_check_strums_match_grid_compares_against_the_plan():
+    grid_two_sections = _sectioned(16, [(0, 8), (8, 16)])
+    strums = _strums_with_plan(
+        [PlannedSection(start_bar=0, end_bar=16, label="verse", members=[0, 1])],
+        patterns=[_pattern(0), _pattern(1)],
+    )
+    with pytest.raises(ValueError, match="re-run from strums"):
+        check_strums_match_grid(grid_two_sections, strums, _CHORDS)
+
+
+def test_check_strums_match_grid_rejects_a_plan_span_outside_the_grid():
+    grid = _sectioned(16, [(0, 8), (8, 16)])
+    strums = _strums_with_plan(
+        [PlannedSection(start_bar=0, end_bar=20, label="verse", members=[0, 1])], patterns=[_pattern()]
+    )
+    with pytest.raises(ValueError, match="re-run from strums"):
+        check_strums_match_grid(grid, strums, _CHORDS)
+
+
+def test_riff_flag_reaches_the_score_section():
+    grid_one_section = _grid(4)
+    strums = _strums_with_plan([], patterns=[_pattern(riff=True)])
+    score = _plan_score(grid_one_section, _CHORDS, strums)
+    assert score.sections[0].riff
+    assert not _plan_score(grid_one_section, _CHORDS, _strums()).sections[0].riff
+
+
+def test_trailing_drop_falls_on_the_last_planned_section_capped_by_the_grid_section():
+    # the grid's last section (14 to 16) is a fragment merged into the planned chorus; the drop
+    # is capped by that grid section's length (2 bars, so at most 1), as the strums stage caps it
+    grid = _sectioned(16, [(0, 8), (8, 14), (14, 16)])
+    plan = [
+        PlannedSection(start_bar=0, end_bar=8, label="verse", members=[0]),
+        PlannedSection(start_bar=8, end_bar=16, label="chorus", members=[1, 2]),
+    ]
+    chords = Chords(
+        key=Key(tonic="C", mode="major", confidence=0.9), events=[_ev(0, 13, "C"), _ev(13, 16, "N")]
+    )
+    arrangement = Arrangement(
+        capo=0, transpose=0, tier="easy",
+        chords=[ArrangedChord(event=0, name="C", shape=C)], substitutions=[],
+    )
+    score = _plan_score(grid, chords, _strums_with_plan(plan, [_pattern(0), _pattern(1)]), arrangement)
+    assert [b.index for b in score.sections[1].bars] == list(range(8, 15))
+    assert score.trailing_bars_dropped == 1
