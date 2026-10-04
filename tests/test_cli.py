@@ -211,3 +211,42 @@ def test_setup_reports_vendoring_error_in_one_line(monkeypatch, capsys):
 def test_module_entry_point_runs_main(module):
     proc = subprocess.run([sys.executable, "-m", module, "--version"], capture_output=True, text=True, timeout=60)
     assert proc.returncode == 0 and __version__ in proc.stdout
+
+
+def test_evaluate_truth_is_optional_and_compare_accepted():
+    from youkelele.cli import build_parser
+
+    args = build_parser().parse_args(["evaluate", "abc"])
+    assert args.truth is None and args.compare is None
+    args = build_parser().parse_args(["evaluate", "abc", "--compare", "def", "--truth", "t"])
+    assert args.compare == "def" and args.truth == "t"
+
+
+def test_run_parser_debug_defaults_to_none():
+    from youkelele.cli import build_parser
+
+    assert build_parser().parse_args(["run", "song.wav"]).debug is None
+    assert build_parser().parse_args(["run", "song.wav", "--debug"]).debug is True
+    assert build_parser().parse_args(["run", "song.wav", "--no-debug"]).debug is False
+
+
+def test_run_no_debug_switches_a_saved_debug_off(tmp_path, monkeypatch):
+    seen = recording_chain(monkeypatch)
+    runs = ["--runs-dir", str(tmp_path)]
+    assert main(["run", "song.wav", "--debug", *runs]) == 0
+    assert seen[-1].debug is True
+    assert main(["run", "song.wav", "--from", "1", "--no-debug", *runs]) == 0
+    assert seen[-1].debug is False
+    assert main(["run", "song.wav", "--from", "1", *runs]) == 0
+    assert seen[-1].debug is False  # the switch-off is saved like any other option
+
+
+def test_run_debug_flag_reaches_options_and_is_saved(tmp_path, monkeypatch):
+    seen = recording_chain(monkeypatch)
+    runs = ["--runs-dir", str(tmp_path)]
+    assert main(["run", "song.wav", *runs]) == 0
+    assert seen[-1].debug is False
+    assert main(["run", "song.wav", "--debug", *runs]) == 0
+    assert seen[-1].debug is True
+    assert main(["run", "song.wav", "--from", "1", *runs]) == 0
+    assert seen[-1].debug is True

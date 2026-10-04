@@ -46,6 +46,10 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--meter", default=None, help="N/D, such as 4/4")
     run.add_argument("--separator", choices=("demucs", "roformer-sw"), default=None)
     run.add_argument("--chord-model", choices=("cnn-lstm", "chordmini"), default=None)
+    run.add_argument(
+        "--debug", action=argparse.BooleanOptionalAction, default=None,
+        help="also export the strums stage onsets as an Audacity label track; --no-debug turns a saved --debug off",
+    )
     run.add_argument("--from", dest="start", default=None)
     run.add_argument("--to", dest="end", default=None)
     _add_runs_dir(run)
@@ -60,10 +64,12 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser("setup", help="fetch the chord model and ffmpeg")
 
     evaluate = subparsers.add_parser(
-        "evaluate", help="score a run against ground-truth annotations"
+        "evaluate",
+        help="report a run's diagnostics, score it against truth, or compare it with another run",
     )
     evaluate.add_argument("slug")
-    evaluate.add_argument("--truth", required=True)
+    evaluate.add_argument("--truth", default=None)
+    evaluate.add_argument("--compare", default=None, help="slug of a run to score against this one")
     _add_runs_dir(evaluate)
     return parser
 

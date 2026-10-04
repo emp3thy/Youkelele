@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import subprocess
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
+from youkelele.schemas import Grid
 from youkelele.vendoring import chord_model_dir
 
 
@@ -27,8 +28,33 @@ def parse_lab(path: Path) -> list[LabelSpan]:
     return spans
 
 
+def beat_positions(grid: Grid) -> list[tuple[float, int]]:
+    """Every gap-filled beat with its 1-based position in its bar.
+
+    A pickup bar with fewer beats than the meter's numerator numbers them from the end, so
+    a lone pickup beat is the last position and is not read as a downbeat. Every other bar,
+    including a short final one, numbers from 1.
+    """
+    numerator = grid.meter.numerator
+    out: list[tuple[float, int]] = []
+    for bar in grid.bars:
+        offset = max(numerator - len(bar.beats), 0) if bar.pickup else 0
+        for pos, beat_index in enumerate(bar.beats):
+            out.append((grid.beats[beat_index], offset + pos + 1))
+    return out
+
+
+def write_beat_file(beats: Sequence[tuple[float, int]], path: Path) -> None:
+    """Write `time<TAB>running index<TAB>position in bar`, the layout the model's BeatLabIO reads."""
+    lines = [f"{time:.4f}\t{i}\t{position}" for i, (time, position) in enumerate(beats, start=1)]
+    Path(path).write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
 def recognise_chords(
-    wav: Path, work_dir: Path, log: Callable[[str], None] = print
+    wav: Path,
+    work_dir: Path,
+    log: Callable[[str], None] = print,
+    beats: Sequence[tuple[float, int]] | None = None,
 ) -> list[LabelSpan]:
     import static_ffmpeg
 
@@ -36,8 +62,15 @@ def recognise_chords(
     # The child runs in the model directory, so hand it absolute paths.
     wav = Path(wav).resolve()
     out_lab = (Path(work_dir) / "out.lab").resolve()
+    if not beats:
+        argv = [sys.executable, "chord_recognition.py", str(wav), str(out_lab), "submission"]
+    else:
+        beats_lab = (Path(work_dir) / "beats.lab").resolve()
+        write_beat_file(beats, beats_lab)
+        driver = Path(__file__).with_name("chord_driver.py").resolve()
+        argv = [sys.executable, str(driver), str(wav), str(out_lab), "submission", str(beats_lab)]
     result = subprocess.run(
-        [sys.executable, "chord_recognition.py", str(wav), str(out_lab), "submission"],
+        argv,
         cwd=chord_model_dir(),
         capture_output=True,
         text=True,

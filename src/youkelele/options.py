@@ -16,3 +16,4 @@ class RunOptions(BaseModel):
     meter: str = "4/4"
     separator: Literal["demucs", "roformer-sw"] = "demucs"
     chord_model: Literal["cnn-lstm", "chordmini"] = "cnn-lstm"
+    debug: bool = False

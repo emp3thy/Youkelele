@@ -97,6 +97,15 @@ class Grid(_Artifact):
         return self
 
 
+class BeatsRaw(_Artifact):
+    """The beat detector's output before gap filling and octave normalisation."""
+
+    detected_beats: list[float]  # taken after the end-of-clip filter: a beat at the clip's end is not kept
+    detected_downbeats: list[float]  # likewise filtered
+    inserted_beats: list[float]  # added by fill_gaps
+    dropped_beats: list[float]  # removed by normalise_octave (empty unless the octave is halved)
+
+
 class Key(_Artifact):
     tonic: str
     mode: Literal["major", "minor"]
@@ -142,6 +151,8 @@ class SectionPattern(_Artifact):
     uncertain: bool
     no_instrument: bool
     inherited_from: int | None
+    explained: float = 0.0  # share of the section's detected strokes on struck slots
+    recall_boost: bool = False  # the recall gate kept high-band onsets for this section
 
 
 class Strums(_Artifact):
@@ -231,6 +242,7 @@ class ScoreSection(_Artifact):
     bar_repeat: float
     no_instrument: bool
     inherited_from: int | None = None
+    explained: float = 0.0
     shifted: int = 0  # bars the start moved from grid.json to sit in phase with the chords
 
 
@@ -247,3 +259,4 @@ class Score(_Artifact):
     strums_uncertain: bool
     chord_diagrams: list[ChordDiagram]
     sections: list[ScoreSection]
+    trailing_bars_dropped: int = 0  # bars after the last chord left off the sheet

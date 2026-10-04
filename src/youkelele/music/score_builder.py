@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from youkelele.music.phrase import NO_CHORD, aligned_starts, bar_change_bars
+from youkelele.music.trailing import trailing_silent_bars
 from youkelele.schemas import (
     ArrangedChord,
     Arrangement,
@@ -132,9 +133,18 @@ def build_score(
         [(s.start_bar, s.end_bar) for s in grid.sections], bar_change_bars(_bar_ends(starts))
     )
 
+    # the strums stage calls trailing_silent_bars the same way to leave these bars out of the
+    # last section's pattern; the two calls must stay in step
+    last = grid.sections[-1]
+    drop = trailing_silent_bars(chords, grid.bars, cap=last.end_bar - last.start_bar)
+
     sections: list[ScoreSection] = []
+    dropped = 0
     for k, (section, (start_bar, end_bar, shifted)) in enumerate(zip(grid.sections, aligned)):
         pattern = strums.patterns[k]
+        if k == len(grid.sections) - 1:
+            dropped = min(drop, max(end_bar - start_bar - 1, 0))  # phrase alignment may have shortened it
+            end_bar -= dropped
         bars: list[ScoreBar] = []
         for bar_idx in range(start_bar, end_bar):
             slot_map = starts[bar_idx]
@@ -168,6 +178,7 @@ def build_score(
                 label=section.label, pattern=list(pattern.slots), uncertain=pattern.uncertain,
                 bars=bars, bar_repeat=pattern.bar_repeat, no_instrument=pattern.no_instrument,
                 inherited_from=pattern.inherited_from, shifted=shifted,
+                explained=pattern.explained,
             )
         )
 
@@ -187,4 +198,5 @@ def build_score(
         strums_uncertain=strums.uncertain,
         chord_diagrams=diagrams,
         sections=sections,
+        trailing_bars_dropped=dropped,
     )

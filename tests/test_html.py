@@ -21,6 +21,7 @@ G = Shape(frets=[0, 2, 3, 2], fingers=[0, 1, 3, 2], base_fret=1, barres=[])
 
 def _section(
     label, n_bars, start, uncertain=False, no_instrument=False, pattern=ISLAND, inherited_from=None,
+    explained=0.85,
     names=("C",),
 ):
     bars = [
@@ -32,7 +33,7 @@ def _section(
     ]
     return ScoreSection(
         label=label, pattern=list(pattern), uncertain=uncertain, bars=bars, bar_repeat=0.875,
-        no_instrument=no_instrument, inherited_from=inherited_from,
+        no_instrument=no_instrument, inherited_from=inherited_from, explained=explained,
     )
 
 
@@ -113,7 +114,7 @@ def test_html_uncertain_section_has_heading_note_and_no_strum_box():
     html = render_html(score)
     verse = _section_html(html, "Verse 1")
     assert "(uncertain)" in verse
-    assert "Strum as played, 88% repeatable" in verse
+    assert "Strum heard in this section; covers 85% of detected strokes. Up and down follow the beat (uncertain)" in verse
     assert 'class="strum-box"' not in verse and "<svg" not in verse
     assert 'class="row"' in verse
     chorus = _section_html(html, "Chorus")
@@ -203,13 +204,52 @@ def test_html_shows_song_level_strum_uncertainty_note():
     assert STRUMS_NOTE not in render_html(_two_sections())
 
 
-def test_html_names_the_section_a_pattern_was_inherited_from():
+def test_html_inherited_section_names_its_donor_without_the_donors_covers_figure():
     score = _score(
-        [_section("Verse", 4, 0), _section("Pre-chorus", 2, 4, inherited_from=0)]
+        [
+            _section("Verse", 4, 0, explained=0.97),
+            _section("Pre-chorus", 2, 4, uncertain=True, inherited_from=0, explained=0.97),
+        ]
     )
     html = render_html(score)
-    assert html.count("inherited from") == 1
-    assert "inherited from Verse" in _section_html(html, "Pre-chorus")
+    pre = _section_html(html, "Pre-chorus")
+    assert "Strum as in Verse (uncertain)" in pre
+    assert "covers" not in pre  # 97% is the donor's figure, not this section's
+    assert "Strum heard" not in pre
+    assert 'class="strum-box"' not in pre  # uncertain, so no strip, as before
+    assert "covers 97% of detected strokes" in _section_html(html, "Verse")
+    assert "same as" not in html and "inherited from" not in html
+
+
+def test_html_prints_explained_not_repeatable():
+    html = render_html(_two_sections())
+    verse = _section_html(html, "Verse 1")
+    assert "Strum heard in this section; covers 85% of detected strokes. Up and down follow the beat" in verse
+    assert "(uncertain)" not in verse
+    assert "repeatable" not in html
+    assert "Strum as played" not in html
+
+
+def test_html_explained_percentage_truncates_not_rounds():
+    score = _score([_section("Verse 1", 2, 0, explained=0.859)])
+    assert "covers 85% of detected strokes" in render_html(score)
+    # never 60% beside the 60 percent threshold when the figure is under it
+    score = _score([_section("Verse 1", 2, 0, explained=0.597)])
+    assert "covers 59% of detected strokes" in render_html(score)
+    # 0.29 is 28.999... per cent in binary; the epsilon keeps it at 29
+    score = _score([_section("Verse 1", 2, 0, explained=0.29)])
+    assert "covers 29% of detected strokes" in render_html(score)
+
+
+def test_html_certain_section_without_explained_omits_the_covers_clause():
+    # a score.json written before version 1.3 has explained 0.0 on every section
+    html = render_html(_score([_section("Verse 1", 2, 0, explained=0.0)]))
+    verse = _section_html(html, "Verse 1")
+    assert "Strum heard in this section. Up and down follow the beat" in verse
+    assert "covers" not in verse
+    # an uncertain section keeps its 0% figure: nothing it heard is on the pattern
+    html = render_html(_score([_section("Verse 1", 2, 0, uncertain=True, explained=0.0)]))
+    assert "covers 0% of detected strokes" in html
 
 
 B = Shape(frets=[4, 3, 2, 2], fingers=[3, 2, 1, 1], base_fret=1, barres=[2])
@@ -309,3 +349,39 @@ def test_pickup_is_narrow_leading_cell_not_its_own_row():
     assert 'class="lead"' in rows[1] and "pickup" not in rows[1]
     verse_html = _section_html(html, "Verse")
     assert "has-pickup" not in verse_html and 'class="lead"' not in verse_html
+
+
+def test_html_prints_worked_example_under_each_box():
+    score = _score(
+        [
+            _section("Verse 1", 4, 0, names=("C", "G")),
+            _section("Pre-chorus", 2, 4, uncertain=True),
+            _section("Chorus", 4, 6),
+        ]
+    )
+    html = render_html(score)
+    boxed = [s for s in score.sections if not (s.uncertain or s.no_instrument)]
+    assert html.count('class="worked-example"') == len(boxed) == 2
+    verse = _section_html(html, "Verse 1")
+    box = verse[verse.index('class="strum-box"'):verse.index('class="grid')]
+    # the strip replaces the one-bar pattern box: one svg in the box, under the label line
+    assert box.count("<svg") == 1 and box.index('class="worked-example"') < box.index("<svg")
+    assert verse.index('class="strum-label"') < verse.index('class="strum-box"')
+    example = box[box.index('class="worked-example"'):]
+    assert re.findall(r'class="chord">([^<]*)<', example)[:2] == ["C", "G"]
+    assert 'class="worked-example"' not in _section_html(html, "Pre-chorus")
+
+
+def test_html_no_example_without_instrument():
+    score = _score([_section("Intro", 2, 0, no_instrument=True), _section("Verse", 2, 2)])
+    html = render_html(score)
+    assert 'class="worked-example"' not in _section_html(html, "Intro")
+    assert html.count('class="worked-example"') == 1
+
+
+def test_html_sixteen_slot_strip_uses_the_narrow_slot_width():
+    sixteenths = list("D-DU-UDU" * 2)
+    score = _score([_section("Verse", 2, 0, pattern=sixteenths)], slots_per_bar=16)
+    verse = _section_html(render_html(score), "Verse")
+    widths = re.findall(r'<svg [^>]*width="(\d+)"', verse)
+    assert widths == ["652"]  # 2 * 16 * 20 + 12, within the 688 px text width

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -196,6 +197,20 @@ def test_render_stage_sheet_has_blocks_passing_line_filled_note_and_pickup(tmp_p
     assert html.count('class="grid has-pickup"') == 1
     assert html.count('class="cell nc pickup"') == 1
     assert html.count("×4") == 3  # each 16-bar C G Am F verse is one row played four times
+
+
+
+def test_render_stage_sheet_has_a_worked_example_per_strum_box(tmp_path):
+    layout, out = _prepare(tmp_path, _realistic_120_bar_score())
+    stage = RenderStage(pdf_writer=lambda h, p: p.write_bytes(b"%PDF-fake"))
+    stage.run(StageContext(layout, RunOptions(source="x.mp3"), out, lambda m: None, stage))
+    html = (out / "sheet.html").read_text(encoding="utf-8")
+    assert html.count('class="strum-box"') == 9  # ten sections, the pre-chorus uncertain
+    assert html.count('class="worked-example"') == 9
+    # the bridge example shows its G / F bar, F on its own stroke
+    bridge = html[html.index("<h2>Bridge</h2>"):]
+    example = bridge[bridge.index('class="worked-example"'):bridge.index('class="grid')]
+    assert re.findall(r'class="chord">([^<]*)<', example) == ["Am", "G", "F"]
 
 
 def test_render_stage_declares_contract():

@@ -230,3 +230,44 @@ def test_quantise_bar_clamps_an_onset_at_the_upper_window_edge_to_the_last_slot(
     bar = Bar(index=0, start=1.406, end=3.483, beats=[0, 1, 2, 3])
     onsets = _onsets([3.3531874999999998])
     assert "".join(quantise_bar(onsets, np.zeros(1, dtype=bool), bar, 8)) == "-------S"
+
+
+def _sustained_tone_with_high_clicks(sr: int = 22050, seconds: float = 4.0):
+    """A ringing 200 Hz tone, low thumps on each beat and faint 4 kHz clicks each half beat.
+
+    The thumps set the full-band envelope's scale, so the default picker misses
+    the clicks, as it misses the re-attacks of a ringing distorted chord.
+    """
+    rng = np.random.default_rng(0)
+    t = np.arange(int(seconds * sr)) / sr
+    y = 0.5 * np.sin(2 * np.pi * 200.0 * t) + 0.003 * rng.standard_normal(len(t))
+    n_click = int(0.02 * sr)
+    tc = np.arange(n_click) / sr
+    click = 0.02 * np.sin(2 * np.pi * 4000.0 * tc) * np.exp(-tc / 0.005)
+    clicks = np.arange(0.25, seconds - 0.1, 0.5)
+    for c in clicks:
+        i = int(c * sr)
+        y[i:i + n_click] += click
+    n_thump = int(0.08 * sr)
+    freqs = np.fft.rfftfreq(n_thump, 1 / sr)
+    for c in np.arange(0.0, seconds - 0.1, 0.5):
+        spec = np.fft.rfft(rng.standard_normal(n_thump))
+        spec[freqs > 1500] = 0
+        thump = np.fft.irfft(spec, n_thump)
+        i = int(c * sr)
+        y[i:i + n_thump] += 0.5 * thump / np.abs(thump).max() * np.exp(-np.arange(n_thump) / sr / 0.02)
+    return y.astype(np.float32), sr, clicks
+
+
+def test_detect_onsets_high_band_finds_click_in_sustained_tone():
+    y, sr, clicks = _sustained_tone_with_high_clicks()
+
+    def found(onsets: Onsets) -> int:
+        return sum(1 for c in clicks if len(onsets.times) and np.min(np.abs(onsets.times - c)) < 0.05)
+
+    default = detect_onsets(y, sr)
+    high = detect_onsets(y, sr, fmin=3000.0)
+    assert found(default) <= 1
+    assert found(high) == len(clicks)
+    assert len(high.times) == len(high.centroid) == len(high.zcr)
+    assert np.all(high.centroid > 0)

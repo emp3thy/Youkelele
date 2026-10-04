@@ -1,6 +1,6 @@
 [project]
 name = "youkelele"
-version = "0.3.0"
+version = "0.4.0"
 description = "Turn a YouTube URL into a ukulele chord-and-strum sheet"
 readme = "README.md"
 requires-python = "==3.12.*"

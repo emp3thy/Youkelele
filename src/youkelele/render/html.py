@@ -10,7 +10,7 @@ from markupsafe import Markup
 from youkelele.render.diagrams import chord_diagram_svg
 from youkelele.music.arrange import _SHARPS
 from youkelele.render.grid import Cell, SectionGrid, fret_notation, section_grid
-from youkelele.render.strum_box import strum_pattern_svg
+from youkelele.render.strum_box import example_bars, slot_px, worked_example_svg
 from youkelele.schemas import Score
 
 _ENV = Environment(
@@ -58,6 +58,7 @@ def render_html(score: Score) -> str:
     )
     sections = []
     any_filled = False
+    per_slot = slot_px(score.slots_per_bar)
     for section in score.sections:
         source = section.inherited_from
         inherited = (
@@ -72,10 +73,20 @@ def render_html(score: Score) -> str:
             {
                 "label": section.label,
                 "uncertain": section.uncertain,
+                # truncated, not rounded, so 0.597 never prints as 60% beside a 60 percent threshold;
+                # the epsilon keeps 0.29 (0.28999... in binary) at 29
+                "explained_pct": int(section.explained * 100 + 1e-9),
+                # a pre-1.3 score.json has no explained figure: a certain section then omits it
+                "show_covers": section.explained > 0 or section.uncertain,
                 "no_instrument": section.no_instrument,
-                "repeat": f"{section.bar_repeat:.0%}",
                 "inherited_from": inherited,
-                "svg": Markup(strum_pattern_svg(section.pattern, score.meter)) if show_box else None,
+                "example": (
+                    Markup(
+                        worked_example_svg(section.pattern, example_bars(section), score.meter, per_slot)
+                    )
+                    if show_box
+                    else None
+                ),
                 "grid": grid,
             }
         )

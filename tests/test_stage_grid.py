@@ -66,6 +66,41 @@ def test_grid_stage_writes_valid_grid_with_fake_detector(tmp_path):
     assert "octave none" in log
 
 
+def test_grid_stage_writes_beats_raw_with_insertions(tmp_path):
+    from youkelele.schemas import BeatsRaw
+
+    base = _fake_detector(0.5, 4, 24.0)
+
+    def detect(wav: Path) -> BeatResult:
+        found = base(wav)
+        gone = found.beats[10]  # one missing beat; a bar start stays detected
+        return BeatResult(beats=[b for b in found.beats if b != gone], downbeats=found.downbeats)
+
+    stage = GridStage(detector=detect)
+    ctx, _ = _ctx(tmp_path, stage, RunOptions(source="x.mp3"), lambda p: write_click_track(p, 24.0, 120))
+    stage.run(ctx)
+    raw = load_model(ctx.output("grid/beats_raw.json"), BeatsRaw)
+    assert "grid/beats_raw.json" in GridStage.produces
+    assert raw.inserted_beats == [pytest.approx(5.0)]
+    assert raw.dropped_beats == []
+    assert 5.0 not in raw.detected_beats and len(raw.detected_beats) == 47
+    assert raw.detected_downbeats == [pytest.approx(i * 2.0) for i in range(12)]
+
+
+def test_grid_stage_beats_raw_lists_dropped_beats_on_halving(tmp_path):
+    from youkelele.schemas import BeatsRaw
+
+    stage = GridStage(detector=_fake_detector(0.25, 8, 24.0))  # a doubled-up detector
+    options = RunOptions(source="x.mp3", beat_octave="half")
+    ctx, _ = _ctx(tmp_path, stage, options, lambda p: write_click_track(p, 24.0, 120))
+    stage.run(ctx)
+    raw = load_model(ctx.output("grid/beats_raw.json"), BeatsRaw)
+    grid = load_model(ctx.output("grid/grid.json"), Grid)
+    assert len(raw.detected_beats) == 96 and raw.inserted_beats == []
+    assert len(raw.dropped_beats) == 96 - len(grid.beats) > 0
+    assert not set(raw.dropped_beats) & set(grid.beats)
+
+
 def test_grid_stage_sections_k_override(tmp_path):
     stage = GridStage(detector=_fake_detector(0.5, 4, 32.0))
     options = RunOptions(source="x.mp3", sections_k=2)
