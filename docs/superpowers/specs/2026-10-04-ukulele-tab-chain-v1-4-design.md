@@ -58,6 +58,8 @@ A run folder is the cleaned title as a slug: `clean_title` lowercased, ASCII-fol
 
 The owner's daughter plays bass, does not code, and wants to try the tool. Today that needs `uv`, `git` on PATH, three commands and a terminal. Version 1.4 makes it: download, double-click install, double-click run, paste a link, the sheet opens.
 
+**Assume nothing is installed.** The install script presumes only Windows 10 or 11 with an internet connection. Python is not a prerequisite: `uv` downloads and manages its own Python 3.12 for the project (`uv sync` fetches it when none is present, since `pyproject.toml` pins the version). Git is not a prerequisite once `setup` fetches the model as a zip. ffmpeg arrives through the `static-ffmpeg` package during `setup`. Chromium for the PDF is installed by the script through Playwright. The model weights (separation, beats, chords) download on first use. The script checks each of these in turn and installs only what is missing, so it also works on a machine that already has some of them.
+
 **No git.** `youkelele setup` fetches the chord model as the zip archive of the pinned commit (`https://github.com/music-x-lab/ISMIR2019-Large-Vocabulary-Chord-Recognition/archive/<commit>.zip`), unpacks it into a sibling folder and renames it into place, as the clone does today, then runs the existing checkpoint verification and numpy patch. A folder already cloned by an earlier version is accepted as it is. `git` is no longer needed anywhere.
 
 **Windows scripts at the repository root.**
