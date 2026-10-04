@@ -47,6 +47,7 @@ class SectionDiag:
     riff_entropy: float | None = None
     riff_single_share: float | None = None
     riff_onsets: int | None = None  # the detector's own onsets the riff pair rests on
+    analysed_start: int = 0  # the first bar of the longest member, the bars the figures are read over
 
 
 def _label_text(d: SectionDiag) -> str:
@@ -266,6 +267,7 @@ def _section_diags(grid: Grid, strums: Strums, chords: Chords) -> list[SectionDi
                 riff_entropy=pattern.riff_entropy,
                 riff_single_share=pattern.riff_single_share,
                 riff_onsets=pattern.riff_onsets,
+                analysed_start=start,
             )
         )
     return diags
@@ -358,6 +360,36 @@ def _segmentation_scores(
     )
 
 
+def _grid_shape(grid: Grid) -> tuple[int, list[tuple[int, int]]]:
+    """The bar count and the grid sections' boundaries: what makes bar numbers comparable."""
+    return len(grid.bars), [(s.start_bar, s.end_bar) for s in grid.sections]
+
+
+def _pair_sections(
+    left: list[SectionDiag], right: list[SectionDiag], grid_a: Grid, grid_b: Grid, notes: list[str]
+) -> list[tuple[SectionDiag | None, SectionDiag | None]]:
+    """Each planned section of A with B's planned section read over the same longest member.
+
+    On one grid a planned section is identified by its longest member's first bar, so a
+    section merged in one run meets the counterpart of the member its figures come from,
+    and a section with no counterpart is paired with None. When the grids differ (bar
+    count or section boundaries) bar numbers mean different things, so the sections are
+    paired by position and a note says so.
+    """
+    if _grid_shape(grid_a) != _grid_shape(grid_b):
+        counts = (len(left), len(right))
+        if all(counts):
+            notes.append(
+                f"section counts differ ({counts[0]} vs {counts[1]}); pairs matched by position"
+                if counts[0] != counts[1]
+                else "grid.json differs between the runs; pairs matched by position"
+            )
+        return list(zip_longest(left, right))
+    by_start_a = {d.analysed_start: d for d in left}
+    by_start_b = {d.analysed_start: d for d in right}
+    return [(by_start_a.get(s), by_start_b.get(s)) for s in sorted(by_start_a.keys() | by_start_b.keys())]
+
+
 def compare_runs(a: Path, b: Path) -> Comparison:
     """Score run `b` against run `a` (the reference); neither needs truth."""
     a, b = Path(a), Path(b)
@@ -380,10 +412,11 @@ def compare_runs(a: Path, b: Path) -> Comparison:
             f"slots per bar differ ({strums_a.slots_per_bar} vs {strums_b.slots_per_bar}); "
             "strum figures are not directly comparable"
         )
-    counts = (len(report_a.sections), len(report_b.sections))
-    if counts[0] != counts[1] and all(counts):
-        notes.append(f"section counts differ ({counts[0]} vs {counts[1]}); pairs matched by position")
-    pairs = list(zip_longest(report_a.sections, report_b.sections))
+    pairs = _pair_sections(
+        report_a.sections, report_b.sections,
+        load_model(a / "02_grid" / "grid.json", Grid), load_model(b / "02_grid" / "grid.json", Grid),
+        notes,
+    )
     deltas = [
         SectionDelta(
             right.strikes_per_bar - left.strikes_per_bar,
@@ -493,7 +526,10 @@ def format_comparison(c: Comparison) -> str:
         f"seg {_num(c.seg, '.3f')}  majmin {_num(c.majmin, '.3f')}"
     ]
     if c.sections:
-        lines.append("  sections: strikes per bar/explained/rests; unc = uncertain, boost = recall boost")
+        lines.append(
+            "  sections: strikes per bar/explained/rests; unc = uncertain, boost = recall boost, "
+            "p = the structure test's chance p, riff = a riff section"
+        )
     for i, (left, right) in enumerate(c.sections):
         side = left if left is not None else right
         delta = c.deltas[i] if i < len(c.deltas) else None

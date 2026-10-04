@@ -438,7 +438,10 @@ def test_compare_reports_section_deltas_and_flags(tmp_path):
     assert "+1.0/-33.3pp/+0.0pp" in text
     assert "+2.0/+0.0pp/-50.0pp" in text
     legend, verse_line, chorus_line = text.splitlines()[1:4]
-    assert legend == "  sections: strikes per bar/explained/rests; unc = uncertain, boost = recall boost"
+    assert legend == (
+        "  sections: strikes per bar/explained/rests; unc = uncertain, boost = recall boost, "
+        "p = the structure test's chance p, riff = a riff section"
+    )
     assert text.count("strikes per bar/explained/rests") == 1  # the legend is printed once
     assert "25.0% unc" in chorus_line and "% unc" not in verse_line
 
@@ -671,6 +674,62 @@ def test_comparison_cell_shows_p_and_riff_and_flags_a_change(tmp_path):
     assert [delta.changed for delta in same.deltas] == [False]
     certain = compare_runs(a, _plan_run(tmp_path / "c", uncertain=True))
     assert [delta.changed for delta in certain.deltas] == [True]
+
+
+def _short_then_long_grid() -> Grid:
+    """Two verses: bars 0-1 and 1-4, so the second is a merged plan's longest member."""
+    return _grid().model_copy(
+        update={
+            "sections": [
+                Section(label="verse", start_bar=0, end_bar=1, confidence=0.5),
+                Section(label="verse", start_bar=1, end_bar=4, confidence=0.5),
+            ]
+        }
+    )
+
+
+def test_compare_pairs_a_merged_section_with_its_longest_members_counterpart(tmp_path):
+    # run A merged both grid sections into one verse, read over bars 1-4; run B kept them apart
+    merged = _strums(
+        [["D", "-", "U", "-"]] * 4,
+        [_pattern(0, ["D", "-", "U", "-"], riff=True, uncertain=False)],
+        plan=[PlannedSection(start_bar=0, end_bar=4, label="verse", members=[0, 1])],
+    )
+    apart = _strums(
+        [["D", "-", "U", "-"]] * 4,
+        [_pattern(0, ["D", "-", "-", "-"], riff=False, uncertain=True),
+         _pattern(1, ["D", "-", "U", "-"], riff=True, uncertain=False)],
+        plan=[
+            PlannedSection(start_bar=0, end_bar=1, label="verse", members=[0]),
+            PlannedSection(start_bar=1, end_bar=4, label="verse", members=[1]),
+        ],
+    )
+    a = _run_with(tmp_path / "a", grid=_short_then_long_grid(), strums=merged)
+    b = _run_with(tmp_path / "b", grid=_short_then_long_grid(), strums=apart)
+    c = compare_runs(a, b)
+    assert [(left and left.index, right and right.index) for left, right in c.sections] == [(None, 0), (0, 1)]
+    assert c.deltas[0] is None
+    assert not c.deltas[1].riff_changed and not c.deltas[1].certainty_changed
+    assert not c.deltas[1].changed
+    assert not any("position" in note for note in c.notes)
+    # by position the merged verse would meet B's one-bar verse: both marks would flip
+    text = format_comparison(c)
+    assert "riff flag changed" not in text and "certainty changed" not in text
+
+
+def test_compare_falls_back_to_position_when_the_grids_differ(tmp_path):
+    strums = _strums(
+        [["D", "-", "U", "-"]] * 4,
+        [_pattern(0, ["D", "-", "U", "-"]), _pattern(1, ["D", "-", "U", "-"])],
+    )
+    a = _run_with(tmp_path / "a", grid=_sectioned_grid(), strums=strums)
+    b = _run_with(tmp_path / "b", grid=_short_then_long_grid(), strums=strums)
+    c = compare_runs(a, b)
+    assert [(left.index, right.index) for left, right in c.sections] == [(0, 0), (1, 1)]
+    assert any("pairs matched by position" in note for note in c.notes)
+    fewer = _strums([["D", "-", "U", "-"]] * 4, [_pattern(0, ["D", "-", "U", "-"])])
+    one = _run_with(tmp_path / "one", grid=_grid(), strums=fewer)
+    assert "section counts differ (2 vs 1); pairs matched by position" in compare_runs(a, one).notes
 
 
 def test_evaluate_prints_the_plan_section_line_and_the_votes(tmp_path):
