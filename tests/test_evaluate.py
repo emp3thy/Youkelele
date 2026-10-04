@@ -368,3 +368,71 @@ def test_cli_evaluate_compare_missing_run_returns_1(tmp_path, capsys):
     code = main(["evaluate", "a", "--compare", "nope", "--runs-dir", str(tmp_path / "runs")])
     assert code == 1
     assert len(capsys.readouterr().out.strip().splitlines()) == 1
+
+
+def test_compare_reports_section_deltas_and_flags(tmp_path):
+    a = _run_with(
+        tmp_path / "a", grid=_sectioned_grid(),
+        strums=_strums(
+            [["D", "-", "U", "-"]] * 2 + [["D", "-", "-", "-"]] * 2,
+            [_pattern(0, ["D", "-", "U", "-"]), _pattern(1, ["D", "-", "-", "-"])],
+        ),
+    )
+    b = _run_with(
+        tmp_path / "b", grid=_sectioned_grid(),
+        strums=_strums(
+            [["D", "-", "U", "U"]] * 2 + [["D", "D", "U", "-"]] * 2,
+            [_pattern(0, ["D", "-", "U", "-"]),
+             _pattern(1, ["D", "D", "U", "-"], uncertain=True)],
+        ),
+    )
+    comparison = compare_runs(a, b)
+    verse, chorus = comparison.deltas
+    assert verse.strikes_per_bar == 1.0
+    assert abs(verse.explained - (4 / 6 - 1.0)) < 1e-9
+    assert verse.rest_share == 0.0
+    assert chorus.strikes_per_bar == 2.0
+    assert chorus.explained == 0.0
+    assert chorus.rest_share == -0.5
+    text = format_comparison(comparison)
+    assert "+1.0/-33.3pp/+0.0pp" in text
+    assert "+2.0/+0.0pp/-50.0pp" in text
+    verse_line, chorus_line = text.splitlines()[1:3]
+    assert "25.0% unc" in chorus_line and "% unc" not in verse_line
+
+
+def test_compare_delta_is_none_when_a_side_is_missing(tmp_path):
+    a = _run_with(tmp_path / "a")
+    b = _run_with(tmp_path / "b", strums=_strums([["-"] * 4] * 4, [_pattern(0, ["-"] * 4)]))
+    comparison = compare_runs(a, b)
+    assert comparison.deltas == [None]
+    assert "B-A n/a" in format_comparison(comparison)
+
+
+def test_compare_pins_run_a_as_reference(tmp_path):
+    one = Chords(
+        key=Key(tonic="C", mode="major", confidence=0.9),
+        events=[_event(0, 0, 0.0, 8.0, "C:maj")],
+    )
+    coarse = _run_with(tmp_path / "coarse", chords=one)
+    fine = _run_with(tmp_path / "fine")  # four two-second chords
+    coarse_as_ref = compare_runs(coarse, fine)
+    fine_as_ref = compare_runs(fine, coarse)
+    assert coarse_as_ref.overseg < 1.0 and coarse_as_ref.underseg == 1.0
+    assert fine_as_ref.underseg < 1.0 and fine_as_ref.overseg == 1.0
+    assert coarse_as_ref.majmin == 0.25 and fine_as_ref.majmin == 0.25
+
+
+def test_evaluate_with_empty_truth_dir_prints_na_truth_lines(tmp_path):
+    truth = tmp_path / "truth"
+    truth.mkdir()
+    report = evaluate_run(_run_with(tmp_path / "run"), truth)
+    lines = format_report(report).splitlines()
+    assert "Changes on bar: 100.0%" in lines
+    assert lines[-5:] == [
+        "Beat F-measure: n/a",
+        "Downbeat F-measure: n/a",
+        "Chord root: n/a",
+        "Chord major/minor: n/a",
+        "Chord triads: n/a",
+    ]

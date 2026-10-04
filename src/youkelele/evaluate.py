@@ -43,7 +43,7 @@ class Report:
     chord_root: float | None
     chord_majmin: float | None
     chord_triads: float | None
-    # truth-free diagnostics (filled only when no truth directory is given)
+    # truth-free diagnostics: always filled, whether or not a truth directory is given
     n_share: float | None = None
     all_n_bars: int | None = None
     filled_bars: int | None = None
@@ -52,6 +52,16 @@ class Report:
     key_confidence: float | None = None
     boxes_mostly_rests: int | None = None
     sections: list[SectionDiag] = field(default_factory=list)
+    truth_given: bool = False  # a truth directory was supplied: print the truth lines (n/a if absent)
+
+
+@dataclass
+class SectionDelta:
+    """B minus A for one section pair."""
+
+    strikes_per_bar: float
+    explained: float
+    rest_share: float
 
 
 @dataclass
@@ -62,6 +72,7 @@ class Comparison:
     majmin: float | None
     sections: list[tuple[SectionDiag | None, SectionDiag | None]]
     notes: list[str]
+    deltas: list[SectionDelta | None] = field(default_factory=list)  # one per pair; None if a side is missing
 
 
 def _read_beats(path: Path) -> tuple[np.ndarray, np.ndarray]:
@@ -222,6 +233,7 @@ def evaluate_run(run_dir: Path, truth_dir: Path | None = None) -> Report:
     if truth_dir is None:
         return report
     truth_dir = Path(truth_dir)
+    report.truth_given = True
     grid = load_model(run_dir / "02_grid" / "grid.json", Grid)
     chords = load_model(run_dir / "03_harmony" / "chords.json", Chords)
 
@@ -299,7 +311,17 @@ def compare_runs(a: Path, b: Path) -> Comparison:
     if counts[0] != counts[1] and all(counts):
         notes.append(f"section counts differ ({counts[0]} vs {counts[1]}); pairs matched by position")
     pairs = list(zip_longest(report_a.sections, report_b.sections))
-    return Comparison(overseg, underseg, seg, majmin, pairs, notes)
+    deltas = [
+        SectionDelta(
+            right.strikes_per_bar - left.strikes_per_bar,
+            right.explained - left.explained,
+            right.rest_share - left.rest_share,
+        )
+        if left is not None and right is not None
+        else None
+        for left, right in pairs
+    ]
+    return Comparison(overseg, underseg, seg, majmin, pairs, notes, deltas)
 
 
 def _pct(value: float | None) -> str:
@@ -330,7 +352,7 @@ def format_report(r: Report) -> str:
     ]
     lines.extend(_section_line(d) for d in r.sections)
     truth = [r.beat_f, r.downbeat_f, r.chord_root, r.chord_majmin, r.chord_triads]
-    if any(value is not None for value in truth):
+    if r.truth_given or any(value is not None for value in truth):
         lines.extend(
             [
                 f"Beat F-measure: {_pct(r.beat_f)}",
@@ -346,7 +368,16 @@ def format_report(r: Report) -> str:
 def _cell(d: SectionDiag | None) -> str:
     if d is None:
         return "n/a"
-    return f"{d.strikes_per_bar:.1f}/{_pct(d.explained)}/{_pct(d.rest_share)}"
+    flags = (" unc" if d.uncertain else "") + (" boost" if d.recall_boost else "")
+    return f"{d.strikes_per_bar:.1f}/{_pct(d.explained)}/{_pct(d.rest_share)}{flags}"
+
+
+def _delta(d: SectionDelta | None) -> str:
+    if d is None:
+        return "n/a"
+    return (
+        f"{d.strikes_per_bar:+.1f}/{d.explained * 100:+.1f}pp/{d.rest_share * 100:+.1f}pp"
+    )
 
 
 def format_comparison(c: Comparison) -> str:
@@ -354,11 +385,12 @@ def format_comparison(c: Comparison) -> str:
         f"overseg {_num(c.overseg, '.3f')}  underseg {_num(c.underseg, '.3f')}  "
         f"seg {_num(c.seg, '.3f')}  majmin {_num(c.majmin, '.3f')}"
     ]
-    for left, right in c.sections:
+    for i, (left, right) in enumerate(c.sections):
         side = left if left is not None else right
+        delta = c.deltas[i] if i < len(c.deltas) else None
         lines.append(
-            f"  {side.index} {side.label}: A {_cell(left)}  B {_cell(right)}"
-            "  (strikes per bar/explained/rests)"
+            f"  {side.index} {side.label}: A {_cell(left)}  B {_cell(right)}  B-A {_delta(delta)}"
+            "  (strikes per bar/explained/rests; unc = uncertain, boost = recall boost)"
         )
     lines.extend(f"note: {note}" for note in c.notes)
     return "\n".join(lines)
