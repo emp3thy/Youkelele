@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 from datetime import datetime
+from pathlib import Path
 
 import pytest
 
 from youkelele.music import score_builder
-from youkelele.music.score_builder import build_score
+from youkelele.music.score_builder import build_score, check_strums_match_grid
 from youkelele.profiles.ukulele import UKULELE_TUNING
 from youkelele.schemas import (
     ArrangedChord,
@@ -16,6 +17,7 @@ from youkelele.schemas import (
     Grid,
     Key,
     Meter,
+    PlannedSection,
     ScoreBar,
     Section,
     SectionPattern,
@@ -691,3 +693,201 @@ def test_score_bar_struck_flag_from_bar_onsets():
     # bar 3 has no bar_onsets entry at all: not struck
     assert [b.struck for b in score.sections[0].bars] == [False, True, True, False]
     assert ScoreBar(index=0, chords=[]).struck is False
+
+
+# the section plan (spec 3.3): the score follows the plan strums.json carries
+
+
+def _pattern(section=0, riff=False) -> SectionPattern:
+    return SectionPattern(
+        section=section, slots=list(ISLAND), confidence=0.8, bar_repeat=0.9, uncertain=False,
+        no_instrument=False, inherited_from=None, riff=riff,
+    )
+
+
+def _strums_with_plan(plan, patterns) -> Strums:
+    return Strums(
+        slots_per_bar=8, source="other_stem", source_ratio=0.6, grid_fit=0.9,
+        uncertain=False, patterns=patterns, bar_onsets=[], plan=plan,
+    )
+
+
+def _sectioned(n_bars, bounds, labels=None) -> Grid:
+    """A grid of n_bars with sections at the given (start, end) bars, labelled verse by default."""
+    labels = labels or ["verse"] * len(bounds)
+    return _grid(n_bars).model_copy(
+        update={
+            "sections": [
+                Section(label=label, start_bar=a, end_bar=b, confidence=0.5)
+                for (a, b), label in zip(bounds, labels, strict=True)
+            ]
+        }
+    )
+
+
+_THREE = [(0, 8), (8, 14), (14, 16)]  # a verse, then a chorus whose last two bars are a fragment
+_THREE_LABELS = ["verse", "chorus", "chorus"]
+_CHORDS = Chords(key=Key(tonic="C", mode="major", confidence=0.9), events=[])
+_ARRANGEMENT = Arrangement(capo=0, transpose=0, tier="easy", chords=[], substitutions=[])
+
+
+def _plan_score(grid, chords, strums, arrangement=_ARRANGEMENT):
+    return build_score(_source(), grid, chords, strums, arrangement, UKULELE_TUNING, "Ukulele")
+
+
+def test_build_score_follows_the_plan_and_records_members():
+    # a six-bar verse fragment after a ten-bar verse on the same (no) chords: the plan merges them
+    grid_two_sections = _sectioned(16, [(0, 10), (10, 16)])
+    strums = _strums_with_plan(
+        [PlannedSection(start_bar=0, end_bar=16, label="verse", members=[0, 1])], patterns=[_pattern()]
+    )
+    score = _plan_score(grid_two_sections, _CHORDS, strums)
+    assert len(score.sections) == 1 and score.sections[0].members == [0, 1]
+    assert [b.index for b in score.sections[0].bars] == list(range(16))
+    assert score.sections[0].label == "verse"
+
+
+def test_build_score_takes_the_label_from_the_plan():
+    # grid.json calls all three verse; the middle one plays chords no other plays, so the plan
+    # calls it the bridge, and the score follows the plan
+    grid = _sectioned(24, [(0, 8), (8, 16), (16, 24)])
+    chords = Chords(
+        key=Key(tonic="C", mode="major", confidence=0.9),
+        events=[_ev(0, 8, "C"), _ev(8, 16, "F#"), _ev(16, 24, "C")],
+    )
+    plan = [
+        PlannedSection(start_bar=0, end_bar=8, label="verse", members=[0]),
+        PlannedSection(start_bar=8, end_bar=16, label="bridge", members=[1]),
+        PlannedSection(start_bar=16, end_bar=24, label="verse", members=[2]),
+    ]
+    score = _plan_score(grid, chords, _strums_with_plan(plan, [_pattern(0), _pattern(1), _pattern(2)]))
+    assert [s.label for s in score.sections] == ["verse", "bridge", "verse"]
+    assert [s.members for s in score.sections] == [[0], [1], [2]]
+
+
+def _fixture(name: str) -> str:
+    return (Path(__file__).parent / "fixtures" / name).read_text(encoding="utf-8")
+
+
+def test_build_score_without_a_plan_uses_one_section_per_grid_section():
+    strums_14 = Strums.model_validate_json(_fixture("v14/strums.json"))
+    chords_for_fixture = Chords.model_validate_json(_fixture("v14/chords.json"))
+    assert strums_14.plan == []
+    n_bars, n_sections = len(strums_14.bar_onsets), len(strums_14.patterns)
+    cuts = [round(k * n_bars / n_sections) for k in range(n_sections + 1)]
+    grid_for_fixture = _sectioned(n_bars, list(zip(cuts, cuts[1:])))
+    score = _plan_score(grid_for_fixture, chords_for_fixture, strums_14)
+    assert [s.members for s in score.sections] == [[i] for i in range(len(grid_for_fixture.sections))]
+    assert not any(s.riff for s in score.sections)
+
+
+def test_check_strums_match_grid_compares_against_the_plan():
+    grid_two_sections = _sectioned(16, [(0, 8), (8, 16)])
+    strums = _strums_with_plan(
+        [PlannedSection(start_bar=0, end_bar=16, label="verse", members=[0, 1])],
+        patterns=[_pattern(0), _pattern(1)],
+    )
+    with pytest.raises(ValueError, match="re-run from strums"):
+        check_strums_match_grid(grid_two_sections, strums, _CHORDS)
+
+
+def test_check_strums_match_grid_rejects_a_plan_span_outside_the_grid():
+    grid = _sectioned(16, [(0, 8), (8, 16)])
+    strums = _strums_with_plan(
+        [PlannedSection(start_bar=0, end_bar=20, label="verse", members=[0, 1])], patterns=[_pattern()]
+    )
+    with pytest.raises(ValueError, match="re-run from strums"):
+        check_strums_match_grid(grid, strums, _CHORDS)
+
+
+def test_riff_flag_reaches_the_score_section():
+    grid_one_section = _grid(4)
+    strums = _strums_with_plan([], patterns=[_pattern(riff=True)])
+    score = _plan_score(grid_one_section, _CHORDS, strums)
+    assert score.sections[0].riff
+    assert not _plan_score(grid_one_section, _CHORDS, _strums()).sections[0].riff
+
+
+def test_trailing_drop_falls_on_the_last_planned_section_capped_by_the_grid_section():
+    # the grid's last section (14 to 16) is a fragment merged into the planned chorus; the drop
+    # is capped by that grid section's length (2 bars, so at most 1), as the strums stage caps it
+    grid = _sectioned(16, _THREE, _THREE_LABELS)
+    plan = [
+        PlannedSection(start_bar=0, end_bar=8, label="verse", members=[0]),
+        PlannedSection(start_bar=8, end_bar=16, label="chorus", members=[1, 2]),
+    ]
+    chords = Chords(
+        key=Key(tonic="C", mode="major", confidence=0.9), events=[_ev(0, 13, "C"), _ev(13, 16, "N")]
+    )
+    arrangement = Arrangement(
+        capo=0, transpose=0, tier="easy",
+        chords=[ArrangedChord(event=0, name="C", shape=C)], substitutions=[],
+    )
+    score = _plan_score(grid, chords, _strums_with_plan(plan, [_pattern(0), _pattern(1)]), arrangement)
+    assert [b.index for b in score.sections[1].bars] == list(range(8, 15))
+    assert score.trailing_bars_dropped == 1
+
+
+def _three_section_plan_strums() -> Strums:
+    """The plan `section_plan` makes from `_THREE`: the two-bar chorus joins the six-bar one."""
+    plan = [
+        PlannedSection(start_bar=0, end_bar=8, label="verse", members=[0]),
+        PlannedSection(start_bar=8, end_bar=16, label="chorus", members=[1, 2]),
+    ]
+    return _strums_with_plan(plan, [_pattern(0), _pattern(1)])
+
+
+def test_check_strums_match_grid_accepts_the_grid_the_plan_was_made_from():
+    grid = _sectioned(16, _THREE, _THREE_LABELS)
+    check_strums_match_grid(grid, _three_section_plan_strums(), _CHORDS)
+
+
+def test_check_strums_match_grid_catches_a_grid_section_split_after_strums_ran():
+    # the plan was made from three grid sections; grid.json now splits the chorus at bar 11
+    split = _sectioned(16, [(0, 8), (8, 11), (11, 14), (14, 16)], ["verse", "chorus", "chorus", "chorus"])
+    with pytest.raises(
+        ValueError,
+        match=(
+            r"^strums.json's section plan no longer matches grid.json and chords.json: planned section 1 is "
+            r"bars 8 to 16, chorus, grid sections \[1, 2\] in strums.json but bars 8 to 16, chorus, "
+            r"grid sections \[1, 2, 3\] now; re-run from strums$"
+        ),
+    ):
+        check_strums_match_grid(split, _three_section_plan_strums(), _CHORDS)
+
+
+def test_check_strums_match_grid_catches_a_moved_boundary():
+    # same section count, but a boundary moved: grid section 0 now ends at bar 10
+    moved = _sectioned(16, [(0, 10), (10, 14), (14, 16)], _THREE_LABELS)
+    with pytest.raises(
+        ValueError, match=r"planned section 0 is bars 0 to 8, verse, grid sections \[0\] in strums.json but bars "
+        r"0 to 10, verse, grid sections \[0\] now; re-run from strums"
+    ):
+        check_strums_match_grid(moved, _three_section_plan_strums(), _CHORDS)
+
+
+def test_check_strums_match_grid_catches_a_label_only_grid_edit():
+    # bars and members unchanged; only the first section's label was edited in grid.json
+    relabelled = _sectioned(16, _THREE, ["intro", "chorus", "chorus"])
+    with pytest.raises(
+        ValueError, match=r"planned section 0 is bars 0 to 8, verse, .* but bars 0 to 8, intro, .*re-run from strums"
+    ):
+        check_strums_match_grid(relabelled, _three_section_plan_strums(), _CHORDS)
+
+
+def test_check_strums_match_grid_names_a_changed_section_count():
+    # strums.json planned one verse; grid.json now has a verse and a chorus, which never merge
+    unmerged = _sectioned(16, [(0, 8), (8, 16)], ["verse", "chorus"])
+    one = _strums_with_plan(
+        [PlannedSection(start_bar=0, end_bar=16, label="verse", members=[0, 1])], [_pattern(0)]
+    )
+    with pytest.raises(ValueError, match=r"strums.json plans 1 sections but grid.json and chords.json give 2"):
+        check_strums_match_grid(unmerged, one, _CHORDS)
+
+
+def test_plan_pattern_count_mismatch_names_the_planned_sections():
+    strums = _three_section_plan_strums()
+    strums = strums.model_copy(update={"patterns": strums.patterns[:1]})
+    with pytest.raises(ValueError) as e:
+        check_strums_match_grid(_sectioned(16, _THREE, _THREE_LABELS), strums, _CHORDS)
+    assert str(e.value) == "strums.json has 1 patterns for 2 planned sections in strums.json; re-run from strums"

@@ -4,13 +4,15 @@ Youkelele turns a song into a printable ukulele sheet. Give it a YouTube link or
 
 ## A sample sheet
 
-![Page 1 of a sample sheet: the title, a header line with key, capo, tempo and tuning, four chord diagrams, and the Intro, Verse 1, Pre-chorus and Chorus 1 sections, each with its chord grid and most with a two-bar strum strip above it.](docs/images/sample-sheet.png)
+![Page 1 of a sample sheet: the title, a header line with key, capo, tempo and tuning, four chord diagrams, and the Intro, Verse 1, Pre-chorus, Chorus 1 and Verse 2 sections, each with its chord grid on the left and, except the Pre-chorus, a one-bar strum strip beside the rows on the right.](docs/images/sample-sheet.png)
 
 *Page 1 of the sheet for "Synthetic Song", the project's own made-up test song (no real song's chart is published here).*
 
 *At the top, the header gives the key in ukulele shapes (C major), the capo (fret 2), the tempo (120 bpm), the tuning and the tier, with notes that italic chords were inferred, that shapes are relative to the capo and that the song sounds in D major. Below it are the diagrams for C, G, Am and F, and a passing B, named with its fret numbers but no diagram.*
 
-*Each section then opens with its two-bar worked example (down and up arrows over the counts 1 & 2 & 3 & 4 &, with the chord under the stroke it starts on), followed by its chord grid: one box per bar, a pickup bar marked as such, and a repeat count such as ×4 where rows repeat. The Pre-chorus has no strip because its pattern was too uncertain to print.*
+*Each section then has its chord grid on the left (one box per bar, a pickup bar marked as such, and a repeat count such as ×4 where rows repeat) and its one-bar worked example on the right: down and up arrows over the counts 1 & 2 & 3 & 4 &, with the chord under the stroke it starts on. A section in which a chord changes inside a bar shows two bars above its rows instead; none on this page does. The Pre-chorus has no strip because its pattern was too uncertain to print.*
+
+*This sample was made with version 1.5.*
 
 ## Using it without coding (Windows)
 
@@ -56,11 +58,11 @@ The tool runs a chain of eight stages. Each stage reads earlier stages' files fr
 | `00_ingest` | the link or file | `audio.wav`, `source.json` | [yt-dlp](https://github.com/yt-dlp/yt-dlp) download and ffmpeg conversion to 44.1 kHz stereo WAV; title and artist cleaned from the video's details |
 | `01_separate` | `audio.wav` | six stems: vocals, drums, bass, guitar, piano, other | Demucs `htdemucs_6s` through [audio-separator](https://github.com/nomadkaraoke/python-audio-separator), on the CPU |
 | `02_grid` | `audio.wav`, drums and vocals stems | `grid.json` (beats, bars, tempo, sections), `beats_raw.json` | [Beat This!](https://github.com/CPJKU/beat_this) beats and downbeats; a drum backbeat test for the tempo octave; sections by Laplacian segmentation of bar features, named with the help of the vocal stem |
-| `03_harmony` | `audio.wav`, `grid.json`, guitar, bass, piano and other stems | `chords.json`, `spans.lab` | [Chord-CNN-LSTM](https://github.com/music-x-lab/ISMIR2019-Large-Vocabulary-Chord-Recognition) (ISMIR 2019) decoded on the beats and downbeats; no-chord bars filled from the harmonic stems' chroma; the key from the chord stream, its mode from the stems; tonic power chords marked |
-| `04_strums` | guitar and other stems, `audio.wav`, `grid.json`, `chords.json` | `strums.json` | onset detection on the best strum source, quantised to an eighth or sixteenth slot grid; a strike vote per section; a recall gate for sustained strums the detector misses |
+| `03_harmony` | `audio.wav`, `grid.json`, guitar, bass, piano and other stems | `chords.json`, `spans.lab` | [Chord-CNN-LSTM](https://github.com/music-x-lab/ISMIR2019-Large-Vocabulary-Chord-Recognition) (ISMIR 2019) decoded on the beats and downbeats; no-chord bars filled from the harmonic stems' chroma; the key from the chord stream by three rules that vote (the header hedges a rule that lost), its mode from the stems; tonic power chords marked |
+| `04_strums` | guitar and other stems, `audio.wav`, `grid.json`, `chords.json` | `strums.json` | onset detection on the best strum source, quantised to an eighth or sixteenth slot grid; a strike vote per section; a recall gate for sustained strums the detector misses; a section plan that merges short same-chord fragments into their neighbours; a shuffle test a pattern must beat to print as certain; a riff marker for sections played as single notes |
 | `05_arrange` | `chords.json`, `grid.json` | `arrangement.json` | capo and transposition scored over the [chords-db](https://github.com/tombatossals/chords-db) ukulele shapes; one shape per chord chosen to keep hand movement low; the easy tier reduces chords to triads |
-| `06_score` | `grid.json`, `chords.json`, `strums.json`, `arrangement.json`, `source.json` | `score.json`, `score.alphatex` | merges everything into one score: section starts aligned to the chord phrase, the bridge chosen by chord novelty, repeating rows collapsed |
-| `07_render` | `score.json` | `sheet.html`, `sheet.pdf` | an HTML page with SVG chord diagrams, printed to A4 by headless Chromium through Playwright |
+| `06_score` | `grid.json`, `chords.json`, `strums.json`, `arrangement.json`, `source.json` | `score.json`, `score.alphatex` | merges everything into one score: section starts aligned to the chord phrase, the bridge chosen by chord novelty, repeating rows collapsed; the sections are the strums stage's plan |
+| `07_render` | `score.json` | `sheet.html`, `sheet.pdf` | an HTML page with SVG chord diagrams, printed to A4 by headless Chromium through Playwright; the worked example is one bar beside the rows unless a chord changes inside a bar |
 
 Every run also writes two diagnostic files: `02_grid/beats_raw.json` (the beats and downbeats before gap filling and octave correction) and `03_harmony/spans.lab` (the chord model's raw output). The options of each run are saved in `runs/<song-name>/manifest.json`.
 
@@ -72,6 +74,7 @@ To fix something the tool got wrong, edit that stage's JSON file and run again f
 uv run youkelele run "https://www.youtube.com/watch?v=VIDEO_ID" --from harmony
 ```
 
+- The strums stage plans the sheet's sections from `02_grid/grid.json` and the chords: short fragments with the same chords merge into their neighbours (see the limitations below), so the sheet can have fewer sections than `grid.json`. The score stage checks that this plan is still the one `grid.json` and the chords give, a renamed section included. If you edit `grid.json` after the strums stage has run, run again from `--from strums` at the latest (strums or any earlier stage); the `--from harmony` above is enough because it re-runs the strums stage too.
 - The score stage may move a section start one bar later so that it lines up with the chord phrase; `shifted` in `06_score/score.json` records each move.
 - In `03_harmony/chords.json`, an event with `filled: true` was inferred and prints in italics; clear the flag when you correct its label.
 - The score stage chooses at most one bridge from the chords, so it may rename sections labelled `verse`, `chorus` or `bridge`. Any other label (`intro`, `instrumental`, `outro`, or one of your own such as `solo` or `pre-chorus`) prints as written.
@@ -80,7 +83,7 @@ uv run youkelele run "https://www.youtube.com/watch?v=VIDEO_ID" --from harmony
 
 ## Measuring
 
-`evaluate` reads a run's own files and needs no reference: it prints the key with its method and margins, the no-chord share, the share of chord changes on a bar start, and per section the strikes per bar, the share of detected strokes the printed pattern covers, and whether it is uncertain.
+`evaluate` reads a run's own files and needs no reference: it prints the key with its method and margins and the three tonic votes, the no-chord share, the share of chord changes on a bar start, and per planned section (by the name the sheet prints, with the grid sections it merged) the printed pattern and its confidence, the strikes per bar, the share of detected strokes the printed pattern covers, the shuffle test's p value, the riff features with the number of onsets they rest on, and whether it is uncertain.
 
 ```
 uv run youkelele evaluate <song-name>
@@ -92,7 +95,7 @@ uv run youkelele evaluate <song-name>
 uv run youkelele evaluate <song-name> --truth tests/fixtures/ground_truth/<song-name>
 ```
 
-`--compare` scores a second run against the first, which is the reference: chord agreement, then each section's strum figures side by side with the second minus the first. To see what a change did, copy the run folder first (to `runs/<song-name>-before`, say), re-run, then compare. A run compared with itself scores 1.000.
+`--compare` scores a second run against the first, which is the reference: chord agreement, then each section's strum figures side by side with the second minus the first (a section merged in one run is paired with the section its figures come from in the other). To see what a change did, copy the run folder first (to `runs/<song-name>-before`, say), re-run, then compare. A run compared with itself scores 1.000.
 
 ```
 uv run youkelele evaluate <song-name>-before --compare <song-name>
@@ -134,16 +137,18 @@ Options for `run`. A run resumed with `--from` keeps the options saved in its `m
 ## Known limitations
 
 - The recall gate works only on the eighth-note grid. A song whose strums fall on a sixteenth grid keeps the detector's onsets, so a sustained, distorted strum there can still print as a sparse pattern.
-- Two guitars in one stem are not told apart. When the guitar stem holds a strummed part and a single-note riff at once, the strum pattern describes neither. Whether such a section prints as uncertain depends on its confidence, not on any test for a second guitar.
-- The certainty test is not a test for noise. A dense two-part or noisy section can pass it: the strike vote keeps most of a dense spray's slots, so the pattern seems to cover most strokes and its confidence is inflated. A confidence corrected for chance is planned.
+- When one separated guitar stem holds two players, one strumming and one playing a riff over the chords, nothing measured tells them apart on a sixteenth-note grid: the section's confidence is held under the floor and the box prints as uncertain. Seventeen onset and pitch features were tried, and so was splitting the onsets by pitch register and taking the strum from the lower part; none separates the ear-rejected sections from the ear-accepted ones.
+- A strum pattern prints as certain only if it beats a shuffle test: the section's strikes and mutes are shuffled within each bar a thousand times, and the pattern must score better than all but 5 percent of the shuffled copies. This catches a noisy section whose vote only seems to fit. A pattern that strikes every slot cannot be tested that way, so it is judged on how dense the strumming is. The test does not change any printed pattern, only whether it is marked uncertain, and a section of four to six bars gives it little to work with.
+- A section marked "Riff heard in this section: strum the chord to this rhythm" has a guitar part of single notes, not chords. The pattern beside it is the rhythm of those notes, and the instruction is to strum the chord to it. The marker is a measured guess and is independent of the uncertain mark. A tight power-chord strum can read as a riff, because it has a riff's pitch content; the instruction is still right there, since the part is meant to be strummed. Some sections that are not riffs may carry the marker too.
+- Short sections with the same chords are merged. A verse or chorus under eight bars joins a neighbour of the same name that is at least as long and plays every chord it plays, and a short verse between two choruses that play every chord it plays joins them as one chorus, so a song that loops one chord cycle prints fewer, longer sections than the grid found. The intro, instrumental, outro and bridge are never merged. The merge rules never rename a section on chord content alone: the only renames are the bridge rule's and the short verse that a sandwich merge folds into a chorus. A merged section's strum pattern is taken from its longest part, not from all of it.
 - Drum bleed can read as strums. On a separated stem, snare bleed can pass the onset and mute rules, so beats 2 and 4 show up as down strokes or muted `x` slots.
 - Section names are a best guess from repeating chord and sound patterns and from where the singing is. Sections are at least four bars long, so a genuine two-bar part is merged into its neighbour.
-- The key's hedge names a second possible key, with its own mode, but never the other mode of the same tonic. A song whose stems carry little harmony and whose tonic chord is ambiguous can get the wrong mode.
+- The key's tonic is chosen by three rules that vote. When they split two against one, the header follows the two and hedges the loser, for example "G major (or D major)"; a close call or a disagreement with the stems' own estimate is hedged as before. The hedge names a second possible key, with its own mode, but never the other mode of the same tonic. A song whose stems carry little harmony and whose tonic chord is ambiguous can get the wrong mode.
 - Inferred chords cover only bars whose harmonic stems clearly match one of the song's own chords. A lead line over the band still prints as N.C., and a faint guitar in a sparse verse can be filled with a chord the record may not have; inferred chords are italic so a reader can tell.
 - Phrase alignment only moves a section start one bar later. When the phrase starts a bar earlier, the rows still start mid-phrase.
-- Real songs print on two to four pages (of the seven measured, two print on two, four on three and one on four); each section's two-bar worked example adds height to the page, and a song cut into many short sections runs longer.
+- Real songs print on two or three pages (of the eight measured with version 1.5, six print on two and two on three); a worked example that sits above the rows adds height to the page (the one-bar strip that sits beside the rows does not), and a song cut into many short sections runs longer.
 - Verse and chorus are told apart by sound and repetition, not by chord content, so on a song cut into many short sections the same chord cycle can print under both names.
-- The power-chord mark (a raised 5 after the chord name) and the line explaining it print only in the full tier; the default easy sheet prints the plain minor chord.
+- The power-chord mark (a raised 5 after the chord name) prints only in the full tier. The default easy sheet prints the triad and, under the chord diagrams, one line for each such chord: "<name> is a power chord (root and fifth) on the record; this sheet prints the triad." It has no raised 5.
 - An artist or title of two or more words given wholly in capitals is printed in title case ("PAT BENATAR" as "Pat Benatar"); one word in capitals stays as written ("INXS").
 
 ## Project history
@@ -155,6 +160,7 @@ Each version has a design spec and a record of how it did on real songs, all und
 - 1.2: four-bar sections, inferred and passing chords, phrase-aligned starts, repeated rows printed once. [Spec](docs/superpowers/specs/2026-10-03-ukulele-tab-chain-v1-2-design.md); [validation](docs/superpowers/specs/2026-10-03-v1-2-validation.md).
 - 1.3: the measurement harness, a more reliable strum pattern, chord changes on the bar lines, the two-bar worked example. [Spec](docs/superpowers/specs/2026-10-04-ukulele-tab-chain-v1-3-design.md); [validation](docs/superpowers/specs/2026-10-04-v1-3-validation.md).
 - 1.4: the key from the chords with a hedge, power chords, section names from the vocals, the no-capo line, run folders named after the song, install and run scripts for non-coders, and this README. [Spec](docs/superpowers/specs/2026-10-04-ukulele-tab-chain-v1-4-design.md); [validation](docs/superpowers/specs/2026-10-04-v1-4-validation.md).
+- 1.5 (package version 0.6.0): short same-chord section fragments merged by a section plan, a shuffle test on strum certainty, a riff marker, a one-bar strip beside the rows, the key chosen by two of three rules with the loser hedged, and the power-chord line on the easy sheet. [Spec](docs/superpowers/specs/2026-10-04-ukulele-tab-chain-v1-5-design.md); [validation](docs/superpowers/specs/2026-10-04-v1-5-validation.md).
 
 The quality research behind versions 1.3 and 1.4 is in [docs/superpowers/research/2026-10-03-quality](docs/superpowers/research/2026-10-03-quality/README.md).
 

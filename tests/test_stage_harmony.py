@@ -180,10 +180,17 @@ def test_harmony_stage_key_from_chords_and_notes(tmp_path):
     assert ctx.notes["key_method"] == "chords_stems"
     assert ctx.notes["key_margin"] == f"{key.margin:.3f}"
     assert ctx.notes["tonic_pair_rule"].startswith("D by ")
-    assert any("key D major (or" in line and "chords+stems, margin" in line for line in logged)
+    assert any("key D major (or" in line and "chords+stems, score margin" in line for line in logged)
     # the hedge's own mode is stored, and the log prints it
     assert key.hedge_mode in ("major", "minor")
     assert any(f"key {key_text(key)} (chords+stems" in line for line in logged)
+    # the three votes: the score and the pair rule agree on D, the mix names another tonic
+    votes = key.tonic_votes
+    assert (votes.score, votes.pair, votes.decided_by) == ("D", "D", "agreement")
+    assert key.pair_tonic == "D"
+    assert ctx.notes["tonic_votes"] == f"score D, pair D, mix {key.mix.tonic}, decided by agreement"
+    key_lines = [line for line in logged if "chords+stems" in line]
+    assert len(key_lines) == 1 and key_lines[0].endswith(", decided by agreement)")
 
 
 def test_relabel_power_takes_only_plain_major_labels():
@@ -243,6 +250,7 @@ def test_harmony_stage_key_falls_back_to_the_mix_with_few_chords(tmp_path):
     assert key.method == "mix_krumhansl" and key.margin is None and key.mix is None
     assert ctx.notes["key_method"] == "mix_krumhansl"
     assert ctx.notes["tonic_pair_rule"] == "none"
+    assert key.tonic_votes is None and ctx.notes["tonic_votes"] == "none"
 
 
 @pytest.mark.slow
@@ -304,3 +312,15 @@ def test_recognise_chords_passes_absolute_paths_to_child(tmp_path, monkeypatch):
     assert wav_arg.is_absolute() and lab_arg.is_absolute()
     assert wav_arg == (tmp_path / wav).resolve()
     assert lab_arg == (tmp_path / work_dir / "out.lab").resolve()
+
+
+def test_key_log_names_whose_margin_it_prints():
+    from youkelele.music.key import TonicDecision
+    from youkelele.schemas import Key
+    from youkelele.stages.harmony import _key_log
+
+    key = Key(tonic="A", mode="minor", confidence=0.2, method="chords_stems", margin=0.031)
+    by_score = TonicDecision("A", 0.031, "C", "score", "C", 0.1, "A", "score")
+    by_pair = TonicDecision("A", 0.031, "C", "pair rule", "A", 0.031, "C", "pair rule")
+    assert "(chords+stems, score margin 0.031 by score, decided by score)" in _key_log(key, by_score)
+    assert "(chords+stems, pair margin 0.031 by pair rule, decided by pair rule)" in _key_log(key, by_pair)

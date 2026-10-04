@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 from youkelele.music.key import hedge_text
 from youkelele.music.phrase import NO_CHORD, aligned_starts, bar_change_bars
-from youkelele.music.relabel import refine_labels
+from youkelele.music.relabel import default_plan, section_plan
 from youkelele.music.trailing import trailing_silent_bars
 from youkelele.schemas import (
     ArrangedChord,
@@ -15,6 +15,7 @@ from youkelele.schemas import (
     Chords,
     Grid,
     Instrument,
+    PlannedSection,
     Score,
     ScoreBar,
     ScoreChord,
@@ -29,19 +30,49 @@ if TYPE_CHECKING:  # profiles imports the score stage, which imports this module
 _EPS = 1e-6
 
 
-def check_strums_match_grid(grid: Grid, strums: Strums) -> None:
+def _plan(grid: Grid, strums: Strums, chords: Chords) -> list[PlannedSection]:
+    """The section plan strums.json carries; a 1.4 file has none, so one per grid section."""
+    return strums.plan or default_plan(grid, chords)
+
+
+def _planned_text(p: PlannedSection) -> str:
+    return f"bars {p.start_bar} to {p.end_bar}, {p.label}, grid sections {p.members}"
+
+
+def _plan_difference(stored: list[PlannedSection], current: list[PlannedSection]) -> str | None:
+    """What differs between the stored plan and the one the inputs give now (the section count,
+    then the first planned section that differs), or None."""
+    parts: list[str] = []
+    if len(stored) != len(current):
+        parts.append(f"strums.json plans {len(stored)} sections but grid.json and chords.json give {len(current)}")
+    for k, (old, new) in enumerate(zip(stored, current)):
+        if old != new:
+            parts.append(f"planned section {k} is {_planned_text(old)} in strums.json but {_planned_text(new)} now")
+            break
+    return "; ".join(parts) or None
+
+
+def check_strums_match_grid(grid: Grid, strums: Strums, chords: Chords) -> None:
     """Fail clearly when grid.json was edited after strums.json was made from it."""
-    n, m = len(strums.patterns), len(grid.sections)
+    plan = _plan(grid, strums, chords)
+    n, m = len(strums.patterns), len(plan)
     if n != m:
-        raise ValueError(
-            f"strums.json has {n} patterns for {m} sections in grid.json; re-run from strums"
-        )
+        where = "planned sections in strums.json" if strums.plan else "sections in grid.json"
+        raise ValueError(f"strums.json has {n} patterns for {m} {where}; re-run from strums")
     indices = [p.section for p in strums.patterns]
     if indices != list(range(m)):
+        where = "the section plan in strums.json" if strums.plan else "grid.json"
         raise ValueError(
-            f"strums.json patterns are for sections {indices} but grid.json has sections "
+            f"strums.json patterns are for sections {indices} but {where} has sections "
             f"{list(range(m))}; re-run from strums"
         )
+    if strums.plan:  # the plan must still be the one grid.json and chords.json give: any edit since shows
+        difference = _plan_difference(strums.plan, section_plan(grid, chords))
+        if difference:
+            raise ValueError(
+                f"strums.json's section plan no longer matches grid.json and chords.json: {difference}; "
+                "re-run from strums"
+            )
     num = grid.meter.numerator
     if strums.slots_per_bar not in (2 * num, 4 * num):
         raise ValueError(
@@ -115,7 +146,8 @@ def build_score(
     tuning: Tuning,
     instrument_name: str,
 ) -> Score:
-    check_strums_match_grid(grid, strums)
+    check_strums_match_grid(grid, strums, chords)
+    plan = _plan(grid, strums, chords)
     spb = strums.slots_per_bar
     arranged = {a.event: a for a in arrangement.chords}
     starts = _bar_starts(grid, chords, arranged, spb)
@@ -137,24 +169,25 @@ def build_score(
         for a in arrangement.no_capo_alternative:
             diagram_index(alternative, a)
 
-    # rows follow the chord-change phrase; grid.json and the section count are unchanged
+    # rows follow the chord-change phrase over the planned sections; grid.json is unchanged
     aligned = aligned_starts(
-        [(s.start_bar, s.end_bar) for s in grid.sections], bar_change_bars(_bar_ends(starts))
+        [(p.start_bar, p.end_bar) for p in plan], bar_change_bars(_bar_ends(starts))
     )
 
-    # the strums stage calls trailing_silent_bars the same way to leave these bars out of the
-    # last section's pattern; the two calls must stay in step
+    # the strums stage calls trailing_silent_bars the same way, capped by the grid's last section,
+    # to leave these bars out of the pattern; the two calls must stay in step. The bars come off
+    # the planned section that ends the song.
     last = grid.sections[-1]
     drop = trailing_silent_bars(chords, grid.bars, cap=last.end_bar - last.start_bar)
+    ends_song = [k for k, p in enumerate(plan) if p.end_bar == last.end_bar]
 
-    # the bridge is decided from the chords here; grid.json keeps the labeller's own names
-    labels = refine_labels(grid, chords)
-
+    # the labels (the bridge decided from the chords, merges named) come with the plan;
+    # grid.json keeps the labeller's own names
     sections: list[ScoreSection] = []
     dropped = 0
-    for k, (label, (start_bar, end_bar, shifted)) in enumerate(zip(labels, aligned)):
+    for k, (planned, (start_bar, end_bar, shifted)) in enumerate(zip(plan, aligned)):
         pattern = strums.patterns[k]
-        if k == len(grid.sections) - 1:
+        if ends_song and k == ends_song[-1]:
             dropped = min(drop, max(end_bar - start_bar - 1, 0))  # phrase alignment may have shortened it
             end_bar -= dropped
         bars: list[ScoreBar] = []
@@ -191,10 +224,10 @@ def build_score(
             )
         sections.append(
             ScoreSection(
-                label=label, pattern=list(pattern.slots), uncertain=pattern.uncertain,
+                label=planned.label, pattern=list(pattern.slots), uncertain=pattern.uncertain,
                 bars=bars, bar_repeat=pattern.bar_repeat, no_instrument=pattern.no_instrument,
                 inherited_from=pattern.inherited_from, shifted=shifted,
-                explained=pattern.explained,
+                explained=pattern.explained, riff=pattern.riff, members=list(planned.members),
             )
         )
 

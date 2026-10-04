@@ -11,12 +11,17 @@ from youkelele.music.as_played import (
     UNCERTAIN_BELOW,
     UNCERTAIN_BELOW_SIXTEENTH,
     bar_repeat,
+    chance_p,
     eighth_grid,
     explained_onsets,
     fill_to_floor,
+    full_vote,
     jaccard,
     majority_vector,
     section_summary,
+    strike_density,
+    structure_test,
+    vote_confidence,
 )
 from youkelele.schemas import Meter
 
@@ -31,7 +36,7 @@ def _random_bars(n: int, slots: int, seed: int = 7) -> list[list[str]]:
 
 def test_constants():
     assert UNCERTAIN_BELOW == 0.45
-    assert UNCERTAIN_BELOW_SIXTEENTH == 0.55
+    assert UNCERTAIN_BELOW_SIXTEENTH == 0.53
     assert MIN_SECTION_BARS == 4
     assert STAGE_UNCERTAIN_GRID_FIT == 0.6
     assert STRIKE_SHARE == 1 / 3
@@ -178,3 +183,47 @@ def test_explained_onsets_zero_without_strikes():
 
 def test_explained_onsets_counts_mutes_as_strikes():
     assert explained_onsets([["x", "-", "S", "-"]], ["S", "-", "-", "-"]) == 0.5
+
+
+def test_full_vote_and_strike_density():
+    assert full_vote(["S", "x", "S", "S"]) and not full_vote(["S", "-", "S", "S"])
+    assert strike_density([["S", "-", "x", "-"], ["-", "-", "-", "-"]]) == 0.25
+    assert strike_density([]) == 0.0
+
+
+def test_chance_p_is_near_one_for_a_random_spray_and_small_for_a_repeated_pattern():
+    rng = random.Random(1)
+    spray = [[rng.choice("S-") for _ in range(8)] for _ in range(8)]
+    pattern = [list("S-SS-SSS")] * 8
+    assert chance_p(spray, seed=3, shuffles=200) > 0.2
+    assert chance_p(pattern, seed=3, shuffles=200) <= 1 / 201 + 1e-9
+
+
+def test_chance_p_is_reproducible_for_a_seed_and_never_zero():
+    bars = [list("S-S-S-SS"), list("S-SS--SS"), list("S-S-S-S-"), list("--S-S-SS")]
+    assert chance_p(bars, seed=7, shuffles=100) == chance_p(bars, seed=7, shuffles=100) > 0
+
+
+def test_structure_test_exempts_a_full_vote_and_needs_density():
+    dense = [list("SSSSSSSS")] * 6
+    structured, p, density = structure_test(dense, list("SSSSSSSS"), seed=0)
+    assert (structured, p, density) == (True, None, 1.0)
+    sparse_full = [list("S-S-S-S-"), list("-S-S-S-S")] * 3  # the vote fills every slot, density 0.5
+    structured, p, density = structure_test(sparse_full, list("SSSSSSSS"), seed=0)
+    assert not structured and p is None and density == 0.5
+
+
+def test_structure_test_all_rest_bars_gives_p_one():
+    rests = [["-"] * 8] * 4
+    structured, p, _ = structure_test(rests, ["-"] * 8, seed=0)
+    assert not structured and p == 1.0
+
+
+def test_sixteenth_floor_is_0_53():
+    assert UNCERTAIN_BELOW_SIXTEENTH == 0.53
+
+
+def test_section_summary_confidence_is_vote_confidence():
+    bars = _random_bars(6, 8, seed=11)
+    assert section_summary(bars, 8, m44)[1] == vote_confidence(bars)
+    assert vote_confidence([]) == 0.0

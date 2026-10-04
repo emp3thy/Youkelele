@@ -249,3 +249,43 @@ def test_real_chromium_prints_120_bar_score_in_at_most_three_pages(tmp_path):
     assert data.startswith(b"%PDF")
     assert 1 <= count_pages(data) <= 3
     assert errors == []
+
+
+def _long_beside_score(rows: int) -> Score:
+    """One certain section of `rows` distinct rows and no mid-bar change, so its one-bar strip
+    sits beside the rows."""
+    names = ["C", "G", "Am", "F"]
+    diagrams = [ChordDiagram(name=n, shape=s) for n, s in zip(names, (C, G, AM, F), strict=True)]
+    bars: list[ScoreBar] = []
+    for r in range(rows):
+        # the row's first three chords spell r in base 4, so no two rows match and none folds
+        # into a repeat block
+        for k in range(4):
+            name = names[(r // 4**k) % 4] if k < 3 else "C"
+            chord = ScoreChord(name=name, diagram=names.index(name), start_slot=0, slots=ISLAND)
+            bars.append(ScoreBar(index=len(bars), chords=[chord]))
+    section = ScoreSection(
+        label="Verse", pattern=ISLAND, uncertain=False, bars=bars, bar_repeat=0.9,
+        no_instrument=False, explained=0.9,
+    )
+    return _two_section_score().model_copy(update={"chord_diagrams": diagrams, "sections": [section]})
+
+
+# one page holds 14 such rows and two hold 36 (probed with this renderer): 25 sits mid-way
+ROWS_OVER_A_PAGE = 25
+
+
+@pytest.mark.slow
+def test_real_chromium_breaks_a_long_beside_section_across_pages(tmp_path):
+    from youkelele.render import pdf as pdf_module
+
+    layout, out = _prepare(tmp_path, _long_beside_score(ROWS_OVER_A_PAGE))
+    errors: list[str] = []
+    stage = RenderStage(pdf_writer=lambda h, p: pdf_module.html_to_pdf(h, p, console=errors))
+    ctx = StageContext(layout, RunOptions(source="x.mp3"), out, lambda m: None, stage)
+    stage.run(ctx)
+
+    html = (out / "sheet.html").read_text(encoding="utf-8")
+    assert html.count('class="section-body beside"') == 1
+    assert count_pages((out / "sheet.pdf").read_bytes()) == 2
+    assert errors == []

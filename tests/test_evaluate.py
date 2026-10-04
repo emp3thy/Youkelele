@@ -5,6 +5,10 @@ from pathlib import Path
 from youkelele.cli import main
 from youkelele.evaluate import (
     Report,
+    SectionDiag,
+    _key_line,
+    _section_diags,
+    _section_line,
     compare_runs,
     evaluate_run,
     format_comparison,
@@ -18,9 +22,11 @@ from youkelele.schemas import (
     Grid,
     Key,
     Meter,
+    PlannedSection,
     Section,
     SectionPattern,
     Strums,
+    TonicVotes,
 )
 
 EXAMPLE = Path(__file__).parent / "fixtures" / "ground_truth" / "example"
@@ -95,7 +101,7 @@ def test_cli_evaluate_prints_report(tmp_path, capsys):
         "Filled bars: 0",
         "Changes on bar: 100.0%",
         "Sub-beat events: 0",
-        "Key: C major (mix_krumhansl, margin n/a, mode margin n/a, runner-up n/a)",
+        "Key: C major (mix_krumhansl, score margin n/a, mode margin n/a, runner-up n/a)",
         "Key confidence: 0.90",
         "Boxes mostly rests: n/a",
         "Vocal runs: n/a",
@@ -180,17 +186,17 @@ def _sectioned_grid() -> Grid:
     )
 
 
-def _pattern(section, slots, uncertain=False, no_instrument=False) -> SectionPattern:
+def _pattern(section, slots, uncertain=False, no_instrument=False, **fields) -> SectionPattern:
     return SectionPattern(
         section=section, slots=slots, confidence=0.8, bar_repeat=0.8, uncertain=uncertain,
-        no_instrument=no_instrument, inherited_from=None,
+        no_instrument=no_instrument, inherited_from=None, **fields,
     )
 
 
-def _strums(bar_onsets, patterns, slots_per_bar=4) -> Strums:
+def _strums(bar_onsets, patterns, slots_per_bar=4, plan=()) -> Strums:
     return Strums(
         slots_per_bar=slots_per_bar, source="mix", source_ratio=1.0, grid_fit=0.9,
-        uncertain=False, patterns=patterns, bar_onsets=bar_onsets,
+        uncertain=False, patterns=patterns, bar_onsets=bar_onsets, plan=list(plan),
     )
 
 
@@ -320,9 +326,14 @@ def test_evaluate_prints_key_method_and_margins(tmp_path):
     )
     chords = _chords().model_copy(update={"key": key})
     text = format_report(evaluate_run(_run_with(tmp_path / "new", chords=chords)))
-    assert "Key: D major (chords_stems, margin 0.052, mode margin 0.302, runner-up A, mix A major)" in text
+    assert "Key: D major (chords_stems, score margin 0.052, mode margin 0.302, runner-up A, mix A major)" in text
     old = format_report(evaluate_run(_run_with(tmp_path / "old")))
-    assert "Key: C major (mix_krumhansl, margin n/a, mode margin n/a, runner-up n/a)" in old
+    assert "Key: C major (mix_krumhansl, score margin n/a, mode margin n/a, runner-up n/a)" in old
+    # under the pair rule (a close score) the margin is the pair rule's
+    paired = key.model_copy(
+        update={"tonic_votes": TonicVotes(score="A", pair="D", mix="A", decided_by="pair rule")}
+    )
+    assert _key_line(paired).startswith("Key: D major (chords_stems, pair margin 0.052, ")
     assert "Key: n/a" in format_report(Report(None, None, None, None, None))
 
 
@@ -332,8 +343,8 @@ def test_format_report_prints_section_lines(tmp_path):
     run = _run_with(tmp_path / "run", grid=_sectioned_grid(),
                     strums=_strums(bar_onsets, patterns))
     text = format_report(evaluate_run(run))
-    assert "verse" in text and "chorus" in text
-    assert "strikes/bar 2.0" in text
+    assert "  0 Verse bars 0-2: D-U-, conf 0.80, strikes/bar 2.0" in text
+    assert "  1 Chorus bars 2-4: D-U-, conf 0.80, strikes/bar 2.0" in text
 
 
 def test_compare_identical_runs_is_identity(tmp_path):
@@ -432,7 +443,10 @@ def test_compare_reports_section_deltas_and_flags(tmp_path):
     assert "+1.0/-33.3pp/+0.0pp" in text
     assert "+2.0/+0.0pp/-50.0pp" in text
     legend, verse_line, chorus_line = text.splitlines()[1:4]
-    assert legend == "  sections: strikes per bar/explained/rests; unc = uncertain, boost = recall boost"
+    assert legend == (
+        "  sections: strikes per bar/explained/rests; unc = uncertain, boost = recall boost, "
+        "p = the structure test's chance p, riff = a riff section"
+    )
     assert text.count("strikes per bar/explained/rests") == 1  # the legend is printed once
     assert "25.0% unc" in chorus_line and "% unc" not in verse_line
 
@@ -497,8 +511,8 @@ def test_evaluate_prints_vocal_runs_and_labels(tmp_path):
     text = format_report(evaluate_run(_run_with(tmp_path / "run", grid=grid,
                                                 strums=_strums(bar_onsets, patterns))))
     assert "Vocal runs: (0, 5)" in text
-    assert "  0 intro bars 0-5: strikes/bar 2.0" in text
-    assert "  1 verse bars 5-12: strikes/bar 2.0" in text
+    assert "  0 Intro bars 0-5: D-U-, conf 0.80, strikes/bar 2.0" in text
+    assert "  1 Verse bars 5-12: D-U-, conf 0.80, strikes/bar 2.0" in text
     # a 1.3 grid has no vocal levels
     assert "Vocal runs: n/a" in format_report(evaluate_run(_run_with(tmp_path / "old")))
     sung = grid.model_copy(update={"bar_vocal_db": [-20.0] * 12})
@@ -533,7 +547,7 @@ def test_compare_scores_power_events_by_their_triad(tmp_path):
     assert compare_runs(minor, power).majmin == 1.0
 
 
-def test_section_lines_print_the_refined_label_beside_the_grids(tmp_path):
+def test_section_lines_print_the_planned_sections_display_name(tmp_path):
     # the middle verse plays chords no other section plays: the sheet calls it the bridge
     bars = [
         Bar(index=i, start=i * 2.0, end=(i + 1) * 2.0, beats=list(range(4 * i, 4 * i + 4)))
@@ -559,8 +573,225 @@ def test_section_lines_print_the_refined_label_beside_the_grids(tmp_path):
     run = _run_with(tmp_path / "run", grid=grid, chords=chords,
                     strums=_strums([["D", "-", "U", "-"]] * 6, patterns))
     lines = format_report(evaluate_run(run)).splitlines()
-    assert any(line.startswith("  0 verse bars 0-2:") for line in lines)
-    assert any(line.startswith("  1 verse -> bridge bars 2-4:") for line in lines)
-    assert any(line.startswith("  2 chorus bars 4-6:") for line in lines)
+    assert any(line.startswith("  0 Verse bars 0-2:") for line in lines)
+    assert any(line.startswith("  1 Bridge bars 2-4:") for line in lines)
+    assert any(line.startswith("  2 Chorus bars 4-6:") for line in lines)
     text = format_comparison(compare_runs(run, run))
-    assert "  1 verse -> bridge: A " in text
+    assert "  1 Bridge: A " in text
+
+
+def test_section_line_prints_members_p_density_and_riff():
+    d = SectionDiag(
+        index=2, label="verse", strikes_per_bar=3.1, explained=1.0, rest_share=0.25,
+        uncertain=False, recall_boost=False, start_bar=55, end_bar=110, members=[4, 5, 6],
+        member_labels=["verse"] * 3, chance_p=0.003, strike_density=0.58, riff=True,
+        riff_entropy=0.66, riff_single_share=0.58, riff_onsets=8, name="Verse 2",
+        pattern=list("D-DU-UDU"), confidence=0.55,
+    )
+    assert _section_line(d) == (
+        "  2 Verse 2 (grid 4, 5, 6: verse, verse, verse) bars 55-110: D-DU-UDU, conf 0.55, strikes/bar 3.1, "
+        "explained 100.0%, rests 25.0%, p 0.003, density 0.58, riff 0.66/0.58 (8 onsets) riff"
+    )
+    one = SectionDiag(**{**d.__dict__, "riff_onsets": 1, "riff": False})
+    assert _section_line(one).endswith("riff 0.66/0.58 (1 onset)")
+    # a 1.5 file written before the count was stored prints the pair alone
+    assert _section_line(SectionDiag(**{**d.__dict__, "riff_onsets": None})).endswith("riff 0.66/0.58 riff")
+
+
+def test_section_line_prints_na_for_a_1_4_section_and_no_group_for_one_member():
+    d = SectionDiag(
+        index=0, label="verse", strikes_per_bar=2.0, explained=1.0, rest_share=0.5,
+        uncertain=True, recall_boost=False, start_bar=0, end_bar=2, members=[0],
+        member_labels=["verse"], name="Verse", pattern=list("D-U-"), confidence=0.4,
+    )
+    assert _section_line(d) == (
+        "  0 Verse bars 0-2: D-U-, conf 0.40, strikes/bar 2.0, explained 100.0%, rests 50.0%, "
+        "p n/a, density n/a, riff n/a uncertain"
+    )
+
+
+def _plan_run(tmp_path, riff=False, uncertain=False):
+    """A two-grid-section run whose plan merges both into one verse (members 0 and 1)."""
+    plan = [PlannedSection(start_bar=0, end_bar=4, label="verse", members=[0, 1])]
+    patterns = [
+        _pattern(0, ["D", "-", "U", "-"], uncertain=uncertain, chance_p=0.02, strike_density=0.5,
+                 riff=riff, riff_entropy=0.4, riff_single_share=0.7, riff_onsets=12)
+    ]
+    strums = _strums([["D", "-", "U", "-"]] * 4, patterns, plan=plan)
+    return _run_with(tmp_path, grid=_sectioned_grid(), strums=strums)
+
+
+def test_section_diags_follow_the_plan_and_a_1_4_file_has_one_per_grid_section(tmp_path):
+    grid, chords = _sectioned_grid(), _chords()
+    plan = [PlannedSection(start_bar=0, end_bar=4, label="verse", members=[0, 1])]
+    with_plan = _strums([["D", "-", "U", "-"]] * 4, [_pattern(0, ["D", "-", "U", "-"])], plan=plan)
+    diags = _section_diags(grid, with_plan, chords)
+    assert [d.members for d in diags] == [[0, 1]]
+    assert diags[0].member_labels == ["verse", "chorus"]
+    assert (diags[0].label, diags[0].start_bar, diags[0].end_bar) == ("verse", 0, 4)
+    old = _strums(
+        [["D", "-", "U", "-"]] * 4,
+        [_pattern(0, ["D", "-", "U", "-"]), _pattern(1, ["D", "-", "U", "-"])],
+    )
+    assert [d.members for d in _section_diags(grid, old, chords)] == [[0], [1]]
+    assert all(d.chance_p is None and d.riff is False for d in _section_diags(grid, old, chords))
+
+
+def test_section_diags_measure_the_longest_member_with_the_trailing_drop(tmp_path):
+    # members 0 (bars 0-1) and 1 (bars 1-4); bar 3 follows the last chord, so the drop is 1 bar
+    grid = _grid().model_copy(
+        update={
+            "sections": [
+                Section(label="verse", start_bar=0, end_bar=1, confidence=0.5),
+                Section(label="verse", start_bar=1, end_bar=4, confidence=0.5),
+            ]
+        }
+    )
+    events = [
+        _event(0, 0, 0.0, 2.0, "C:maj"), _event(1, 0, 2.0, 4.0, "G:maj"),
+        _event(2, 0, 4.0, 6.0, "A:min"), _event(3, 0, 6.0, 8.0, "N"),
+    ]
+    chords = Chords(key=Key(tonic="C", mode="major", confidence=0.7), events=events)
+    bar_onsets = [["D", "D", "D", "D"], ["D", "-", "U", "-"], ["D", "-", "U", "-"], ["D", "D", "D", "D"]]
+    plan = [PlannedSection(start_bar=0, end_bar=4, label="verse", members=[0, 1])]
+    strums = _strums(bar_onsets, [_pattern(0, ["D", "-", "U", "-"])], plan=plan)
+    (diag,) = _section_diags(grid, strums, chords)
+    assert diag.strikes_per_bar == 2.0 and diag.explained == 1.0
+
+
+def test_section_diags_drop_nothing_when_the_longest_member_is_not_the_grids_last_section():
+    # members 0 (bars 0-3) and 1 (bar 3); bar 3 follows the last chord, so the song drops 1 bar,
+    # but the figures are read over member 0, which does not end the song: bar 2 still counts
+    grid = _grid().model_copy(
+        update={
+            "sections": [
+                Section(label="verse", start_bar=0, end_bar=3, confidence=0.5),
+                Section(label="verse", start_bar=3, end_bar=4, confidence=0.5),
+            ]
+        }
+    )
+    events = [
+        _event(0, 0, 0.0, 2.0, "C:maj"), _event(1, 0, 2.0, 4.0, "G:maj"),
+        _event(2, 0, 4.0, 6.0, "A:min"), _event(3, 0, 6.0, 8.0, "N"),
+    ]
+    chords = Chords(key=Key(tonic="C", mode="major", confidence=0.7), events=events)
+    bar_onsets = [["D", "-", "U", "-"], ["D", "-", "U", "-"], ["D", "D", "D", "D"], ["-", "-", "-", "-"]]
+    plan = [PlannedSection(start_bar=0, end_bar=4, label="verse", members=[0, 1])]
+    strums = _strums(bar_onsets, [_pattern(0, ["D", "-", "U", "-"])], plan=plan)
+    (diag,) = _section_diags(grid, strums, chords)
+    assert diag.analysed_start == 0
+    assert diag.strikes_per_bar == 8 / 3  # with bar 2 dropped it would be 2.0
+
+
+def test_key_line_prints_the_votes():
+    key = Key(tonic="F", mode="major", confidence=0.1,
+              tonic_votes=TonicVotes(score="C", pair="F", mix="F", decided_by="mix"))
+    assert _key_line(key).endswith("votes score C pair F mix F (mix))")
+    none = Key(tonic="F", mode="major", confidence=0.1,
+               tonic_votes=TonicVotes(score="C", pair=None, mix="F", decided_by="score"))
+    assert _key_line(none).endswith("votes score C pair none mix F (score))")
+    assert "votes" not in _key_line(Key(tonic="F", mode="major", confidence=0.1))
+
+
+def test_comparison_cell_shows_p_and_riff_and_flags_a_change(tmp_path):
+    a = _plan_run(tmp_path / "a", riff=False)
+    b = _plan_run(tmp_path / "b", riff=True)
+    c = compare_runs(a, b)
+    text = format_comparison(c)
+    assert "p 0.020" in text and "riff" in text
+    assert [delta.changed for delta in c.deltas] == [True]
+    same = compare_runs(a, a)
+    assert [delta.changed for delta in same.deltas] == [False]
+    certain = compare_runs(a, _plan_run(tmp_path / "c", uncertain=True))
+    assert [delta.changed for delta in certain.deltas] == [True]
+
+
+def _short_then_long_grid() -> Grid:
+    """Two verses: bars 0-1 and 1-4, so the second is a merged plan's longest member."""
+    return _grid().model_copy(
+        update={
+            "sections": [
+                Section(label="verse", start_bar=0, end_bar=1, confidence=0.5),
+                Section(label="verse", start_bar=1, end_bar=4, confidence=0.5),
+            ]
+        }
+    )
+
+
+def test_compare_pairs_a_merged_section_with_its_longest_members_counterpart(tmp_path):
+    # run A merged both grid sections into one verse, read over bars 1-4; run B kept them apart
+    merged = _strums(
+        [["D", "-", "U", "-"]] * 4,
+        [_pattern(0, ["D", "-", "U", "-"], riff=True, uncertain=False)],
+        plan=[PlannedSection(start_bar=0, end_bar=4, label="verse", members=[0, 1])],
+    )
+    apart = _strums(
+        [["D", "-", "U", "-"]] * 4,
+        [_pattern(0, ["D", "-", "-", "-"], riff=False, uncertain=True),
+         _pattern(1, ["D", "-", "U", "-"], riff=True, uncertain=False)],
+        plan=[
+            PlannedSection(start_bar=0, end_bar=1, label="verse", members=[0]),
+            PlannedSection(start_bar=1, end_bar=4, label="verse", members=[1]),
+        ],
+    )
+    a = _run_with(tmp_path / "a", grid=_short_then_long_grid(), strums=merged)
+    b = _run_with(tmp_path / "b", grid=_short_then_long_grid(), strums=apart)
+    c = compare_runs(a, b)
+    assert [(left and left.index, right and right.index) for left, right in c.sections] == [(None, 0), (0, 1)]
+    assert c.deltas[0] is None
+    assert not c.deltas[1].riff_changed and not c.deltas[1].certainty_changed
+    assert not c.deltas[1].changed
+    assert not any("position" in note for note in c.notes)
+    # by position the merged verse would meet B's one-bar verse: both marks would flip
+    text = format_comparison(c)
+    assert "riff flag changed" not in text and "certainty changed" not in text
+
+
+def test_compare_falls_back_to_position_when_the_grids_differ(tmp_path):
+    strums = _strums(
+        [["D", "-", "U", "-"]] * 4,
+        [_pattern(0, ["D", "-", "U", "-"]), _pattern(1, ["D", "-", "U", "-"])],
+    )
+    a = _run_with(tmp_path / "a", grid=_sectioned_grid(), strums=strums)
+    b = _run_with(tmp_path / "b", grid=_short_then_long_grid(), strums=strums)
+    c = compare_runs(a, b)
+    assert [(left.index, right.index) for left, right in c.sections] == [(0, 0), (1, 1)]
+    assert any("pairs matched by position" in note for note in c.notes)
+    fewer = _strums([["D", "-", "U", "-"]] * 4, [_pattern(0, ["D", "-", "U", "-"])])
+    one = _run_with(tmp_path / "one", grid=_grid(), strums=fewer)
+    assert "section counts differ (2 vs 1); pairs matched by position" in compare_runs(a, one).notes
+
+
+def test_evaluate_prints_the_plan_section_line_and_the_votes(tmp_path):
+    key = Key(tonic="C", mode="major", confidence=0.4,
+              tonic_votes=TonicVotes(score="C", pair="C", mix="G", decided_by="agreement"))
+    run = _plan_run(tmp_path / "run", riff=True)
+    chords = _chords().model_copy(update={"key": key})
+    save_model(run / "03_harmony" / "chords.json", chords)
+    lines = format_report(evaluate_run(run)).splitlines()
+    assert any(line.endswith("votes score C pair C mix G (agreement))") for line in lines)
+    assert (
+        "  0 Verse (grid 0, 1: verse, chorus) bars 0-4: D-U-, conf 0.80, strikes/bar 2.0, "
+        "explained 100.0%, rests 50.0%, p 0.020, density 0.50, riff 0.40/0.70 (12 onsets) riff"
+    ) in lines
+
+
+def test_section_diags_carry_the_pattern_confidence_and_the_sheets_numbered_names():
+    grid = _grid().model_copy(
+        update={
+            "sections": [
+                Section(label="verse", start_bar=0, end_bar=1, confidence=0.5),
+                Section(label="chorus", start_bar=1, end_bar=2, confidence=0.5),
+                Section(label="verse", start_bar=2, end_bar=4, confidence=0.5),
+            ]
+        }
+    )
+    plan = [
+        PlannedSection(start_bar=s.start_bar, end_bar=s.end_bar, label=s.label, members=[i])
+        for i, s in enumerate(grid.sections)
+    ]
+    patterns = [_pattern(i, ["D", "-", "U", "-"]) for i in range(3)]
+    diags = _section_diags(grid, _strums([["D", "-", "U", "-"]] * 4, patterns, plan=plan), _chords())
+    assert [d.name for d in diags] == ["Verse 1", "Chorus", "Verse 2"]
+    assert [d.label for d in diags] == ["verse", "chorus", "verse"]
+    assert all(d.pattern == ["D", "-", "U", "-"] and d.confidence == 0.8 for d in diags)

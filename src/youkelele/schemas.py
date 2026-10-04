@@ -109,6 +109,15 @@ class BeatsRaw(_Artifact):
     dropped_beats: list[float]  # removed by normalise_octave (empty unless the octave is halved)
 
 
+class TonicVotes(_Artifact):
+    """The three tonic estimates a chords_stems key weighed, and which decided."""
+
+    score: str | None = None  # the tonic by chord-stream score
+    pair: str | None = None  # the tonic by the pair rule
+    mix: str | None = None  # the tonic of the mix estimate
+    decided_by: Literal["agreement", "pair rule", "mix", "score"] | None = None  # the rule that settled it
+
+
 class Key(_Artifact):
     tonic: str
     mode: Literal["major", "minor"]
@@ -116,13 +125,15 @@ class Key(_Artifact):
     # chords_stems: tonic from the chord stream, mode from the harmonic stems (1.4);
     # mix_krumhansl: the 24-way profile search on the mix (1.3 files, or too few chords)
     method: Literal["mix_krumhansl", "chords_stems"] = "mix_krumhansl"
-    margin: float | None = None  # the deciding tonic margin (by score, or by the pair rule)
+    margin: float | None = None  # the score's margin, or the pair rule's when it decided a close score (decided_by "pair rule")
     mode_margin: float | None = None  # major minus minor correlation at the tonic, absolute
     runner_up: str | None = None  # the runner-up tonic under the deciding rule
     mix: Key | None = None  # the mix estimate, kept for comparison
     # the mode of the other tonic a hedged key names, from the chroma at that tonic; None
     # when not hedged and in files written before it was stored
     hedge_mode: Literal["major", "minor"] | None = None
+    pair_tonic: str | None = None  # the tonic the pair rule names; None in files before 1.5
+    tonic_votes: TonicVotes | None = None  # the votes behind the tonic; None in files before 1.5
 
 
 class ChordEvent(_Artifact):
@@ -167,6 +178,19 @@ class SectionPattern(_Artifact):
     inherited_from: int | None
     explained: float = 0.0  # share of the section's detected strokes on struck slots
     recall_boost: bool = False  # the recall gate kept high-band onsets for this section
+    chance_p: float | None = None  # share of shuffled copies scoring at least this section's confidence; low means structured; None before 1.5
+    strike_density: float | None = None  # share of the section's cells that are not rests, mutes counted as strikes; None before 1.5
+    riff: bool = False  # the section's guitar plays single notes rather than chords (a riff, not a strum)
+    riff_entropy: float | None = None  # median over the section's onsets of each onset's normalised chroma entropy; low means single notes; None before 1.5
+    riff_single_share: float | None = None  # share of onsets with a single pitch class at half the maximum or more; None before 1.5
+    riff_onsets: int | None = None  # the detector's own onsets (before the recall gate) the riff features rest on; None before 1.5
+
+
+class PlannedSection(_Artifact):
+    start_bar: int
+    end_bar: int  # exclusive
+    label: str
+    members: list[int] = []  # grid section indices merged into this section, in order
 
 
 class Strums(_Artifact):
@@ -177,6 +201,7 @@ class Strums(_Artifact):
     uncertain: bool
     patterns: list[SectionPattern]
     bar_onsets: list[list[Slot]]
+    plan: list[PlannedSection] = []  # the section plan the patterns follow; empty before 1.5
 
     @model_validator(mode="after")
     def _check_slot_lengths(self) -> Strums:
@@ -262,6 +287,8 @@ class ScoreSection(_Artifact):
     inherited_from: int | None = None
     explained: float = 0.0
     shifted: int = 0  # bars the start moved from grid.json to sit in phase with the chords
+    riff: bool = False  # copied from the pattern: the section's guitar plays single notes rather than chords (a riff, not a strum)
+    members: list[int] = []  # copied from the plan: grid section indices merged into this section
 
 
 class Score(_Artifact):

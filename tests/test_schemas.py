@@ -1,10 +1,22 @@
 import json
+from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
 
 from youkelele.jsonio import ArtifactError, load_model, save_model
-from youkelele.schemas import Chords, Grid, Key, Meter, SourceInfo, Strums
+from youkelele.schemas import (
+    Chords,
+    Grid,
+    Key,
+    Meter,
+    PlannedSection,
+    ScoreSection,
+    SectionPattern,
+    SourceInfo,
+    Strums,
+    TonicVotes,
+)
 
 
 def make_grid(n_bars=8):
@@ -199,3 +211,43 @@ def test_source_info_without_raw_title_loads(tmp_path):
     )
     info = load_model(path, SourceInfo)
     assert info.raw_title is None and info.title == "T"
+
+
+def _fixture(name: str) -> str:
+    return (Path(__file__).parent / "fixtures" / name).read_text(encoding="utf-8")
+
+
+def test_strums_plan_defaults_empty_and_round_trips():
+    s = Strums.model_validate_json(_fixture("v14/strums.json"))
+    assert s.plan == []
+    s2 = s.model_copy(update={"plan": [PlannedSection(start_bar=0, end_bar=8, label="verse", members=[0, 1])]})
+    assert Strums.model_validate_json(s2.model_dump_json()).plan[0].members == [0, 1]
+
+
+def test_section_pattern_new_fields_default():
+    p = SectionPattern(
+        section=0, slots=["-"] * 8, confidence=0.0, bar_repeat=0.0,
+        uncertain=True, no_instrument=True, inherited_from=None,
+    )
+    assert (p.chance_p, p.strike_density, p.riff, p.riff_entropy, p.riff_single_share) == (None, None, False, None, None)
+    assert p.riff_onsets is None
+
+
+def test_1_4_strums_patterns_load_without_riff_onsets():
+    s = Strums.model_validate_json(_fixture("v14/strums.json"))
+    assert all(p.riff_onsets is None for p in s.patterns)
+
+
+def test_key_votes_default_none_and_load_1_3_and_1_4_keys():
+    for fixture in ("v13/chords.json", "v14/chords.json"):
+        key = Chords.model_validate_json(_fixture(fixture)).key
+        assert key.pair_tonic is None and key.tonic_votes is None
+    votes = TonicVotes(score="C", pair="F", mix="F", decided_by="mix")
+    assert Key(tonic="F", mode="major", confidence=0.1, tonic_votes=votes).tonic_votes.decided_by == "mix"
+
+
+def test_score_section_riff_and_members_default():
+    sec = ScoreSection(
+        label="verse", pattern=["-"] * 8, uncertain=False, bars=[], bar_repeat=0.0, no_instrument=False
+    )
+    assert sec.riff is False and sec.members == []

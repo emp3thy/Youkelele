@@ -3,6 +3,9 @@
 1.4: the tonic comes from the chord stream and the mode from the harmonic-stem chroma
 (`key_from_chords`). The 24-way Krumhansl-Kessler search on the mix (`estimate_key`)
 is kept as the fallback for songs with too few chords and for comparison.
+
+1.5: when the score and the pair rule disagree on a clear score margin, the mix estimate's
+tonic decides between them (`decide_tonic`), and the losing chord rule is hedged (`_hedge`).
 """
 
 from __future__ import annotations
@@ -17,7 +20,7 @@ import numpy as np
 import soundfile as sf
 
 from youkelele.music.triads import to_triad
-from youkelele.schemas import Bar, ChordEvent, Key, Section
+from youkelele.schemas import Bar, ChordEvent, Key, Section, TonicVotes
 
 KRUMHANSL_MAJOR = (6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88)
 KRUMHANSL_MINOR = (6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17)
@@ -97,11 +100,13 @@ def plain_major_root(label: str) -> str | None:
 @dataclass(frozen=True)
 class TonicDecision:
     tonic: str
-    margin: float  # the deciding margin
+    margin: float  # the pair rule's margin under rule 1, else the score's (rules 2 and 3, even when the mix picks the pair rule's tonic)
     runner_up: str | None
     rule: Literal["score", "pair rule"]
     pair_tonic: str  # the pair rule's winner, computed whether or not it decided
     pair_margin: float
+    score_tonic: str  # the score's winner, before any override
+    decided_by: Literal["agreement", "pair rule", "mix", "score"]
 
 
 def _pitch_class(name: str) -> int:
@@ -268,12 +273,20 @@ def decide_tonic(
     bars: Sequence[Bar],
     sections: Sequence[Section],
     chroma_mean: np.ndarray,
+    mix_tonic: str | None = None,
 ) -> TonicDecision | None:
-    """The tonic by score, or by the pair rule when the score margin is under `KEY_TIE_MARGIN`.
+    """The tonic by two of three votes: the score, the pair rule and the mix estimate.
 
-    The deciding pair rule weighs only the candidates whose score is within `KEY_TIE_MARGIN`
-    of the top; it is also computed over every candidate for the record. When no root
-    reaches `TONIC_MIN_SHARE`, every root is a candidate. None without chords.
+    1. A score margin under `KEY_TIE_MARGIN`: the pair rule decides, weighing only the
+       candidates whose score is within `KEY_TIE_MARGIN` of the top (`decided_by` "pair rule").
+    2. Otherwise, when the score and the pair rule over every candidate name one tonic, that
+       tonic ("agreement").
+    3. Otherwise the mix's tonic decides between the two when it names one of them ("mix");
+       when it names neither, or there is none, the score's tonic leads ("score").
+
+    Under 2 and 3 the margin is the score's (clear of `KEY_TIE_MARGIN`); when the mix picks
+    the pair rule's tonic, the score's tonic is the runner-up. When no root reaches
+    `TONIC_MIN_SHARE`, every root is a candidate. None without chords.
     """
     chords = _chords(events)
     if not chords:
@@ -284,14 +297,27 @@ def decide_tonic(
     )
     if not scores:
         return None
-    tonic, margin, runner_up = _winner(scores)
+    score_tonic, margin, runner_up = _winner(scores)
     pair_tonic, pair_margin, _ = pair_rule(events, list(scores), chroma_mean)
     if runner_up is not None and margin < KEY_TIE_MARGIN:
-        top = scores[tonic]
+        top = scores[score_tonic]
         close = [name for name, score in scores.items() if top - score < KEY_TIE_MARGIN]
         tonic, margin, runner_up = pair_rule(events, close, chroma_mean)
-        return TonicDecision(tonic, margin, runner_up, "pair rule", pair_tonic, pair_margin)
-    return TonicDecision(tonic, margin, runner_up, "score", pair_tonic, pair_margin)
+        return TonicDecision(
+            tonic, margin, runner_up, "pair rule", pair_tonic, pair_margin, score_tonic,
+            "pair rule",
+        )
+    tonic = score_tonic
+    decided_by: Literal["agreement", "mix", "score"] = "score"
+    if pair_tonic == score_tonic:
+        decided_by = "agreement"
+    elif mix_tonic in (score_tonic, pair_tonic):
+        decided_by = "mix"
+        if mix_tonic == pair_tonic:
+            tonic, runner_up = pair_tonic, score_tonic
+    return TonicDecision(
+        tonic, margin, runner_up, "score", pair_tonic, pair_margin, score_tonic, decided_by
+    )
 
 
 def _corr(a: np.ndarray, b: np.ndarray) -> float:
@@ -343,14 +369,19 @@ def key_and_decision(
     """`key_from_chords` with the tonic decision behind it (None when the mix key stands)."""
     if len(_chords(events)) < MIN_CHORD_EVENTS:
         return mix_key, None
-    decision = decide_tonic(events, bars, sections, chroma_mean)
+    # the mix may hear another mode; only its tonic votes
+    decision = decide_tonic(events, bars, sections, chroma_mean, mix_key.tonic)
     if decision is None:
         return mix_key, None
     mode, mode_margin = _mode_of(decision.tonic, chroma_mean, events)
+    votes = TonicVotes(
+        score=decision.score_tonic, pair=decision.pair_tonic, mix=mix_key.tonic,
+        decided_by=decision.decided_by,
+    )
     key = Key(
         tonic=decision.tonic, mode=mode, confidence=mode_margin, method="chords_stems",
         margin=decision.margin, mode_margin=mode_margin, runner_up=decision.runner_up,
-        mix=mix_key,
+        mix=mix_key, pair_tonic=decision.pair_tonic, tonic_votes=votes,
     )
     other = hedge_tonic(key)
     if other is not None:  # the other tonic the sheet names carries its own mode
@@ -445,22 +476,41 @@ def _mix_disagrees(key: Key) -> bool:
     return key.mix is not None and key.mix.tonic != key.tonic
 
 
+def _losing_chord_rule(key: Key) -> str | None:
+    """The tonic of the chord rule (score or pair rule) that lost when the two disagreed and
+    the mix or the score settled it (spec 1.5, section 6.1, rule 3); None otherwise, and for
+    a file written before 1.5, which has no votes."""
+    votes = key.tonic_votes
+    if votes is None or votes.decided_by not in ("mix", "score"):
+        return None
+    loser = votes.pair if key.tonic == votes.score else votes.score
+    return loser if loser is not None and loser != key.tonic else None
+
+
 def hedged(key: Key) -> bool:
-    """A close call on the tonic, or a mix estimate that names another tonic."""
-    return _close(key) or _mix_disagrees(key)
+    """A close call on the tonic, a chord rule that lost, or a mix estimate that names
+    another tonic."""
+    return _close(key) or _hedge(key) is not None
 
 
-def _hedge(key: Key) -> tuple[str, Literal["runner_up", "mix"]] | None:
+def _hedge(key: Key) -> tuple[str, Literal["runner_up", "chord rule", "mix"]] | None:
+    """The other tonic and where it comes from, by three rungs in order: a close margin names
+    the runner-up; a chord rule that lost names its tonic; a mix estimate that differs names
+    its tonic."""
     if _close(key) and key.runner_up is not None:
         return key.runner_up, "runner_up"
+    loser = _losing_chord_rule(key)
+    if loser is not None:
+        return loser, "chord rule"
     if _mix_disagrees(key):
         return key.mix.tonic, "mix"
     return None
 
 
 def hedge_tonic(key: Key) -> str | None:
-    """The other tonic a hedged key names: the runner-up when the margin is close (whether
-    or not the mix also disagrees), the mix's tonic when only the mix disagrees."""
+    """The other tonic a hedged key names: the runner-up when the margin is close, else the
+    losing chord rule's tonic when the mix or the score settled a disagreement, else the
+    mix's tonic when the mix disagrees."""
     hedge = _hedge(key)
     return hedge[0] if hedge is not None else None
 
@@ -470,7 +520,7 @@ def hedge_text(key: Key) -> str | None:
 
     The mode is the one stored at harmony time (`Key.hedge_mode`). A file written before it
     was stored falls back to the mix estimate's mode for a mix hedge and to the key's own
-    mode for a runner-up."""
+    mode for a runner-up; such a file has no votes, so it never reaches the chord-rule rung."""
     hedge = _hedge(key)
     if hedge is None:
         return None
@@ -496,3 +546,16 @@ def pair_rule_note(decision: TonicDecision | None) -> str:
     if decision.pair_margin < PAIR_TIE:
         return f"tie, {decision.pair_tonic} by chroma"
     return f"{decision.pair_tonic} by {decision.pair_margin:.3f}"
+
+
+def tonic_votes_note(key: Key) -> str:
+    """The three tonic votes, for the manifest: `score C, pair F, mix F, decided by mix`; a
+    missing vote prints `none`, and a key without votes (the mix's own, or a file before
+    1.5) is `none`."""
+    votes = key.tonic_votes
+    if votes is None:
+        return "none"
+    return (
+        f"score {votes.score or 'none'}, pair {votes.pair or 'none'}, "
+        f"mix {votes.mix or 'none'}, decided by {votes.decided_by or 'none'}"
+    )

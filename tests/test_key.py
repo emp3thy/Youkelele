@@ -17,6 +17,7 @@ from youkelele.music.key import (
     hedge_text,
     hedge_tonic,
     hedged,
+    key_and_decision,
     key_from_chords,
     key_text,
     mode_at,
@@ -25,9 +26,10 @@ from youkelele.music.key import (
     power_chord_events,
     tonic_chord_mode,
     tonic_scores,
+    tonic_votes_note,
 )
 from youkelele.music.triads import to_triad
-from youkelele.schemas import Bar, ChordEvent, Key, Section
+from youkelele.schemas import Bar, ChordEvent, Key, Section, TonicVotes
 
 
 def _chroma(pitch_classes):
@@ -419,3 +421,128 @@ def test_pair_rule_note_names_a_chroma_tie_as_a_tie():
     assert clear.pair_margin >= PAIR_TIE
     assert pair_rule_note(clear) == f"{clear.pair_tonic} by {clear.pair_margin:.3f}"
     assert pair_rule_note(None) == "none"
+
+
+# --- three tonic votes: the score, the pair rule and the mix (spec 1.5, section 6) ---
+
+bars = _bars(12)
+sections = _sections([12])
+# shaped like Need You Tonight: C holds half the chord time and ends the song, so the score
+# names C by a wide margin; A# major and G minor are diatonic to F major, not to C major, so
+# the pair rule names F (1.0 against 10.5 / 12)
+events_score_c_pair_f = _events(
+    ["C:maj", "F:maj", "C:maj", "A#:maj", "C:maj", "F:maj", "C:maj", "G:min", "F:maj", "C:maj",
+     "F:maj", "C:maj"]
+)
+# every chord diatonic to G major, G holding half the time: the score and the pair rule agree
+events_clear_g = _events(["G:maj", "C:maj", "D:maj", "G:maj"] * 3)
+# D and A tie on score; the pair rule decides (D, A, Bm and G are all diatonic to D major)
+events_close_d_a = _events(["D:maj", "A:maj"] * 5 + ["B:min", "G:maj"])
+chroma_f = np.roll(KRUMHANSL_MAJOR, 5)  # F major's profile: major at F and at C
+chroma_g = np.roll(KRUMHANSL_MAJOR, 7)  # G major's profile: major at G and at D
+chroma_d = _triad_chroma((2, 6, 9))
+mix_key_f = Key(tonic="F", mode="major", confidence=0.2)
+mix_key_g = Key(tonic="G", mode="major", confidence=0.2)
+mix_key_d = Key(tonic="D", mode="major", confidence=0.2)
+# the key of tests/fixtures/v14/chords.json, written by 1.4: no pair_tonic, no tonic_votes
+FIXTURE_14_KEY_JSON = (
+    '{"schema": 1, "tonic": "D", "mode": "major", "confidence": 0.30000378914920933, '
+    '"method": "chords_stems", "margin": 0.0515576789091271, '
+    '"mode_margin": 0.30000378914920933, "runner_up": "A", "mix": {"schema": 1, "tonic": "D", '
+    '"mode": "major", "confidence": 0.055961666104045654, "method": "mix_krumhansl", '
+    '"margin": null, "mode_margin": null, "runner_up": null, "mix": null}}'
+)
+EXPECTED_14_HEDGE = None  # what hedge_text returned for it before 1.5: a clear D major
+
+
+def test_two_of_three_mix_decides_when_the_chord_rules_disagree():
+    decision = decide_tonic(events_score_c_pair_f, bars, sections, chroma_f, mix_tonic="F")
+    assert (decision.tonic, decision.score_tonic, decision.pair_tonic) == ("F", "C", "F")
+    key, _ = key_and_decision(events_score_c_pair_f, bars, sections, chroma_f, mix_key_f)
+    assert key.tonic_votes == TonicVotes(score="C", pair="F", mix="F", decided_by="mix")
+    assert key_text(key) == "F major (or C major)"
+
+
+def test_score_leads_when_the_mix_names_neither():
+    key, _ = key_and_decision(events_score_c_pair_f, bars, sections, chroma_f, mix_key_g)
+    assert key.tonic == "C" and key.tonic_votes.decided_by == "score"
+    assert key_text(key) == "C major (or F major)"
+
+
+def test_agreement_records_itself_and_the_mix_only_hedges():
+    key, _ = key_and_decision(events_clear_g, bars, sections, chroma_g, mix_key_d)
+    assert key.tonic_votes.decided_by == "agreement" and key_text(key) == "G major (or D major)"
+
+
+def test_close_score_margin_keeps_the_pair_rule_decision():
+    key, decision = key_and_decision(events_close_d_a, bars, sections, chroma_d, mix_key_d)
+    assert decision.rule == "pair rule" and key.tonic_votes.decided_by == "pair rule"
+
+
+def test_no_mix_estimate_falls_to_the_score_without_raising():
+    decision = decide_tonic(events_score_c_pair_f, bars, sections, chroma_f, mix_tonic=None)
+    assert decision.tonic == "C"
+
+
+def test_pre_1_5_key_without_votes_hedges_as_1_4_did():
+    key = Key.model_validate_json(FIXTURE_14_KEY_JSON)
+    assert hedge_text(key) == EXPECTED_14_HEDGE  # the fixture's 1.4 text
+    assert key_text(key) == "D major" and not hedged(key)
+
+
+def test_mix_siding_with_the_score_still_hedges_the_pair_rule():
+    decision = decide_tonic(events_score_c_pair_f, bars, sections, chroma_f, mix_tonic="C")
+    assert (decision.tonic, decision.decided_by, decision.rule) == ("C", "mix", "score")
+    mix_key_c = Key(tonic="C", mode="major", confidence=0.2)
+    key, _ = key_and_decision(events_score_c_pair_f, bars, sections, chroma_f, mix_key_c)
+    assert key.pair_tonic == "F"
+    assert key.tonic_votes == TonicVotes(score="C", pair="F", mix="C", decided_by="mix")
+    # the score margin is clear and the mix agrees: only the losing chord rule hedges
+    assert hedged(key) and hedge_tonic(key) == "F" and key_text(key) == "C major (or F major)"
+
+
+def test_decision_records_the_score_tonic_and_who_decided():
+    agree = decide_tonic(events_clear_g, bars, sections, chroma_g, mix_tonic="D")
+    assert (agree.tonic, agree.score_tonic, agree.pair_tonic) == ("G", "G", "G")
+    assert (agree.rule, agree.decided_by) == ("score", "agreement")
+    close = decide_tonic(events_close_d_a, bars, sections, chroma_d, mix_tonic="A")
+    assert (close.tonic, close.rule, close.decided_by) == ("D", "pair rule", "pair rule")
+    # the mix chose the pair rule's tonic: the score's tonic is the runner-up and the score
+    # margin (clear of KEY_TIE_MARGIN, so of KEY_HEDGE_MARGIN) is kept
+    mixed = decide_tonic(events_score_c_pair_f, bars, sections, chroma_f, mix_tonic="F")
+    assert mixed.runner_up == "C" and mixed.margin >= KEY_HEDGE_MARGIN
+
+
+def test_hedge_rungs_in_order():
+    votes = TonicVotes(score="C", pair="F", mix="G", decided_by="mix")
+    key = Key(tonic="F", mode="major", confidence=0.3, method="chords_stems", margin=0.2,
+              mode_margin=0.3, runner_up="C", mix=Key(tonic="G", mode="major", confidence=0.1),
+              pair_tonic="F", tonic_votes=votes, hedge_mode="major")
+    # rung 2 before rung 3: the losing chord rule, not the mix
+    assert hedged(key) and hedge_tonic(key) == "C" and key_text(key) == "F major (or C major)"
+    # rung 1 before rung 2: a close margin names the runner-up
+    close = key.model_copy(update={"margin": 0.01, "runner_up": "A#"})
+    assert hedge_tonic(close) == "A#"
+    # agreement and the pair rule's own decision never reach rung 2
+    for decided_by in ("agreement", "pair rule"):
+        settled = key.model_copy(
+            update={"tonic_votes": votes.model_copy(update={"decided_by": decided_by})}
+        )
+        assert hedge_tonic(settled) == "G"  # the mix differs: rung 3
+        same_mix = settled.model_copy(update={"mix": Key(tonic="F", mode="major", confidence=0.1)})
+        assert not hedged(same_mix) and hedge_tonic(same_mix) is None
+    # the score led: the pair rule's tonic
+    score_led = key.model_copy(
+        update={"tonic": "C", "tonic_votes": votes.model_copy(update={"decided_by": "score"})}
+    )
+    assert hedged(score_led) and hedge_tonic(score_led) == "F"
+
+
+def test_tonic_votes_note_prints_none_for_a_missing_vote():
+    key, _ = key_and_decision(events_score_c_pair_f, bars, sections, chroma_f, mix_key_f)
+    assert tonic_votes_note(key) == "score C, pair F, mix F, decided by mix"
+    no_mix = key.model_copy(
+        update={"tonic_votes": key.tonic_votes.model_copy(update={"mix": None})}
+    )
+    assert tonic_votes_note(no_mix) == "score C, pair F, mix none, decided by mix"
+    assert tonic_votes_note(MIX) == "none"  # a mix key, or a file before 1.5, has no votes
