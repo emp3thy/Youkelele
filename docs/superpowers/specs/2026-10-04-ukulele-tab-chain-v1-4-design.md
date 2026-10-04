@@ -8,7 +8,7 @@ Version 1.3 made the strum box trustworthy and put chord changes on the bar line
 
 ## 2. Scope
 
-In: the key and its hedge; tonic power chords; vocal-aware section boundaries and labels; the bridge by chord novelty and display numbering by occurrence; the no-capo line; run folders named after the song, with a wider artist-prefix rule for titles; a trimmed all-N outro as "no instrument"; the strip skipping unplayed bars; a README rewritten for a visitor, with a sample sheet and an MIT licence. Out: the chance-corrected strum confidence, the page budget and pattern pooling (version 1.5), fill refinement, earlier phrase shifts, the octave test, separating two guitars in one stem.
+In: the key and its hedge; tonic power chords; vocal-aware section boundaries and labels; the bridge by chord novelty and display numbering by occurrence; the no-capo line; run folders named after the song, with a wider artist-prefix rule for titles; a trimmed all-N outro as "no instrument"; the strip skipping unplayed bars; install and run scripts for people who do not code, with `setup` no longer needing git; a README rewritten for a visitor, with a sample sheet and an MIT licence. Out: the chance-corrected strum confidence, the page budget and pattern pooling (version 1.5), fill refinement, earlier phrase shifts, the octave test, separating two guitars in one stem.
 
 ## 3. Stage changes
 
@@ -54,6 +54,22 @@ A run folder is the cleaned title as a slug: `clean_title` lowercased, ASCII-fol
 
 **Wider artist-prefix rule.** 1.2 strips a leading `<artist> - ` only when it equals the uploader case-insensitively. The third blind song's uploader is "Benatar Giraldo" for a title beginning "Pat Benatar - ", so the prefix would survive into the folder name. The rule becomes: a leading `X - ` (also en dash or colon) is stripped, and `X` becomes the artist, when `X` is at most four words and shares at least one word of three or more letters with the uploader, case-insensitively; the uploader-equality rule remains as the first test. Measured on the five known titles: no change (all five match by equality); "Pat Benatar - All Fired Up (Official Music Video)" with uploader "Benatar Giraldo" gives title "All Fired Up", artist "Pat Benatar".
 
+### 3.7 Install and run without coding
+
+The owner's daughter plays bass, does not code, and wants to try the tool. Today that needs `uv`, `git` on PATH, three commands and a terminal. Version 1.4 makes it: download, double-click install, double-click run, paste a link, the sheet opens.
+
+**No git.** `youkelele setup` fetches the chord model as the zip archive of the pinned commit (`https://github.com/music-x-lab/ISMIR2019-Large-Vocabulary-Chord-Recognition/archive/<commit>.zip`), unpacks it into a sibling folder and renames it into place, as the clone does today, then runs the existing checkpoint verification and numpy patch. A folder already cloned by an earlier version is accepted as it is. `git` is no longer needed anywhere.
+
+**Windows scripts at the repository root.**
+- `install.cmd`: a one-line wrapper that runs `install.ps1` with the execution policy bypassed for that process.
+- `install.ps1`: installs `uv` if missing (the official installer, `irm https://astral.sh/uv/install.ps1 | iex`, then refreshes PATH for the session); runs `uv sync`, `uv run youkelele setup` and `uv run playwright install chromium`; prints each step's outcome in plain words and a final "Ready" or the first error with what to do about it. It is safe to run twice.
+- `run-youkelele.cmd`: asks for a YouTube link (or accepts a dropped audio file), runs `uv run youkelele run "<link>" --runs-dir runs` from the repository folder, and when the chain finishes opens `runs\<song-name>\07_render\sheet.pdf` with the default PDF viewer. On failure it leaves the window open with the last lines of output and the folder path to send to the owner.
+- macOS and Linux get the equivalent `install.sh` and `run-youkelele.sh`, written but not exercised on this machine; the README says so.
+
+**First-run downloads.** The separation model and the beat tracker fetch their weights on first use; the README states the approximate total download size (measured during implementation) and that the first song takes longer than later ones.
+
+**Validation.** On this machine, in a fresh folder outside the repository: unpack the repository's ZIP as GitHub serves it, double-click `install.cmd`, then `run-youkelele.cmd` with one of the validation URLs; the sheet must open without a terminal command being typed. Recorded in the validation document with the exact steps a non-coder would take.
+
 ## 4. The sheet
 
 - **Display names by occurrence.** `Verse 1`, `Verse 2`, `Chorus`, `Instrumental 1`, `Bridge`, `Outro`; a label that occurs once carries no number; "Strum as in" references use the same display names.
@@ -66,9 +82,10 @@ A run folder is the cleaned title as a slug: `clean_title` lowercased, ASCII-fol
 
 The README today opens with the research reports and buries the tool under them; the tool section is a wall of bullets with no picture and no quick start, and "Known limitations" has become a version history. It is rewritten for a visitor to the repository, in this order:
 
-1. **Title and one paragraph**: what the tool does (a YouTube URL or audio file in, a printable ukulele chord-and-strum sheet out), for whom, and that it runs on a CPU-only Windows or Linux machine.
+1. **Title and one paragraph**: what the tool does (a YouTube link or audio file in, a printable ukulele chord-and-strum sheet out), for whom, and that it runs on an ordinary Windows, macOS or Linux computer with no graphics card.
 2. **A sample sheet**: one PNG of page 1 rendered from the end-to-end test clip's score (the repository's own synthetic song, so no copyrighted chart is committed), stored under `docs/images/`, with a caption naming what the reader sees (header with key and tempo, chord diagrams, a section with its two-bar strip, the chord grid).
-3. **Quick start**: install `uv`, `uv sync`, `uv run youkelele setup`, `uv run youkelele run "<url>"`, where the PDF lands (`runs/<song-name>/07_render/sheet.pdf`), and that Chromium is needed for the PDF.
+3. **Using it without coding** (section 3.7), written for someone who has never opened a terminal, as numbered steps with no jargon: on GitHub press the green "Code" button and "Download ZIP"; unzip it somewhere you can find; double-click `install.cmd` and wait until it says Ready (it downloads about N MB the first time); double-click `run-youkelele.cmd`, paste the YouTube link and press Enter; the sheet opens as a PDF when it is done, and it is also saved in the `runs` folder under the song's name. What to do if a window closes or says something is missing. A line that the tool makes ukulele sheets today and that other instruments are planned.
+4. **Quick start for developers**: install `uv`, `uv sync`, `uv run youkelele setup`, `uv run youkelele run "<url>"`, where the PDF lands (`runs/<song-name>/07_render/sheet.pdf`), and that Chromium is needed for the PDF.
 4. **How it works**: a table of the eight stages, one row each, with what the stage reads, what it writes and the model or method it uses.
 5. **Correcting a result**: hand-editing a stage's JSON and `--from`, with the three notes that exist today (shifted section starts, `filled: true`, labels winning over refinement).
 6. **Measuring**: `evaluate`, `--truth`, `--compare` and `--debug`, each in two lines with an example command.
@@ -99,6 +116,7 @@ Seven songs: the five from 1.3 and two new blind songs run from scratch, Pat Ben
 | Pat Benatar "All Fired Up" (blind) | the chain completes; folder `all-fired-up`, title "All Fired Up", artist "Pat Benatar"; tempo, key with margin, sections and labels, strum boxes, filled and passing chords recorded and judged from measurable features, with what cannot be verified stated plainly |
 | INXS "Need You Tonight" (blind) | the chain completes; folder `need-you-tonight`, title "Need You Tonight", artist "INXS"; the same measurable record as above; a riff-based song with sparse chords, so the no-chord filling, the strum box and the key margin are the points to watch |
 | All | folders named after the songs; no section shorter than four bars; page counts no worse than 1.3; `evaluate` prints the key method and margins and the vocal runs; nothing in a sheet contradicts the chord grid (a header key must be diatonic to most of the grid) |
+| Non-coder path | from a fresh unpacked ZIP in a folder outside the repository: `install.cmd` ends with "Ready" without git installed on PATH for that shell; `run-youkelele.cmd` with one validation URL opens the sheet; the steps as the README lists them, nothing extra typed |
 
 ## 8. Decisions
 
