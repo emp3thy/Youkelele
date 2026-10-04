@@ -10,6 +10,7 @@ import soundfile as sf
 from youkelele.jsonio import load_model, save_model
 from youkelele.layout import RunLayout
 from youkelele.music.onsets import Onsets
+from youkelele.music.recall import HIGH_BAND_FMIN
 from youkelele.options import RunOptions
 from youkelele.schemas import Bar, Grid, Meter, Section, Strums
 from youkelele.stage import StageContext
@@ -55,7 +56,9 @@ def _write(path: Path, mono: np.ndarray) -> None:
     sf.write(str(path), np.tile(mono[:, None], (1, 2)).astype(np.float32), SR, subtype="PCM_16")
 
 
-def _ctx(tmp_path, stage, grid: Grid, guitar: np.ndarray, other: np.ndarray, mix: np.ndarray, options=None):
+def _ctx(
+    tmp_path, stage, grid: Grid, guitar: np.ndarray, other: np.ndarray, mix: np.ndarray, options=None, log=None
+):
     layout = RunLayout(tmp_path / "run", ["ingest", "separate", "grid", "harmony", "strums"])
     _write(layout.path("separate/stems/guitar.wav"), guitar)
     _write(layout.path("separate/stems/other.wav"), other)
@@ -65,22 +68,28 @@ def _ctx(tmp_path, stage, grid: Grid, guitar: np.ndarray, other: np.ndarray, mix
     save_model(grid_path, grid)
     out = tmp_path / "out"
     out.mkdir()
-    ctx = StageContext(layout, options or RunOptions(source="x.mp3"), out, lambda m: None, stage)
+    ctx = StageContext(layout, options or RunOptions(source="x.mp3"), out, log or (lambda m: None), stage)
     return ctx, out
 
 
-def _detector(times: Sequence[float], muted_every: int = 0):
-    """Fake onset detector; every `muted_every`-th onset gets a low centroid and zcr."""
+def _detector(times: Sequence[float], muted_every: int = 0, high: Sequence[float] = ()):
+    """Fake onset detector; every `muted_every`-th onset gets a low centroid and zcr.
+
+    With `fmin` (the recall gate's high-band list) it returns `high` instead.
+    """
     times = np.asarray(times, dtype=float)
     centroid = np.full(len(times), 2000.0)
     zcr = np.full(len(times), 0.1)
     if muted_every:
         centroid[::muted_every] = 500.0
         zcr[::muted_every] = 0.01
-    calls: list[int] = []
+    high = np.asarray(high, dtype=float)
+    calls: list[tuple[int, float | None]] = []
 
-    def detect(y: np.ndarray, sr: int) -> Onsets:
-        calls.append(sr)
+    def detect(y: np.ndarray, sr: int, fmin: float | None = None) -> Onsets:
+        calls.append((sr, fmin))
+        if fmin is not None:
+            return Onsets(times=high.copy(), centroid=np.full(len(high), 2000.0), zcr=np.full(len(high), 0.1))
         return Onsets(times=times.copy(), centroid=centroid.copy(), zcr=zcr.copy())
 
     detect.calls = calls
@@ -96,11 +105,15 @@ def _island(n_bars: int) -> list[float]:
     return [t for b in range(n_bars) for t in _bar_times(b, ISLAND)]
 
 
-def _run(tmp_path, grid, detector, guitar_amp=0.0, other_amp=0.3, mix_amp=0.5, other=None, options=None):
+def _run(
+    tmp_path, grid, detector, guitar_amp=0.0, other_amp=0.3, mix_amp=0.5, other=None, options=None, log=None
+):
     seconds = grid.bars[-1].end
     stage = StrumsStage(onset_detector=detector)
     other_wave = _tone(seconds, other_amp) if other is None else other
-    ctx, out = _ctx(tmp_path, stage, grid, _tone(seconds, guitar_amp), other_wave, _tone(seconds, mix_amp), options)
+    ctx, out = _ctx(
+        tmp_path, stage, grid, _tone(seconds, guitar_amp), other_wave, _tone(seconds, mix_amp), options, log
+    )
     stage.run(ctx)
     return load_model(ctx.output("strums/strums.json"), Strums), ctx, out
 
@@ -200,7 +213,7 @@ def test_strums_stage_passes_grid_bpm_to_slot_choice(tmp_path):
 def test_strums_stage_one_pattern_per_section_and_valid_schema(tmp_path):
     detector = _detector(_island(12))
     strums, ctx, out = _run(tmp_path, _grid([4, 8]), detector)
-    assert detector.calls == [SR]
+    assert detector.calls == [(SR, None), (SR, HIGH_BAND_FMIN)]
     assert strums.slots_per_bar == 8
     assert strums.grid_fit == 1.0
     assert not strums.uncertain
@@ -291,3 +304,44 @@ def test_strums_stage_keeps_a_strike_played_in_half_the_bars(tmp_path):
     times = [t for b in range(8) for t in _bar_times(b, ISLAND + ((4,) if b % 2 == 0 else ()))]
     strums, _, _ = _run(tmp_path, _grid([8]), _detector(times))
     assert strums.patterns[0].slots[4] != "-"
+
+
+def test_stage_sets_recall_boost_and_marks_added_onsets(tmp_path):
+    # section 0: two strikes per bar today, the high band hears five; section 1: the island, dense
+    base = [t for b in range(8) for t in _bar_times(b, (0, 4))] + [t for b in range(8, 16) for t in _bar_times(b, ISLAND)]
+    high = [t for b in range(16) for t in _bar_times(b, (0, 2, 4, 5, 6))]
+    lines: list[str] = []
+    strums, _, out = _run(
+        tmp_path, _grid([8, 8]), _detector(base, high=high),
+        options=RunOptions(source="x.mp3", debug=True), log=lines.append,
+    )
+    sparse, dense = strums.patterns
+    assert sparse.recall_boost
+    assert "".join(sparse.slots) == "D-D-DUD-"
+    assert all("".join(bar) == "D-D-DUD-" for bar in strums.bar_onsets[:8])
+    assert not dense.recall_boost
+    assert "".join(dense.slots) == "D-DU-UDU"
+    assert all("".join(bar) == "D-DU-UDU" for bar in strums.bar_onsets[8:])
+    assert strums.grid_fit == 1.0
+    assert any("recall boost: section 0, 2.0 -> 5.0 strikes per bar" in line for line in lines)
+    assert not any("recall boost: section 1" in line for line in lines)
+
+    rows = [line.split("\t") for line in (out / "onsets.txt").read_text(encoding="utf-8").splitlines()]
+    added = sorted(t for b in range(8) for t in _bar_times(b, (2, 5, 6)))
+    assert len(rows) == len(base) + len(added)
+    assert [float(r[0]) for r in rows if r[2] == "S+"] == pytest.approx(added, abs=1e-3)
+    assert {r[2] for r in rows} == {"S", "S+"}
+    assert [float(r[0]) for r in rows] == sorted(float(r[0]) for r in rows)
+
+
+def test_stage_marks_a_muted_added_onset_x_plus():
+    assert strums_module._onset_label(True, added=True) == "x+"
+    assert strums_module._onset_label(False, added=True) == "S+"
+    assert strums_module._onset_label(True) == "x"
+    assert strums_module._onset_label(False) == "S"
+
+
+def test_strums_stage_without_gain_leaves_recall_boost_off(tmp_path):
+    strums, _, _ = _run(tmp_path, _grid([8]), _detector(_island(8), high=_island(8)))
+    assert not strums.patterns[0].recall_boost
+    assert all("".join(bar) == "D-DU-UDU" for bar in strums.bar_onsets)

@@ -35,11 +35,23 @@ class Onsets:
     zcr: np.ndarray
 
 
-def detect_onsets(y: np.ndarray, sr: int) -> Onsets:
-    """librosa's default onset detector, with centroid and zcr at each onset frame."""
+def detect_onsets(y: np.ndarray, sr: int, fmin: float | None = None) -> Onsets:
+    """librosa's default onset detector, with centroid and zcr at each onset frame.
+
+    With `fmin`, the onset envelope is the mean over mel bands from `fmin` up only
+    (the recall gate's high band); its peaks come from librosa's default picker,
+    and centroid and zcr are still taken from the full-band signal.
+    """
     import librosa
 
-    times = np.asarray(librosa.onset.onset_detect(y=y, sr=sr, units="time", backtrack=False), dtype=float)
+    if fmin is None:
+        found = librosa.onset.onset_detect(y=y, sr=sr, units="time", backtrack=False)
+    else:
+        env = librosa.onset.onset_strength(y=y, sr=sr, hop_length=512, fmin=fmin, aggregate=np.mean)
+        found = librosa.onset.onset_detect(
+            onset_envelope=env, sr=sr, hop_length=512, units="time", backtrack=False
+        )
+    times = np.asarray(found, dtype=float)
     centroid = librosa.feature.spectral_centroid(y=y, sr=sr)[0]
     zcr = librosa.feature.zero_crossing_rate(y)[0]
     if len(times) == 0:

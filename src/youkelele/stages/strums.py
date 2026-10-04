@@ -28,20 +28,38 @@ from youkelele.music.onsets import (
     render_directions,
     section_has_instrument,
 )
+from youkelele.music.recall import HIGH_BAND_FMIN, gate_section
 from youkelele.schemas import Grid, SectionPattern, Strums
 from youkelele.stage import Stage, StageContext
 
 
-def _onset_label(muted: bool) -> str:
-    """The Audacity label for one detected onset: S for a strike, x for a mute."""
-    return "x" if muted else "S"
+def _onset_label(muted: bool, added: bool = False) -> str:
+    """The Audacity label for one detected onset: S for a strike, x for a mute, + if the recall gate added it."""
+    return ("x" if muted else "S") + ("+" if added else "")
 
 
-def _onsets_label_track(onsets: Onsets, muted: np.ndarray) -> str:
+def _onsets_label_track(onsets: Onsets, muted: np.ndarray, added: np.ndarray) -> str:
     """Audacity label track: start, end (equal, a point label) and label, tab separated."""
     return "".join(
-        f"{t:.3f}\t{t:.3f}\t{_onset_label(bool(m))}\n" for t, m in zip(onsets.times, muted)
+        f"{t:.3f}\t{t:.3f}\t{_onset_label(bool(m), bool(a))}\n" for t, m, a in zip(onsets.times, muted, added)
     )
+
+
+def _splice(base: Onsets, pieces: list[Onsets]) -> tuple[Onsets, np.ndarray]:
+    """Today's onsets plus the onsets each accepted section added, sorted by time, and the added mask.
+
+    Sections partition the bars, so the added pieces never overlap one another.
+    """
+    parts = [base, *pieces]
+    times = np.concatenate([p.times for p in parts])
+    order = np.argsort(times, kind="stable")
+    added = np.concatenate([np.zeros(len(base.times), dtype=bool)] + [np.ones(len(p.times), dtype=bool) for p in pieces])
+    onsets = Onsets(
+        times=times[order],
+        centroid=np.concatenate([p.centroid for p in parts])[order],
+        zcr=np.concatenate([p.zcr for p in parts])[order],
+    )
+    return onsets, added[order]
 
 
 def _read_mono(path: Path) -> tuple[np.ndarray, int]:
@@ -59,7 +77,8 @@ class StrumsStage(Stage):
     )
     produces = ("strums/strums.json",)
 
-    def __init__(self, onset_detector: Callable[[np.ndarray, int], Onsets] = detect_onsets) -> None:
+    def __init__(self, onset_detector: Callable[..., Onsets] = detect_onsets) -> None:
+        """`onset_detector(y, sr)` gives today's onsets and `onset_detector(y, sr, fmin=...)` the high band's."""
         self._detect = onset_detector
 
     def run(self, ctx: StageContext) -> None:
@@ -73,22 +92,49 @@ class StrumsStage(Stage):
         guitar, other, mix = guitar[:n], other[:n], mix[:n]
 
         source, y, source_ratio = choose_source(guitar, other, mix)
-        onsets = self._detect(y, sr)
+        today = self._detect(y, sr)
         bars, meter = grid.bars, grid.meter
-        slots = choose_slots_per_bar(onsets, bars, meter, grid.bpm)
-        fit = grid_fit(onsets, bars, slots)
+        slots = choose_slots_per_bar(today, bars, meter, grid.bpm)
+        fit = grid_fit(today, bars, slots)
+
+        has_instrument: list[bool] = []
+        for sec in grid.sections:
+            a = int(round(bars[sec.start_bar].start * sr))
+            b = int(round(bars[sec.end_bar - 1].end * sr))
+            has_instrument.append(section_has_instrument(y[a:b], mix[a:b]))
+
+        # recall gate (spec 4.3): per section, today's onsets or their union with the high band's
+        high = self._detect(y, sr, fmin=HIGH_BAND_FMIN)
+        boosted = [False] * len(grid.sections)
+        pieces: list[Onsets] = []
+        for i, sec in enumerate(grid.sections):
+            if not has_instrument[i]:
+                continue  # nothing is printed for it, so nothing is recovered
+            section_onsets, added, decision = gate_section(
+                today, high, y, sr, bars[sec.start_bar:sec.end_bar], slots, fit, meter
+            )
+            if decision.accepted:
+                boosted[i] = True
+                pieces.append(
+                    Onsets(
+                        times=section_onsets.times[added],
+                        centroid=section_onsets.centroid[added],
+                        zcr=section_onsets.zcr[added],
+                    )
+                )
+                ctx.log(f"  recall boost: section {i}, {decision.before:.1f} -> {decision.after:.1f} strikes per bar")
+        onsets, added = _splice(today, pieces)
+
         muted = mute_mask(onsets, enabled=source != "mix")
         if ctx.options.debug:
             # optional diagnostic, so not in produces
-            (ctx.out_dir / "onsets.txt").write_text(_onsets_label_track(onsets, muted), encoding="utf-8")
+            (ctx.out_dir / "onsets.txt").write_text(_onsets_label_track(onsets, muted, added), encoding="utf-8")
         classes: list[list[StrikeClass]] = [quantise_bar(onsets, muted, bar, slots) for bar in bars]
 
         patterns: list[SectionPattern | None] = [None] * len(grid.sections)
         short: list[int] = []
         for i, sec in enumerate(grid.sections):
-            a = int(round(bars[sec.start_bar].start * sr))
-            b = int(round(bars[sec.end_bar - 1].end * sr))
-            if not section_has_instrument(y[a:b], mix[a:b]):
+            if not has_instrument[i]:
                 patterns[i] = SectionPattern(
                     section=i, slots=["-"] * slots, confidence=0.0, bar_repeat=0.0,
                     uncertain=True, no_instrument=True, inherited_from=None,
@@ -99,7 +145,7 @@ class StrumsStage(Stage):
             patterns[i] = SectionPattern(
                 section=i, slots=rendered, confidence=confidence, bar_repeat=repeat,
                 uncertain=confidence < UNCERTAIN_BELOW or explained < EXPLAINED_BELOW or not long_enough,
-                no_instrument=False, inherited_from=None, explained=explained,
+                no_instrument=False, inherited_from=None, explained=explained, recall_boost=boosted[i],
             )
             if not long_enough:
                 short.append(i)
@@ -119,6 +165,7 @@ class StrumsStage(Stage):
             patterns[i] = SectionPattern(
                 section=i, slots=list(src.slots), confidence=src.confidence, bar_repeat=src.bar_repeat,
                 uncertain=True, no_instrument=False, inherited_from=j, explained=src.explained,
+                recall_boost=boosted[i],  # this section's own onsets, though the slots are the donor's
             )
 
         uncertain = fit < STAGE_UNCERTAIN_GRID_FIT

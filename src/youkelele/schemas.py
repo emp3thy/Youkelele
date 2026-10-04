@@ -152,6 +152,7 @@ class SectionPattern(_Artifact):
     no_instrument: bool
     inherited_from: int | None
     explained: float = 0.0  # share of the section's detected strokes on struck slots
+    recall_boost: bool = False  # the recall gate kept high-band onsets for this section
 
 
 class Strums(_Artifact):
