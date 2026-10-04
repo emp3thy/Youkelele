@@ -109,6 +109,15 @@ class BeatsRaw(_Artifact):
     dropped_beats: list[float]  # removed by normalise_octave (empty unless the octave is halved)
 
 
+class TonicVotes(_Artifact):
+    """The three tonic estimates a chords_stems key weighed, and which decided."""
+
+    score: str | None = None  # the tonic by chord-stream score
+    pair: str | None = None  # the tonic by the pair rule
+    mix: str | None = None  # the tonic of the mix estimate
+    decided_by: Literal["agreement", "pair rule", "mix", "score"] | None = None  # the rule that settled it
+
+
 class Key(_Artifact):
     tonic: str
     mode: Literal["major", "minor"]
@@ -123,6 +132,8 @@ class Key(_Artifact):
     # the mode of the other tonic a hedged key names, from the chroma at that tonic; None
     # when not hedged and in files written before it was stored
     hedge_mode: Literal["major", "minor"] | None = None
+    pair_tonic: str | None = None  # the tonic the pair rule names; None in files before 1.5
+    tonic_votes: TonicVotes | None = None  # the votes behind the tonic; None in files before 1.5
 
 
 class ChordEvent(_Artifact):
@@ -167,6 +178,18 @@ class SectionPattern(_Artifact):
     inherited_from: int | None
     explained: float = 0.0  # share of the section's detected strokes on struck slots
     recall_boost: bool = False  # the recall gate kept high-band onsets for this section
+    chance_p: float | None = None  # chance of the structure test passing by luck; None before 1.5
+    strike_density: float | None = None  # share of the section's slots that are struck; None before 1.5
+    riff: bool = False  # the section is a one-bar riff rather than a strum
+    riff_entropy: float | None = None  # entropy of the section's bar patterns, behind the riff marker
+    riff_single_share: float | None = None  # share of bars carrying the single most common pattern
+
+
+class PlannedSection(_Artifact):
+    start_bar: int
+    end_bar: int  # exclusive
+    label: str
+    members: list[int] = []  # grid section indices merged into this section, in order
 
 
 class Strums(_Artifact):
@@ -177,6 +200,7 @@ class Strums(_Artifact):
     uncertain: bool
     patterns: list[SectionPattern]
     bar_onsets: list[list[Slot]]
+    plan: list[PlannedSection] = []  # the section plan the patterns follow; empty before 1.5
 
     @model_validator(mode="after")
     def _check_slot_lengths(self) -> Strums:
@@ -262,6 +286,8 @@ class ScoreSection(_Artifact):
     inherited_from: int | None = None
     explained: float = 0.0
     shifted: int = 0  # bars the start moved from grid.json to sit in phase with the chords
+    riff: bool = False  # copied from the pattern: a one-bar riff rather than a strum
+    members: list[int] = []  # copied from the plan: grid section indices merged into this section
 
 
 class Score(_Artifact):
