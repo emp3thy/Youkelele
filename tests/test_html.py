@@ -339,9 +339,10 @@ def test_html_prints_worked_example_under_each_box():
     boxed = [s for s in score.sections if not (s.uncertain or s.no_instrument)]
     assert html.count('class="worked-example"') == len(boxed) == 2
     verse = _section_html(html, "Verse 1")
-    box = verse[verse.index('class="strum-box"'):]
-    # the pattern svg first, then the example inside the same box, before the grid
-    assert box.index("<svg") < box.index('class="worked-example"') < box.index('class="grid')
+    box = verse[verse.index('class="strum-box"'):verse.index('class="grid')]
+    # the strip replaces the one-bar pattern box: one svg in the box, under the label line
+    assert box.count("<svg") == 1 and box.index('class="worked-example"') < box.index("<svg")
+    assert verse.index('class="strum-label"') < verse.index('class="strum-box"')
     example = box[box.index('class="worked-example"'):]
     assert re.findall(r'class="chord">([^<]*)<', example)[:2] == ["C", "G"]
     assert 'class="worked-example"' not in _section_html(html, "Pre-chorus")
@@ -354,9 +355,9 @@ def test_html_no_example_without_instrument():
     assert html.count('class="worked-example"') == 1
 
 
-def test_html_box_and_example_share_the_slot_width():
+def test_html_sixteen_slot_strip_uses_the_narrow_slot_width():
     sixteenths = list("D-DU-UDU" * 2)
     score = _score([_section("Verse", 2, 0, pattern=sixteenths)], slots_per_bar=16)
     verse = _section_html(render_html(score), "Verse")
     widths = re.findall(r'<svg [^>]*width="(\d+)"', verse)
-    assert widths == ["320", "652"]  # 16 * 20, then 2 * 16 * 20 + 12
+    assert widths == ["652"]  # 2 * 16 * 20 + 12, within the 688 px text width

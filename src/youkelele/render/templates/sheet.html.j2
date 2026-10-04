@@ -28,7 +28,6 @@
   .no-instrument { font-size: 9pt; color: var(--muted); font-style: italic; }
   .strum-box { margin: 2px 0 0 0; break-inside: avoid; }
   .strum-box svg { display: block; }
-  .worked-example { margin-top: 3px; }
   .row { display: grid; grid-template-columns: repeat(4, 1fr) auto; break-inside: avoid; }
   .row { gap: 1.5mm; margin-bottom: 1.5mm; }
   .cell { border: 1px solid; padding: 2mm; font-size: 12pt; }
@@ -97,11 +96,8 @@
           <span class="strum-label">Strum heard in this section; covers {{ "%d" % (section.explained * 100) }}% of detected strokes. Up and down follow the beat{% if section.uncertain %} (uncertain){% endif %}{% if section.inherited_from is not none %}, same as {{ section.inherited_from }}{% endif %}</span>
           {% endif %}
         </div>
-        {% if section.svg is not none %}
-        <div class="strum-box">
-          {{ section.svg }}
-          {% if section.example is not none %}<div class="worked-example">{{ section.example }}</div>{% endif %}
-        </div>
+        {% if section.example is not none %}
+        <div class="strum-box"><div class="worked-example">{{ section.example }}</div></div>
         {% endif %}
       </div>
       {% set grid = section.grid %}

@@ -1,7 +1,7 @@
-"""Strum pattern box SVG, and the worked example that lays a section's chords under its pattern.
+"""The strum box: a section's pattern drawn once per example bar, its chords laid beneath.
 
-Both draw one column per slot with beat labels and arrows; a song uses one slot width for both,
-so their columns line up.
+Each bar is one column per slot with beat labels and arrows, over a chord row that puts every
+chord name on the stroke it starts on.
 """
 
 from __future__ import annotations
@@ -98,17 +98,16 @@ def _svg_open(width: int, height: int) -> str:
     )
 
 
-def strum_pattern_svg(slots: Sequence[Slot], meter: Meter, per_slot: int = _PER_SLOT) -> str:
-    width = len(slots) * per_slot
-    return _svg_open(width, _H) + "".join(_stroke_parts(slots, meter, per_slot)) + "</svg>"
-
-
 def example_bars(section: ScoreSection) -> list[ScoreBar]:
-    """The bars the worked example shows: the first two, unless neither changes chord mid-bar
-    and a later bar does, which then replaces the second; one bar if the section has one."""
-    bars = section.bars[:2]
+    """The bars the worked example shows: the first two full bars (a leading pickup is skipped),
+    unless neither changes chord mid-bar and a later bar does, which then replaces the second;
+    one bar if the section has one. A section that is only a pickup shows the pickup."""
+    full = section.bars[1:] if section.bars and section.bars[0].pickup else section.bars
+    if not full:
+        return list(section.bars)
+    bars = full[:2]
     if len(bars) == 2 and all(len(b.chords) <= 1 for b in bars):
-        change = next((b for b in section.bars[2:] if len(b.chords) > 1), None)
+        change = next((b for b in full[2:] if len(b.chords) > 1), None)
         if change is not None:
             bars = [bars[0], change]
     return list(bars)
@@ -151,7 +150,9 @@ def worked_example_svg(
     pattern: Sequence[Slot], bars: Sequence[ScoreBar], meter: Meter, per_slot: int
 ) -> str:
     """The section's pattern once per bar with the bar's chords beneath, so each change sits
-    under the stroke it falls on; bars are 12 px apart with a bar line between them."""
+    under the stroke it falls on; bars are 12 px apart with a bar line between them. With no bars
+    the pattern is still drawn once, over an N.C. row."""
+    bars = list(bars) or [ScoreBar(index=0, chords=[])]
     n = len(pattern)
     bar_w = n * per_slot
     width = len(bars) * bar_w + _BAR_GAP * (len(bars) - 1)
