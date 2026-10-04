@@ -285,6 +285,13 @@ def test_download_retries_three_times_then_raises(monkeypatch, tmp_path):
     assert "https://example.test/v" in str(exc.value)
 
 
+def test_download_and_details_take_the_one_video_not_its_playlist(monkeypatch, tmp_path):
+    # a Mix link (watch?v=ID&list=RD...) would otherwise resolve, and download, every entry
+    monkeypatch.setattr(ytdl, "ffmpeg_paths", lambda: (Path("ff/ffmpeg"), Path("ff/ffprobe")))
+    assert ytdl._options(tmp_path)["noplaylist"] is True
+    assert ytdl._metadata_options()["noplaylist"] is True
+
+
 @pytest.mark.slow
 def test_to_wav_real_ffmpeg_produces_44100_stereo(tmp_path):
     pytest.importorskip("static_ffmpeg")

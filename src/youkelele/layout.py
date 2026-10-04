@@ -19,7 +19,18 @@ DEFAULT_RUNS_DIR = "runs"
 # The video details fetched to name a new run folder; ingest reuses them. Not a stage artefact.
 SOURCE_META_NAME = "source_meta.json"
 
-_YOUTUBE_ID = re.compile(r"(?:[?&]v=|youtu\.be/|shorts/)([A-Za-z0-9_-]{11})")
+# `v=` anywhere in the query, youtu.be/ID, shorts/ID, and the live and embed paths of the
+# YouTube hosts (embed also on youtube-nocookie.com), all of which yt-dlp downloads
+_YOUTUBE_ID = re.compile(
+    r"(?:[?&]v=|youtu\.be/|shorts/|youtube(?:-nocookie)?\.com/(?:live|embed)/)"
+    r"([A-Za-z0-9_-]{11})"
+)
+# The longest folder name a title gives; Windows paths stay well inside their limit.
+TITLE_SLUG_MAX = 60
+# Names Windows will not give a folder, whatever the case.
+_RESERVED_NAMES = frozenset(
+    {"con", "prn", "aux", "nul"} | {f"com{n}" for n in range(1, 10)} | {f"lpt{n}" for n in range(1, 10)}
+)
 
 
 def video_id_for(source: str) -> str | None:
@@ -54,10 +65,20 @@ def title_slug(title: str) -> str:
 
     Accents fold to their base letter, apostrophes vanish ("Summer Of '69" gives
     summer-of-69), and anything else not a letter or digit separates words. A title with
-    nothing left gives the empty string."""
+    nothing left gives the empty string. A slug longer than `TITLE_SLUG_MAX` is cut at the
+    last hyphen inside the cap (a single long word at the cap), and a name Windows reserves
+    (con, nul, com1 and the like) gets `-song` after it."""
     folded = unicodedata.normalize("NFKD", title).encode("ascii", "ignore").decode("ascii")
     folded = folded.lower().replace("'", "")
-    return re.sub(r"[^a-z0-9]+", "-", folded).strip("-")
+    slug = re.sub(r"[^a-z0-9]+", "-", folded).strip("-")
+    if len(slug) > TITLE_SLUG_MAX:
+        head = slug[: TITLE_SLUG_MAX + 1]  # a hyphen just past the cap still ends a word
+        cut = head.rfind("-")
+        slug = head[:cut] if cut > 0 else slug[:TITLE_SLUG_MAX]
+        slug = slug.strip("-")
+    if slug in _RESERVED_NAMES:
+        slug += "-song"
+    return slug
 
 
 def _saved_runs(runs_dir: Path) -> Iterator[tuple[Path, Manifest]]:

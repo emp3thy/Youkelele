@@ -68,6 +68,14 @@ def run_command(args: argparse.Namespace) -> int:
     except ValueError as exc:
         print(str(exc))
         return 1
+    # before any folder is named: a failed check spends no network fetch and leaves no folder
+    names = [s.name for s in chain[start : end + 1]]
+    problems = check_environment(options, names)
+    for problem in problems:
+        print(problem.what)
+        print(f"  fix: {problem.fix}")
+    if problems:
+        return 2
     if run_dir is None:
         # a new run: name its folder, reading the video's details if the source is a URL
         try:
@@ -78,13 +86,6 @@ def run_command(args: argparse.Namespace) -> int:
             print(f"  fix: {problem.fix}")
             return 2
     slug = run_dir.name
-    names = [s.name for s in chain[start : end + 1]]
-    problems = check_environment(options, names)
-    for problem in problems:
-        print(problem.what)
-        print(f"  fix: {problem.fix}")
-    if problems:
-        return 2
     if not chain:
         print("nothing to run: no stages are registered")
         return 0

@@ -290,6 +290,40 @@ def _no_fetch(url):
     raise AssertionError("fetch must not be called")
 
 
+def test_run_command_checks_the_environment_before_fetching(tmp_path, capsys, monkeypatch):
+    recording_chain(monkeypatch)
+    monkeypatch.setattr(
+        commands, "check_environment", lambda *a, **k: [Problem("Deno is not installed", "uv sync")]
+    )
+    monkeypatch.setattr(commands, "fetch_metadata", _no_fetch)
+    url = "https://youtu.be/abcdefghijk"
+    assert main(["run", url, "--runs-dir", str(tmp_path)]) == 2
+    assert "Deno is not installed" in capsys.readouterr().out
+    assert not tmp_path.exists() or list(tmp_path.iterdir()) == []
+
+
+def test_run_command_refuses_a_cut_link_before_naming_a_folder(tmp_path, capsys, monkeypatch):
+    from youkelele.preflight import Probes, check_environment
+
+    recording_chain(monkeypatch)
+    probes = Probes(
+        ffmpeg_dir=lambda: tmp_path, deno_bin=lambda: tmp_path,
+        chromium_state=lambda: "present", chord_model_present=lambda: True,
+        source_exists=lambda path: False,
+    )
+    monkeypatch.setattr(
+        commands, "check_environment", lambda options, names: check_environment(options, names, probes)
+    )
+    monkeypatch.setattr(commands, "fetch_metadata", _no_fetch)
+    # cmd.exe cut the link at the = sign; yt-dlp would have fetched the front page
+    assert main(["run", "https://www.youtube.com/watch?v", "--runs-dir", str(tmp_path)]) == 2
+    assert capsys.readouterr().out.splitlines() == [
+        "YouTube link has no 11-character video id",
+        "  fix: paste the whole link, for example https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+    ]
+    assert not tmp_path.exists() or list(tmp_path.iterdir()) == []
+
+
 def test_run_command_names_the_folder_after_the_song(tmp_path, capsys, monkeypatch):
     recording_chain(monkeypatch)
     calls = []

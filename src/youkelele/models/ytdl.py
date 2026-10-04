@@ -38,6 +38,8 @@ def _common_options() -> dict:
     return {
         "quiet": True,
         "no_warnings": True,
+        # a link to a video in a Mix or playlist means that video, not every entry
+        "noplaylist": True,
         "js_runtimes": {"deno": {"path": str(deno.find_deno_bin())}},
     }
 

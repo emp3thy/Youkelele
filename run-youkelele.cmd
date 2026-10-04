@@ -4,9 +4,18 @@ rem on this file. The sheet opens as a PDF when it is done and is kept in the ru
 rem folder beside this file, under the song's name.
 setlocal
 
-rem a dropped file arrives as the first argument; make its path absolute before moving
-set "YK_SOURCE=%~1"
-if defined YK_SOURCE if exist "%~1" set "YK_SOURCE=%~f1"
+rem A dropped file arrives as the first argument: make its path absolute before moving.
+rem Anything else is a link, taken from the whole argument line because cmd splits an
+rem argument at = (watch?v=...); quotes around it are dropped as for a pasted link.
+set "YK_SOURCE="
+if "%~1"=="" goto source_done
+if exist "%~1" goto source_file
+set YK_ARGS=%*
+set "YK_SOURCE=%YK_ARGS:"=%"
+goto source_done
+:source_file
+set "YK_SOURCE=%~f1"
+:source_done
 
 cd /d "%~dp0"
 set "YK_RUNS=%~dp0runs"
@@ -14,6 +23,13 @@ set "YK_RUNS=%~dp0runs"
 set "YK_UV=uv"
 where uv >nul 2>nul
 if errorlevel 1 set "YK_UV=%USERPROFILE%\.local\bin\uv.exe"
+if "%YK_UV%"=="uv" goto have_uv
+if exist "%YK_UV%" goto have_uv
+echo.
+echo uv was not found. Run install.cmd first.
+pause
+exit /b 1
+:have_uv
 
 if defined YK_SOURCE goto have_source
 :ask
@@ -36,9 +52,9 @@ echo.
 "%YK_UV%" run youkelele run "%YK_SOURCE%" --runs-dir "%YK_RUNS%"
 if errorlevel 1 goto failed
 
-rem the newest runs\*\07_render\sheet.pdf is the one this run wrote
+rem the newest runs\*\07_render\sheet.pdf written since the run began is this run's
 set "YK_PDF="
-for /f "usebackq delims=" %%p in (`powershell -NoProfile -Command "Get-ChildItem -LiteralPath $env:YK_RUNS -Directory -ErrorAction SilentlyContinue | ForEach-Object { Get-Item -LiteralPath (Join-Path $_.FullName '07_render\sheet.pdf') -ErrorAction SilentlyContinue } | Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 1 -ExpandProperty FullName"`) do set "YK_PDF=%%p"
+for /f "usebackq delims=" %%p in (`powershell -NoProfile -Command "Get-ChildItem -LiteralPath $env:YK_RUNS -Directory -ErrorAction SilentlyContinue | ForEach-Object { Get-Item -LiteralPath (Join-Path $_.FullName '07_render\sheet.pdf') -ErrorAction SilentlyContinue } | Where-Object { $_.LastWriteTimeUtc.Ticks -ge [long]$env:YK_SINCE } | Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 1 -ExpandProperty FullName"`) do set "YK_PDF=%%p"
 if not defined YK_PDF goto no_pdf
 echo.
 echo The sheet is ready:

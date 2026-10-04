@@ -6,10 +6,12 @@ import pytest
 
 from youkelele.layout import (
     SOURCE_META_NAME,
+    TITLE_SLUG_MAX,
     RunLayout,
     resolve_run_dir,
     slug_for,
     title_slug,
+    video_id_for,
 )
 from youkelele.manifest import Manifest, save_manifest
 from youkelele.options import RunOptions
@@ -125,6 +127,43 @@ def test_title_slug_rules():
     assert title_slug("  Chelsea   Dagger!! ") == "chelsea-dagger"
     assert title_slug("夜に駆ける") == ""
     assert title_slug("") == ""
+
+
+def test_title_slug_is_capped_on_a_word_boundary():
+    long = "The Ballad Of A Song Whose Title Goes On And On Well Past Any Sensible Folder Name"
+    slug = title_slug(long)
+    assert len(slug) <= TITLE_SLUG_MAX == 60
+    assert slug == "the-ballad-of-a-song-whose-title-goes-on-and-on-well-past"
+    assert not slug.endswith("-")
+    # one word longer than the cap is cut at the cap
+    assert title_slug("a" * 80) == "a" * 60
+    # exactly at the cap stays whole
+    assert title_slug("b" * 60) == "b" * 60
+
+
+def test_title_slug_avoids_windows_reserved_names():
+    for name in ("CON", "prn", "Aux", "NUL", "COM1", "com9", "LPT1", "lpt9"):
+        assert title_slug(name) == f"{name.lower()}-song"
+    assert title_slug("Console") == "console" and title_slug("COM10") == "com10"
+
+
+def test_video_id_for_youtube_hosts_and_paths():
+    for url in (
+        "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+        "https://m.youtube.com/watch?v=dQw4w9WgXcQ",
+        "https://music.youtube.com/watch?v=dQw4w9WgXcQ&feature=share",
+        "https://www.youtube.com/watch?feature=share&v=dQw4w9WgXcQ",
+        "https://youtu.be/dQw4w9WgXcQ",
+        "https://www.youtube.com/shorts/dQw4w9WgXcQ",
+        "https://www.youtube.com/live/dQw4w9WgXcQ",
+        "https://www.youtube.com/embed/dQw4w9WgXcQ",
+        "https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ",
+    ):
+        assert video_id_for(url) == "dQw4w9WgXcQ", url
+    assert video_id_for("https://www.youtube.com/watch?v=short") is None
+    assert video_id_for("https://www.youtube.com/watch?v") is None
+    # a local folder named live or embed is not a video link
+    assert video_id_for(r"C:\music\live\dQw4w9WgXcQ.wav") is None
 
 
 URL = "https://www.youtube.com/watch?v=eFjjO_lhf9c"
