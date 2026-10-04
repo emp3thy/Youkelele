@@ -8,7 +8,7 @@ Version 1.3 made the strum box trustworthy and put chord changes on the bar line
 
 ## 2. Scope
 
-In: the key and its hedge; tonic power chords; vocal-aware section boundaries and labels; the bridge by chord novelty and display numbering by occurrence; the no-capo line; run folders named after the song, with a wider artist-prefix rule for titles; a trimmed all-N outro as "no instrument"; the strip skipping unplayed bars. Out: the chance-corrected strum confidence, the page budget and pattern pooling (version 1.5), fill refinement, earlier phrase shifts, the octave test, separating two guitars in one stem.
+In: the key and its hedge; tonic power chords; vocal-aware section boundaries and labels; the bridge by chord novelty and display numbering by occurrence; the no-capo line; run folders named after the song, with a wider artist-prefix rule for titles; a trimmed all-N outro as "no instrument"; the strip skipping unplayed bars; a README rewritten for a visitor, with a sample sheet and an MIT licence. Out: the chance-corrected strum confidence, the page budget and pattern pooling (version 1.5), fill refinement, earlier phrase shifts, the octave test, separating two guitars in one stem.
 
 ## 3. Stage changes
 
