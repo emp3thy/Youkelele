@@ -17,10 +17,10 @@ Youkelele turns a song into a printable ukulele sheet. Give it a YouTube link or
 You need Windows 10 or 11 with an internet connection, and nothing else installed. You do not need to know anything about programming for this. Each step is one thing to do.
 
 1. On this repository's GitHub page, press the green **Code** button, then **Download ZIP**.
-2. Find the downloaded file (it is called `Youkelele-main.zip`, usually in your Downloads folder). Right-click it, choose **Extract All**, and pick a place you will find again, such as your Documents folder. This makes a folder called `Youkelele-main`. If you open it and see only another folder with the same name, open that one too.
+2. Find the downloaded file (it is called `Youkelele-main.zip`, usually in your Downloads folder). Right-click it, choose **Extract All**, and pick a folder that OneDrive does not sync, such as `C:\Youkelele` (type it into the box). The tool and each song take hundreds of megabytes, which OneDrive would otherwise copy to the internet, and Documents and Desktop are often synced. This makes a folder called `Youkelele-main`. If you open it and see only another folder with the same name, open that one too.
 3. Open the `Youkelele-main` folder and double-click `install.cmd`. A black window opens and works through four steps.
    - Windows will probably first show a box saying **The publisher could not be verified. Are you sure you want to run this software?** This happens because the files came from the internet. Choose **Run**. If instead a blue box says **Windows protected your PC**, choose **More info**, then **Run anyway**.
-   - The first time, it downloads a little over 800 MB and uses about 3 GB of disk space, so leave it until it finishes. Some download progress bars may show as rows of odd characters; that is harmless.
+   - The first time, it downloads a little over 800 MB and uses about 3 GB of disk space, so leave it until it finishes. Some downloads show their progress as rows of small squares; that is normal.
 4. Wait until the window says **Ready**, then press any key to close it. You only need to do steps 1 to 4 once.
 5. Double-click `run-youkelele.cmd`. It may show the same security box the first time; choose **Run** again. When it asks, paste the YouTube link (press Ctrl+V, or right-click in the window) and press Enter.
    - Then wait: a song takes several minutes while the window shows the eight steps going by, and the first song takes longer, because it downloads another 140 MB or so of song-analysis models. Later songs skip this.
@@ -125,7 +125,7 @@ Options for `run`. A run resumed with `--from` keeps the options saved in its `m
 ## Requirements and tests
 
 - Python 3.12, which uv installs for the project. No graphics card is needed; everything runs on the CPU.
-- `uv run youkelele setup` needs network access, not git: it downloads the chord model as a zip of its pinned commit (27.2 MB) and ffmpeg. A model folder cloned by an earlier version is still accepted.
+- `uv run youkelele setup` needs network access, not git: it downloads the chord model as a zip of its pinned commit (27.2 MB) and ffmpeg. A model folder cloned by an earlier version is still accepted when git is installed.
 - The PDF needs Playwright's Chromium: `uv run playwright install chromium`. The run checks for it before starting and says so if it is missing.
 - The separation and beat models download on first use (about 136 MB together).
 - Fast tests (no network, no models): `uv run pytest -q -W error -m "not slow"`.
@@ -138,13 +138,13 @@ Options for `run`. A run resumed with `--from` keeps the options saved in its `m
 - The certainty test is not a test for noise. A dense two-part or noisy section can pass it: the strike vote keeps most of a dense spray's slots, so the pattern seems to cover most strokes and its confidence is inflated. A confidence corrected for chance is planned.
 - Drum bleed can read as strums. On a separated stem, snare bleed can pass the onset and mute rules, so beats 2 and 4 show up as down strokes or muted `x` slots.
 - Section names are a best guess from repeating chord and sound patterns and from where the singing is. Sections are at least four bars long, so a genuine two-bar part is merged into its neighbour.
-- The key's hedge names a second possible tonic but not the other mode. A song whose stems carry little harmony and whose tonic chord is ambiguous can get the wrong mode.
+- The key's hedge names a second possible key, with its own mode, but never the other mode of the same tonic. A song whose stems carry little harmony and whose tonic chord is ambiguous can get the wrong mode.
 - Inferred chords cover only bars whose harmonic stems clearly match one of the song's own chords. A lead line over the band still prints as N.C., and a faint guitar in a sparse verse can be filled with a chord the record may not have; inferred chords are italic so a reader can tell.
 - Phrase alignment only moves a section start one bar later. When the phrase starts a bar earlier, the rows still start mid-phrase.
 - Real songs print on two to four pages (of the seven measured, two print on two, four on three and one on four); each section's two-bar worked example adds height to the page, and a song cut into many short sections runs longer.
 - Verse and chorus are told apart by sound and repetition, not by chord content, so on a song cut into many short sections the same chord cycle can print under both names.
-- The power-chord mark (a raised 5 after the chord name) prints only in the full tier, and the line explaining it is left out if the record also plays that chord as a full minor chord anywhere.
-- An artist name given wholly in capitals is printed in title case, so "INXS" prints as "Inxs".
+- The power-chord mark (a raised 5 after the chord name) and the line explaining it print only in the full tier; the default easy sheet prints the plain minor chord.
+- An artist or title of two or more words given wholly in capitals is printed in title case ("PAT BENATAR" as "Pat Benatar"); one word in capitals stays as written ("INXS").
 
 ## Project history
 
