@@ -2,8 +2,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import json
+
 import numpy as np
 import pytest
+import soundfile as sf
 
 from tests.audio_fixtures import write_chord_loop, write_click_track, write_drum_stem
 from youkelele.jsonio import load_model
@@ -25,6 +28,15 @@ def _fake_detector(period: float, beats_per_bar: int, seconds: float):
     return detect
 
 
+def _write_vocals(path: Path, seconds: float, silent_until: float | None, sr: int = 22050) -> None:
+    """A vocals stem: digital silence, or silence then a 330 Hz tone from `silent_until` on."""
+    y = np.zeros(int(seconds * sr), dtype=np.float32)
+    if silent_until is not None:
+        t = np.arange(len(y)) / sr
+        y = np.where(t >= silent_until, 0.3 * np.sin(2 * np.pi * 330.0 * t), 0.0).astype(np.float32)
+    sf.write(str(path), y, sr, subtype="PCM_16")
+
+
 def _ctx(
     tmp_path: Path,
     stage: GridStage,
@@ -33,12 +45,14 @@ def _ctx(
     hit_beats: tuple[int, ...] = (),
     bpm: float = 150,
     seconds: float = 24.0,
+    vocals_silent_until: float | None = None,
 ) -> tuple[StageContext, list[str]]:
     layout = RunLayout(tmp_path / "run", ["ingest", "separate", "grid"])
     audio = layout.path("ingest/audio.wav")
     audio.parent.mkdir(parents=True)
     write_audio(audio)
     write_drum_stem(layout.path("separate/stems/drums.wav"), seconds, bpm, hit_beats)
+    _write_vocals(layout.path("separate/stems/vocals.wav"), seconds, vocals_silent_until)
     out = tmp_path / "out"
     out.mkdir()
     messages: list[str] = []
@@ -245,3 +259,58 @@ def test_grid_stage_bpm_is_mean_interval_octave_uses_median(tmp_path):
     log = " ".join(messages)
     assert "150.0 bpm detected" in log
     assert f"{grid.bpm:.1f} bpm;" in log
+
+
+def test_grid_stage_requires_vocals_and_stores_bar_vocal_db(tmp_path, monkeypatch):
+    assert "separate/stems/vocals.wav" in GridStage.requires
+    # 12 bars of 2 s; one cluster throughout; the vocals come in at 10 s (bar 5)
+    monkeypatch.setattr(grid_module, "segment_bars", lambda features, k=None: ([0] * 12, 3, 1.0))
+    stage = GridStage(detector=_fake_detector(0.5, 4, 24.0))
+    ctx, messages = _ctx(
+        tmp_path, stage, RunOptions(source="x.mp3"), lambda p: write_click_track(p, 24.0, 120),
+        vocals_silent_until=10.0,
+    )
+    stage.run(ctx)
+    grid = load_model(ctx.output("grid/grid.json"), Grid)
+    assert len(grid.bar_vocal_db) == 12
+    assert grid.bar_vocal_db[:5] == [-120.0] * 5
+    tone_db = 20 * np.log10(0.3 / np.sqrt(2))
+    assert all(abs(db - tone_db) < 0.1 for db in grid.bar_vocal_db[5:])
+    # the run (0, 5) ends at bar 5, which becomes a boundary; the vocal-free start is the intro
+    assert [(s.label, s.start_bar, s.end_bar) for s in grid.sections] == [
+        ("intro", 0, 5), ("verse", 5, 12),
+    ]
+    assert "vocal runs (0, 5)" in "\n".join(messages)
+
+
+def test_grid_stage_silent_vocals_stem_changes_nothing(tmp_path, monkeypatch):
+    clusters = [0] * 4 + [1] * 4 + [0] * 4
+    monkeypatch.setattr(grid_module, "segment_bars", lambda features, k=None: (clusters, 3, 0.67))
+    stage = GridStage(detector=_fake_detector(0.5, 4, 24.0))
+    ctx, messages = _ctx(
+        tmp_path, stage, RunOptions(source="x.mp3"), lambda p: write_click_track(p, 24.0, 120)
+    )
+    stage.run(ctx)
+    grid = load_model(ctx.output("grid/grid.json"), Grid)
+    assert grid.bar_vocal_db == [-120.0] * 12
+    assert [(s.start_bar, s.end_bar) for s in grid.sections] == [(0, 4), (4, 8), (8, 12)]
+    assert [s.label for s in grid.sections] == ["verse", "chorus", "verse"]
+    assert "vocal runs none" in "\n".join(messages)
+
+
+def test_grid_json_without_bar_vocal_db_loads(tmp_path):
+    bars = [{"index": i, "start": 2.0 * i, "end": 2.0 * i + 2.0, "beats": [4 * i + j for j in range(4)]}
+            for i in range(4)]
+    data = {
+        "schema": 1, "bpm": 120.0, "meter": {"numerator": 4, "denominator": 4},
+        "beats": [0.5 * i for i in range(16)], "downbeats": [0, 4, 8, 12], "bars": bars,
+        "sections": [{"label": "verse", "start_bar": 0, "end_bar": 4, "confidence": 0.5}],
+        "octave_decision": "none", "bar_loudness_db": [-20.0] * 4, "sections_k": 1,
+        "largest_cluster_share": 1.0, "chorus_margin_db": None, "labels_low_confidence": False,
+    }
+    path = tmp_path / "grid.json"
+    path.write_text(json.dumps(data), encoding="utf-8")
+    grid = load_model(path, Grid)
+    assert grid.bar_vocal_db == []
+    with pytest.raises(ValueError, match="bar_vocal_db"):
+        Grid.model_validate({**data, "bar_vocal_db": [-20.0] * 3})

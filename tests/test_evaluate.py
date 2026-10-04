@@ -89,7 +89,7 @@ def test_cli_evaluate_prints_report(tmp_path, capsys):
     code = main(["evaluate", "demo", "--truth", str(EXAMPLE), "--runs-dir", str(tmp_path / "runs")])
     out = capsys.readouterr().out.splitlines()
     assert code == 0
-    assert out[:8] == [
+    assert out[:9] == [
         "N share: 0.0%",
         "All-N bars: 0",
         "Filled bars: 0",
@@ -98,8 +98,9 @@ def test_cli_evaluate_prints_report(tmp_path, capsys):
         "Key: C major (mix_krumhansl, margin n/a, mode margin n/a, runner-up n/a)",
         "Key confidence: 0.90",
         "Boxes mostly rests: n/a",
+        "Vocal runs: n/a",
     ]
-    assert out[8:] == [
+    assert out[9:] == [
         "Beat F-measure: 100.0%",
         "Downbeat F-measure: 100.0%",
         "Chord root: 100.0%",
@@ -471,3 +472,34 @@ def test_evaluate_with_empty_truth_dir_prints_na_truth_lines(tmp_path):
         "Chord major/minor: n/a",
         "Chord triads: n/a",
     ]
+
+
+def test_evaluate_prints_vocal_runs_and_labels(tmp_path):
+    # 12 bars: no vocals in bars 0-4, vocals from bar 5 on
+    beats = [i * 0.5 for i in range(48)]
+    bars = [
+        Bar(index=i, start=i * 2.0, end=(i + 1) * 2.0, beats=list(range(4 * i, 4 * i + 4)))
+        for i in range(12)
+    ]
+    grid = Grid(
+        bpm=120.0, meter=Meter(numerator=4, denominator=4), beats=beats,
+        downbeats=list(range(0, 48, 4)), bars=bars,
+        sections=[
+            Section(label="intro", start_bar=0, end_bar=5, confidence=0.5),
+            Section(label="verse", start_bar=5, end_bar=12, confidence=0.5),
+        ],
+        octave_decision="none", bar_loudness_db=[-20.0] * 12, sections_k=1,
+        largest_cluster_share=1.0, chorus_margin_db=None, labels_low_confidence=False,
+        bar_vocal_db=[-120.0] * 5 + [-20.0] * 7,
+    )
+    bar_onsets = [["D", "-", "U", "-"]] * 12
+    patterns = [_pattern(0, ["D", "-", "U", "-"]), _pattern(1, ["D", "-", "U", "-"])]
+    text = format_report(evaluate_run(_run_with(tmp_path / "run", grid=grid,
+                                                strums=_strums(bar_onsets, patterns))))
+    assert "Vocal runs: (0, 5)" in text
+    assert "  0 intro bars 0-5: strikes/bar 2.0" in text
+    assert "  1 verse bars 5-12: strikes/bar 2.0" in text
+    # a 1.3 grid has no vocal levels
+    assert "Vocal runs: n/a" in format_report(evaluate_run(_run_with(tmp_path / "old")))
+    sung = grid.model_copy(update={"bar_vocal_db": [-20.0] * 12})
+    assert "Vocal runs: none" in format_report(evaluate_run(_run_with(tmp_path / "all", grid=sung)))

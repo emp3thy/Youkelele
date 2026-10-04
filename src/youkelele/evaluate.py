@@ -11,6 +11,7 @@ import numpy as np
 
 from youkelele.jsonio import load_model
 from youkelele.music.as_played import explained_onsets
+from youkelele.music.sections import runs_text, vocal_flags, vocal_runs
 from youkelele.music.trailing import trailing_silent_bars
 from youkelele.schemas import Chords, Grid, Key, Strums
 
@@ -35,6 +36,8 @@ class SectionDiag:
     rest_share: float
     uncertain: bool
     recall_boost: bool
+    start_bar: int = 0
+    end_bar: int = 0  # exclusive
 
 
 @dataclass
@@ -53,6 +56,7 @@ class Report:
     key_confidence: float | None = None
     key: Key | None = None
     boxes_mostly_rests: int | None = None
+    vocal_runs: list[tuple[int, int]] | None = None  # None when the grid has no vocal levels
     sections: list[SectionDiag] = field(default_factory=list)
     truth_given: bool = False  # a truth directory was supplied: print the truth lines (n/a if absent)
 
@@ -210,6 +214,8 @@ def _section_diags(grid: Grid, strums: Strums, chords: Chords) -> list[SectionDi
                 rest_share=rests / len(pattern.slots) if pattern.slots else 0.0,
                 uncertain=pattern.uncertain,
                 recall_boost=bool(getattr(pattern, "recall_boost", False)),
+                start_bar=section.start_bar,
+                end_bar=section.end_bar,
             )
         )
     return diags
@@ -234,6 +240,8 @@ def _diagnose(run_dir: Path) -> tuple[Report, Strums | None]:
     chords = load_model(run_dir / "03_harmony" / "chords.json", Chords)
     strums = _load_strums(run_dir)
     report = Report(None, None, None, None, None, **_chord_diagnostics(grid, chords))
+    if grid.bar_vocal_db:
+        report.vocal_runs = vocal_runs(vocal_flags(grid.bar_vocal_db))
     if strums is not None:
         report.sections = _section_diags(grid, strums, chords)
         report.boxes_mostly_rests = _boxes_mostly_rests(strums, report.sections)
@@ -349,7 +357,7 @@ def _num(value: float | int | None, spec: str = "") -> str:
 def _section_line(d: SectionDiag) -> str:
     flags = (" uncertain" if d.uncertain else "") + (" recall-boost" if d.recall_boost else "")
     return (
-        f"  {d.index} {d.label}: strikes/bar {d.strikes_per_bar:.1f}, "
+        f"  {d.index} {d.label} bars {d.start_bar}-{d.end_bar}: strikes/bar {d.strikes_per_bar:.1f}, "
         f"explained {_pct(d.explained)}, rests {_pct(d.rest_share)}{flags}"
     )
 
@@ -377,6 +385,7 @@ def format_report(r: Report) -> str:
         _key_line(r.key),
         f"Key confidence: {_num(r.key_confidence, '.2f')}",
         f"Boxes mostly rests: {_num(r.boxes_mostly_rests)}",
+        f"Vocal runs: {'n/a' if r.vocal_runs is None else runs_text(r.vocal_runs)}",
     ]
     lines.extend(_section_line(d) for d in r.sections)
     truth = [r.beat_f, r.downbeat_f, r.chord_root, r.chord_majmin, r.chord_triads]

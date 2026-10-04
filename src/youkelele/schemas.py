@@ -71,6 +71,7 @@ class Grid(_Artifact):
     labels_low_confidence: bool
     backbeat_ratio: float | None = None
     drums_silent: bool = False
+    bar_vocal_db: list[float] = []  # vocals-stem level per bar; empty in files before 1.4
 
     @model_validator(mode="after")
     def _check_structure(self) -> Grid:
@@ -82,6 +83,8 @@ class Grid(_Artifact):
             raise ValueError("bars must be indexed 0..n-1 in order")
         if len(self.bar_loudness_db) != len(self.bars):
             raise ValueError("bar_loudness_db must have one value per bar")
+        if self.bar_vocal_db and len(self.bar_vocal_db) != len(self.bars):
+            raise ValueError("bar_vocal_db must be empty or have one value per bar")
         if self.sections:
             if self.sections[0].start_bar != 0:
                 raise ValueError("sections must start at bar 0")
