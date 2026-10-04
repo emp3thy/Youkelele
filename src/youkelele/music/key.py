@@ -70,9 +70,6 @@ MIN_CHORD_EVENTS = 4
 _NO_CHORD = ("N", "X")
 # The diatonic triads of a major key by semitones above its tonic.
 _DIATONIC = {0: "maj", 2: "min", 4: "min", 5: "maj", 7: "maj", 9: "min", 11: "dim"}
-# Sevenths count by their third; every other quality is ignored for the tonic's mode.
-_MAJOR_QUALITIES = frozenset({"maj", "7", "maj7"})
-_MINOR_QUALITIES = frozenset({"min", "min7"})
 
 
 @dataclass(frozen=True)
@@ -82,6 +79,19 @@ class _Chord:
     triad: str  # the reduced triad quality, e.g. "maj"
     duration: float
     bar: int
+    plain: bool = False  # the plain major label: no seventh, extra degree or bass
+
+
+def plain_major_root(label: str) -> str | None:
+    """The root as written when `label` is the plain major chord (`C#:maj` or `C#`), else None.
+
+    A seventh, an added degree (`C#:maj(9)`) or a bass (`C#/3`) has more than a root and
+    fifth in it, so none of them is a plain major."""
+    try:
+        root, quality, degrees, bass = mir_eval.chord.split(label)
+    except (mir_eval.chord.InvalidChordException, ValueError, IndexError):
+        return None
+    return root if quality == "maj" and not degrees and bass == "1" else None
 
 
 @dataclass(frozen=True)
@@ -110,7 +120,8 @@ def _chords(events: Sequence[ChordEvent]) -> list[_Chord]:
             pc = _pitch_class(root)
         except (mir_eval.chord.InvalidChordException, ValueError, IndexError):
             continue
-        out.append(_Chord(pc, quality, triad, event.end - event.start, event.bar))
+        plain = plain_major_root(event.label) is not None
+        out.append(_Chord(pc, quality, triad, event.end - event.start, event.bar, plain))
     return out
 
 
@@ -303,16 +314,17 @@ def mode_at(tonic: str, chroma_mean: np.ndarray) -> tuple[Literal["major", "mino
 def tonic_chord_mode(
     tonic: str, events: Sequence[ChordEvent]
 ) -> Literal["major", "minor"] | None:
-    """The quality holding more of the tonic root's chord time, sevenths by their third
-    (X:7 and X:maj7 major, X:min7 minor); None when neither holds more."""
+    """The quality holding more of the tonic root's chord time, each chord by its triad (X:7,
+    X:9 and X:maj6 major; X:min7, X:min9 and X:minmaj7 minor); None when neither holds more.
+    Suspended, diminished and power chords count for neither."""
     pc = _pitch_class(tonic)
     major = minor = 0.0
     for chord in _chords(events):
         if chord.root != pc:
             continue
-        if chord.quality in _MAJOR_QUALITIES:
+        if chord.triad == "maj":
             major += chord.duration
-        elif chord.quality in _MINOR_QUALITIES:
+        elif chord.triad == "min":
             minor += chord.duration
     if major > minor:
         return "major"
@@ -334,15 +346,27 @@ def key_and_decision(
     decision = decide_tonic(events, bars, sections, chroma_mean)
     if decision is None:
         return mix_key, None
-    mode, mode_margin = mode_at(decision.tonic, chroma_mean)
-    if mode_margin < MODE_TIE_MARGIN:
-        mode = tonic_chord_mode(decision.tonic, events) or mode
+    mode, mode_margin = _mode_of(decision.tonic, chroma_mean, events)
     key = Key(
         tonic=decision.tonic, mode=mode, confidence=mode_margin, method="chords_stems",
         margin=decision.margin, mode_margin=mode_margin, runner_up=decision.runner_up,
         mix=mix_key,
     )
+    other = hedge_tonic(key)
+    if other is not None:  # the other tonic the sheet names carries its own mode
+        key = key.model_copy(update={"hedge_mode": _mode_of(other, chroma_mean, events)[0]})
     return key, decision
+
+
+def _mode_of(
+    tonic: str, chroma_mean: np.ndarray, events: Sequence[ChordEvent]
+) -> tuple[Literal["major", "minor"], float]:
+    """The mode at a tonic by the chroma, and its margin; under `MODE_TIE_MARGIN` the tonic's
+    own chords decide."""
+    mode, margin = mode_at(tonic, chroma_mean)
+    if margin < MODE_TIE_MARGIN:
+        mode = tonic_chord_mode(tonic, events) or mode
+    return mode, margin
 
 
 def key_from_chords(
@@ -377,11 +401,14 @@ POWER_MIN_SHARE = 0.2
 def power_chord_events(
     events: Sequence[ChordEvent], key: Key, chroma_mean: np.ndarray
 ) -> list[int]:
-    """Indices of the tonic root's major events when the tonic is a power chord, else `[]`.
+    """Indices of the tonic root's plain major events when the tonic is a power chord, else `[]`.
 
-    All four hold: the key is minor; the tonic root's chord time as major exceeds its time as
-    minor; the harmonic chroma prefers minor at the tonic by at least `POWER_MODE_MARGIN`; and
-    the tonic root holds at least `POWER_MIN_SHARE` of non-N chord time.
+    Only the plain major label counts as major here (`X:maj`, see `plain_major_root`): a
+    seventh, an added degree or a slash chord has more than root and fifth in its label.
+    All four hold: the key is minor; the tonic root's chord time as plain major exceeds its
+    time as minor; the harmonic chroma prefers minor at the tonic by at least
+    `POWER_MODE_MARGIN`; and the tonic root holds at least `POWER_MIN_SHARE` of non-N chord
+    time.
     """
     if key.mode != "minor":
         return []
@@ -397,7 +424,7 @@ def power_chord_events(
         if chord.root != tonic:
             continue
         root_time += chord.duration
-        if chord.triad == "maj":
+        if chord.plain:
             major += chord.duration
             majors.append(index)
         elif chord.triad == "min":
@@ -423,18 +450,49 @@ def hedged(key: Key) -> bool:
     return _close(key) or _mix_disagrees(key)
 
 
-def hedge_tonic(key: Key) -> str | None:
-    """The other tonic a hedged key names: the runner-up when the margin is close (whether
-    or not the mix also disagrees), the mix's tonic when only the mix disagrees."""
+def _hedge(key: Key) -> tuple[str, Literal["runner_up", "mix"]] | None:
     if _close(key) and key.runner_up is not None:
-        return key.runner_up
+        return key.runner_up, "runner_up"
     if _mix_disagrees(key):
-        return key.mix.tonic
+        return key.mix.tonic, "mix"
     return None
 
 
+def hedge_tonic(key: Key) -> str | None:
+    """The other tonic a hedged key names: the runner-up when the margin is close (whether
+    or not the mix also disagrees), the mix's tonic when only the mix disagrees."""
+    hedge = _hedge(key)
+    return hedge[0] if hedge is not None else None
+
+
+def hedge_text(key: Key) -> str | None:
+    """The other key a hedged key names, `C major`, with its own mode; None when not hedged.
+
+    The mode is the one stored at harmony time (`Key.hedge_mode`). A file written before it
+    was stored falls back to the mix estimate's mode for a mix hedge and to the key's own
+    mode for a runner-up."""
+    hedge = _hedge(key)
+    if hedge is None:
+        return None
+    other, source = hedge
+    mode = key.hedge_mode
+    if mode is None:
+        mode = key.mix.mode if source == "mix" and key.mix is not None else key.mode
+    return f"{other} {mode}"
+
+
 def key_text(key: Key) -> str:
-    """`D major`, or `G major (or D major)` when hedged."""
+    """`D major`, or `A minor (or C major)` when hedged."""
     text = f"{key.tonic} {key.mode}"
-    other = hedge_tonic(key)
-    return f"{text} (or {other} {key.mode})" if other is not None else text
+    other = hedge_text(key)
+    return f"{text} (or {other})" if other is not None else text
+
+
+def pair_rule_note(decision: TonicDecision | None) -> str:
+    """The pair rule over every candidate, for the manifest: `F by 0.083`, or `tie, F by
+    chroma` when the pair shares were within `PAIR_TIE` and the stem chroma chose."""
+    if decision is None:
+        return "none"
+    if decision.pair_margin < PAIR_TIE:
+        return f"tie, {decision.pair_tonic} by chroma"
+    return f"{decision.pair_tonic} by {decision.pair_margin:.3f}"

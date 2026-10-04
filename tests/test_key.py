@@ -8,16 +8,19 @@ from youkelele.music.key import (
     KRUMHANSL_MAJOR,
     KRUMHANSL_MINOR,
     MODE_TIE_MARGIN,
+    PAIR_TIE,
     POWER_MIN_SHARE,
     POWER_MODE_MARGIN,
     SECTION_END_WEIGHT,
     decide_tonic,
     estimate_key,
+    hedge_text,
     hedge_tonic,
     hedged,
     key_from_chords,
     key_text,
     mode_at,
+    pair_rule_note,
     pair_shares,
     power_chord_events,
     tonic_chord_mode,
@@ -325,3 +328,94 @@ def test_key_json_without_new_fields_loads():
     nested = Key(tonic="D", mode="major", confidence=0.3, method="chords_stems", margin=0.05,
                  mode_margin=0.3, runner_up="A", mix=key)
     assert Key.model_validate_json(nested.model_dump_json(by_alias=True)) == nested
+
+
+def test_power_chord_events_take_only_the_plain_major_label():
+    # a seventh, a slash chord and an added ninth have more than root and fifth in the label
+    labels = ["C#:maj"] * 6 + ["C#:7", "C#:maj7", "C#/3", "C#:maj(9)"] + ["B:maj"] * 3 + ["E:maj"] * 2
+    assert power_chord_events(_events(labels), C_SHARP_MINOR, MINOR_STEMS) == list(range(6))
+    # a bare root is the plain major too
+    assert power_chord_events(_events(["C#"] * 6 + ["B:maj"] * 3), C_SHARP_MINOR, MINOR_STEMS) == list(
+        range(6)
+    )
+
+
+def test_tonic_chord_mode_counts_every_quality_by_its_triad():
+    assert tonic_chord_mode("F", _events(["F:9", "F:maj6", "F:min9"])) == "major"
+    assert tonic_chord_mode("F", _events(["F:min9", "F:minmaj7", "F:9"])) == "minor"
+    assert tonic_chord_mode("F", _events(["F:sus4", "F:5"])) is None
+
+
+# --- the hedge carries its own mode (final fix wave, A1 and B2) ---
+
+
+def test_runner_up_hedge_carries_its_own_mode():
+    # A and C tie on score and on pair share; the A minor chroma picks A, C is the runner-up
+    labels = ["A:min", "C:maj"] * 4 + ["E:min", "D:min"]
+    events, bars, sections = _events(labels), _bars(len(labels)), _sections([len(labels)])
+    chroma = np.roll(KRUMHANSL_MINOR, 9)  # A minor's profile: major at C
+    key = key_from_chords(events, bars, sections, chroma, MIX)
+    assert (key.tonic, key.mode, key.runner_up) == ("A", "minor", "C")
+    assert key.margin < KEY_HEDGE_MARGIN and hedge_tonic(key) == "C"
+    assert key.hedge_mode == "major"
+    assert key_text(key) == "A minor (or C major)"
+    assert hedge_text(key) == "C major"
+
+
+def test_mix_hedge_carries_the_mode_the_stems_hear_at_the_mix_tonic():
+    labels = ["G:maj", "C:maj", "D:maj", "G:maj"] * 3
+    events, bars, sections = _events(labels), _bars(len(labels)), _sections([4, 4, 4])
+    chroma = np.roll(KRUMHANSL_MAJOR, 7)  # G major's profile: minor at E
+    # the mix names E major; the stems hear E as minor, and the stored mode is the stems'
+    mix = Key(tonic="E", mode="major", confidence=0.2)
+    key = key_from_chords(events, bars, sections, chroma, mix)
+    assert (key.tonic, key.mode) == ("G", "major") and key.margin >= KEY_HEDGE_MARGIN
+    assert hedge_tonic(key) == "E" and key.hedge_mode == "minor"
+    assert key_text(key) == "G major (or E minor)"
+
+
+def test_hedge_mode_tie_is_decided_by_the_hedge_tonics_own_chords():
+    # at F the chroma prefers minor by under MODE_TIE_MARGIN; the song's one F chord is major
+    chroma = np.roll(KRUMHANSL_MAJOR, 5) + 1.2 * np.roll(KRUMHANSL_MINOR, 5)
+    mode, margin = mode_at("F", chroma)
+    assert mode == "minor" and margin < MODE_TIE_MARGIN
+    labels = ["G:maj", "C:maj", "D:maj", "G:maj"] * 3 + ["F:maj"]
+    events, bars, sections = _events(labels), _bars(len(labels)), _sections([4, 4, 5])
+    key = key_from_chords(events, bars, sections, chroma, Key(tonic="F", mode="minor", confidence=0.1))
+    assert key.tonic == "G" and hedge_tonic(key) == "F"
+    assert key.hedge_mode == "major" and hedge_text(key) == "F major"
+
+
+def test_hedge_text_for_files_written_before_the_hedge_mode():
+    # no stored hedge mode: the runner-up takes the key's mode, the mix keeps its own
+    close = Key(tonic="A", mode="minor", confidence=0.3, method="chords_stems", margin=0.01,
+                mode_margin=0.3, runner_up="C", mix=Key(tonic="A", mode="minor", confidence=0.1))
+    assert close.hedge_mode is None and hedge_text(close) == "C minor"
+    mix_only = close.model_copy(
+        update={"margin": 0.2, "mix": Key(tonic="F", mode="major", confidence=0.1)}
+    )
+    assert hedge_text(mix_only) == "F major" and key_text(mix_only) == "A minor (or F major)"
+    # a stored mode wins over the mix's own
+    stored = mix_only.model_copy(update={"hedge_mode": "minor"})
+    assert hedge_text(stored) == "F minor"
+    assert hedge_text(close.model_copy(update={"margin": 0.2})) is None
+
+
+def test_key_json_from_version_1_3_loads_without_a_hedge_mode():
+    key = Key.model_validate({"schema": 1, "tonic": "C", "mode": "major", "confidence": 0.5})
+    assert key.hedge_mode is None and key_text(key) == "C major" and hedge_text(key) is None
+    hedged_key = Key(tonic="D", mode="major", confidence=0.3, method="chords_stems", margin=0.01,
+                     mode_margin=0.3, runner_up="A", hedge_mode="minor")
+    assert Key.model_validate_json(hedged_key.model_dump_json(by_alias=True)) == hedged_key
+
+
+def test_pair_rule_note_names_a_chroma_tie_as_a_tie():
+    events = _events(["C:maj", "F:maj"] * 4 + ["A:min", "D:min"])
+    decision = decide_tonic(events, _bars(10), _sections([10]), _triad_chroma((5, 9, 0)))
+    assert decision.pair_margin < PAIR_TIE
+    assert pair_rule_note(decision) == f"tie, {decision.pair_tonic} by chroma"
+    labels = ["G:maj", "C:maj", "D:maj", "G:maj"] * 3
+    clear = decide_tonic(_events(labels), _bars(12), _sections([12]), np.ones(12))
+    assert clear.pair_margin >= PAIR_TIE
+    assert pair_rule_note(clear) == f"{clear.pair_tonic} by {clear.pair_margin:.3f}"
+    assert pair_rule_note(None) == "none"

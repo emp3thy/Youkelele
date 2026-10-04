@@ -132,6 +132,14 @@ def test_score_carries_key_hedge_from_chords_key():
     clear = close.model_copy(update={"margin": 0.2})
     assert build(clear).key_hedge is None
     assert build(Key(tonic="C", mode="major", confidence=0.9)).key_hedge is None
+    # the hedge carries its own mode, not the key's
+    a_minor = Key(tonic="A", mode="minor", confidence=0.3, method="chords_stems", margin=0.01,
+                  mode_margin=0.3, runner_up="C", hedge_mode="major")
+    assert (build(a_minor).key, build(a_minor).key_hedge) == ("A minor", "C major")
+    mix = a_minor.model_copy(
+        update={"margin": 0.2, "hedge_mode": None, "mix": Key(tonic="F", mode="major", confidence=0.1)}
+    )
+    assert build(mix).key_hedge == "F major"  # a file from before the stored mode: the mix's own
 
 
 def test_score_copies_explained():
@@ -374,15 +382,19 @@ def test_score_sets_power_on_chord_and_diagram():
     assert [(d.name, d.power) for d in score.chord_diagrams] == [("C#m", True), ("G", False)]
 
 
-def test_diagram_used_both_power_and_plain_is_not_power():
-    evs = [_ev(0, 1, "C#:5"), _ev(1, 2, "G"), _ev(2, 3, "C#:min")]
+def test_diagram_used_both_power_and_plain_is_power():
+    # any use as a power chord gives the legend line; the badge stays on the power cells only
+    evs = [_ev(0, 1, "C#:min"), _ev(1, 2, "G"), _ev(2, 3, "C#:5")]
     arranged = [
-        ArrangedChord(event=0, name="C#m", shape=F, power=True),
+        ArrangedChord(event=0, name="C#m", shape=F),
         ArrangedChord(event=1, name="G", shape=G),
-        ArrangedChord(event=2, name="C#m", shape=F),
+        ArrangedChord(event=2, name="C#m", shape=F, power=True),
     ]
     score = _build_events(3, evs, arranged)
-    assert [(d.name, d.power) for d in score.chord_diagrams] == [("C#m", False), ("G", False)]
+    assert [(d.name, d.power) for d in score.chord_diagrams] == [("C#m", True), ("G", False)]
+    assert [[(c.name, c.power) for c in bar.chords] for bar in score.sections[0].bars] == [
+        [("C#m", False)], [("G", False)], [("C#m", True)],
+    ]
 
 
 def test_score_sections_use_aligned_starts_and_record_shift():

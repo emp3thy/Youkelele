@@ -120,6 +120,9 @@ class Key(_Artifact):
     mode_margin: float | None = None  # major minus minor correlation at the tonic, absolute
     runner_up: str | None = None  # the runner-up tonic under the deciding rule
     mix: Key | None = None  # the mix estimate, kept for comparison
+    # the mode of the other tonic a hedged key names, from the chroma at that tonic; None
+    # when not hedged and in files written before it was stored
+    hedge_mode: Literal["major", "minor"] | None = None
 
 
 class ChordEvent(_Artifact):
@@ -229,7 +232,7 @@ class ChordDiagram(_Artifact):
     name: str
     shape: Shape
     passing: bool = False  # every use of this chord is a passing chord
-    power: bool = False  # every use of this chord is a power chord on the record
+    power: bool = False  # some use of this chord is a power chord on the record
 
 
 class ScoreChord(_Artifact):

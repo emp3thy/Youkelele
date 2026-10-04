@@ -33,6 +33,8 @@ from youkelele.music.key import (
     estimate_key,
     key_and_decision,
     key_text,
+    pair_rule_note,
+    plain_major_root,
     power_chord_events,
 )
 from youkelele.music.snap import snap_to_beats
@@ -64,13 +66,15 @@ def _key_log(key: Key, decision: TonicDecision | None) -> str:
 
 def relabel_power(events: list[ChordEvent], indices: list[int]) -> list[ChordEvent]:
     """The events at `indices` as power chords: label `<root>:5`, the key's quality (minor, the
-    gate's precondition) as the triad, `power` set. The root keeps the model's spelling and
-    nothing else changes."""
+    gate's precondition) as the triad, `power` set. The root is the parsed root in the model's
+    spelling and nothing else changes. Only a plain major label is relabelled; any other
+    event at an index (a seventh, an added degree, a slash chord) is left as it is."""
     chosen = set(indices)
     out: list[ChordEvent] = []
     for i, event in enumerate(events):
-        if i in chosen:
-            root = event.label.split(":", 1)[0]
+        root = plain_major_root(event.label) if i in chosen else None
+        if root is not None:
+            # model_copy skips validation, so the label is built only from a parsed root
             event = event.model_copy(
                 update={"label": f"{root}:5", "triad": f"{root}:min", "power": True}
             )
@@ -136,10 +140,7 @@ class HarmonyStage(Stage):
         ctx.note("power_chords", str(len(power)))
         ctx.note("key_method", key.method)
         ctx.note("key_margin", "none" if key.margin is None else f"{key.margin:.3f}")
-        ctx.note(
-            "tonic_pair_rule",
-            "none" if decision is None else f"{decision.pair_tonic} by {decision.pair_margin:.3f}",
-        )
+        ctx.note("tonic_pair_rule", pair_rule_note(decision))
         ctx.note("model", f"chord_cnn_lstm@{CHORD_MODEL_COMMIT}")
         prefixes = ",".join(h[:8] for h in CHORD_MODEL_CHECKPOINT_SHA256.values())
         ctx.note("checkpoints", prefixes)

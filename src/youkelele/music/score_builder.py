@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from youkelele.music.key import hedge_tonic
+from youkelele.music.key import hedge_text
 from youkelele.music.phrase import NO_CHORD, aligned_starts, bar_change_bars
 from youkelele.music.relabel import refine_labels
 from youkelele.music.trailing import trailing_silent_bars
@@ -124,7 +124,7 @@ def build_score(
         for i, d in enumerate(diagrams):
             if d.name == a.name and d.shape == a.shape:
                 d.passing = d.passing and a.passing  # one full use makes a full diagram
-                d.power = d.power and a.power  # one plain use drops the legend line
+                d.power = d.power or a.power  # one power use gives the legend line
                 return i
         diagrams.append(
             ChordDiagram(name=a.name, shape=a.shape, passing=a.passing, power=a.power)
@@ -198,8 +198,6 @@ def build_score(
             )
         )
 
-    other = hedge_tonic(chords.key)
-    hedge = f"{other} {chords.key.mode}" if other is not None else None
     return Score(
         instrument=Instrument(
             name=instrument_name, strings=len(tuning.pitches), tuning=list(tuning.pitches),
@@ -208,7 +206,7 @@ def build_score(
         title=source.title,
         artist=source.artist,
         key=f"{chords.key.tonic} {chords.key.mode}",
-        key_hedge=hedge,
+        key_hedge=hedge_text(chords.key),
         bpm=grid.bpm,
         meter=grid.meter,
         tier=arrangement.tier,

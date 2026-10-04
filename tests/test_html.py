@@ -377,6 +377,14 @@ def test_html_easy_tier_prints_the_plain_name_without_badge_or_legend_line():
     assert re.findall(r'<div class="cell">([^<]*)</div>', html) == ["C#m", "C#m / G", "G"]
 
 
+def test_html_power_legend_line_once_per_name():
+    # two shapes of one name, both used as a power chord: one legend line
+    score = _power_score("full")
+    diagrams = [*score.chord_diagrams, ChordDiagram(name="C#m", shape=B, power=True)]
+    html = render_html(score.model_copy(update={"chord_diagrams": diagrams}))
+    assert html.count("C#m is a power chord on the record") == 1
+
+
 def test_html_without_power_has_no_badge_markup():
     html = render_html(_two_sections())
     assert "<sup>5</sup>" not in html and "power chord" not in html

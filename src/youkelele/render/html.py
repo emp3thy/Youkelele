@@ -25,7 +25,7 @@ _ENV = Environment(
 
 CAPO_NOTE = "Shapes are relative to the capo"
 POWER_LEGEND = "{name} is a power chord on the record"
-FILLED_NOTE ="Italic chords were inferred where the recording had no clear chord"
+FILLED_NOTE = "Italic chords were inferred where the recording had no clear chord"
 
 
 def display_names(labels: Sequence[str]) -> list[str]:
@@ -91,11 +91,9 @@ def render_html(score: Score) -> str:
     )
     # the badge and its legend line belong to the full tier; the easy tier prints the plain name
     power_badge = score.tier == "full"
-    power_lines = (
-        [POWER_LEGEND.format(name=d.name) for d in score.chord_diagrams if d.power]
-        if power_badge
-        else []
-    )
+    # one line per name: two shapes of one chord would otherwise print it twice
+    power_names = dict.fromkeys(d.name for d in score.chord_diagrams if d.power)
+    power_lines = [POWER_LEGEND.format(name=name) for name in power_names] if power_badge else []
     sections = []
     any_filled = False
     per_slot = slot_px(score.slots_per_bar)

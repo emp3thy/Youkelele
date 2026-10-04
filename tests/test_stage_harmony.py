@@ -9,9 +9,11 @@ from youkelele.jsonio import load_model, save_model
 from youkelele.layout import RunLayout
 from youkelele.models.chords import LabelSpan
 from youkelele.options import RunOptions
-from youkelele.schemas import Bar, Chords, Grid, Meter, Section
+from youkelele.music.key import key_text
+from youkelele.music.triads import to_triad
+from youkelele.schemas import Bar, ChordEvent, Chords, Grid, Meter, Section
 from youkelele.stage import StageContext
-from youkelele.stages.harmony import HarmonyStage
+from youkelele.stages.harmony import HarmonyStage, relabel_power
 
 
 def _grid(n_bars: int, bar_seconds: float) -> Grid:
@@ -179,6 +181,29 @@ def test_harmony_stage_key_from_chords_and_notes(tmp_path):
     assert ctx.notes["key_margin"] == f"{key.margin:.3f}"
     assert ctx.notes["tonic_pair_rule"].startswith("D by ")
     assert any("key D major (or" in line and "chords+stems, margin" in line for line in logged)
+    # the hedge's own mode is stored, and the log prints it
+    assert key.hedge_mode in ("major", "minor")
+    assert any(f"key {key_text(key)} (chords+stems" in line for line in logged)
+
+
+def test_relabel_power_takes_only_plain_major_labels():
+    labels = ["C#:maj", "C#:7", "C#:maj7", "C#/3", "C#:maj(9)", "C#"]
+    events = [
+        ChordEvent(bar=i, beat=0, start=float(i), end=i + 1.0, label=label,
+                   triad=to_triad(label), confidence=0.9)
+        for i, label in enumerate(labels)
+    ]
+    out = relabel_power(events, list(range(len(events))))
+    assert [(e.label, e.triad, e.power) for e in out] == [
+        ("C#:5", "C#:min", True),
+        ("C#:7", "C#:maj", False),
+        ("C#:maj7", "C#:maj", False),
+        ("C#/3", "C#:maj", False),
+        ("C#:maj(9)", "C#:maj", False),
+        ("C#:5", "C#:min", True),
+    ]
+    for event in out:  # every label still passes the schema's own check
+        ChordEvent.model_validate(event.model_dump())
 
 
 def test_harmony_stage_relabels_power_events(tmp_path):
