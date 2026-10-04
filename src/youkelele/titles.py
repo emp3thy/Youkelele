@@ -28,13 +28,16 @@ _WORD_RE = re.compile(r"\S+")
 
 
 def _title_case_if_shouting(text: str) -> str:
-    if any(ch.islower() for ch in text):
+    """Title-case two or more words given entirely in capitals. One word in capitals stays
+    as written (INXS, ABBA, AC/DC), and so does anything with a lower-case letter."""
+    if any(ch.islower() for ch in text) or len(_WORD_RE.findall(text)) < 2:
         return text
     return _WORD_RE.sub(lambda m: m.group()[:1].upper() + m.group()[1:].lower(), text)
 
 
 def clean_artist(artist: str | None) -> str | None:
-    """Title-case an artist given entirely in capitals; otherwise leave it alone."""
+    """Title-case an artist of two or more words given entirely in capitals; otherwise
+    leave it alone."""
     if artist is None:
         return None
     return _title_case_if_shouting(artist)

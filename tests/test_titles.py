@@ -42,6 +42,19 @@ def test_clean_artist_title_cases_capitals():
     assert clean_artist("Wet Leg") == "Wet Leg"
 
 
+def test_one_word_in_capitals_stays_as_written():
+    # a one-word name in capitals is usually how the act spells itself
+    for name in ("INXS", "ABBA", "KISS", "AC/DC"):
+        assert clean_artist(name) == name
+        assert clean_artist_from(f"{name} - Song", name) == name
+    assert clean_artist("PAT BENATAR") == "Pat Benatar"
+    assert clean_artist("deadmau5") == "deadmau5" and clean_artist("McFly") == "McFly"
+    # the same rule for the title
+    assert clean_title("FAME", None) == "FAME"
+    assert clean_title("INXS - NEED YOU TONIGHT", "INXS") == "Need You Tonight"
+    assert clean_title("SHOUTY TITLE", None) == "Shouty Title"
+
+
 def test_tag_words_are_the_agreed_set():
     assert "official" in UPLOAD_TAG_WORDS and "remastered" in UPLOAD_TAG_WORDS
 
