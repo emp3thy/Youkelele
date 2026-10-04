@@ -24,6 +24,8 @@ Out, with the reason:
 
 House rules unchanged: schema version 1 and every 1.3 and 1.4 file loads; UK spelling; no em-dashes; no song lyrics anywhere in code, tests or documents; no time or effort estimates in documents.
 
+**Generality (owner's rule, 2026-10-04).** The validation songs are where patterns and strategies are learnt, never what the program is built for. No code path, constant or test may depend on which song is being processed: nothing reads a title, id, duration or any other identity, and every rule in this document is stated so that it applies to any input. Constants are set inside bands measured across every available song, and a constant whose band rests on one song, or whose margin is a few hundredths, is named as such in section 9 so the owner can see where fitting these songs is closest to learning from them (this version: the riff thresholds, A13 and A17; the full-vote density, A8; the sandwich rule, A3). Unit tests use synthetic inputs or the measured numbers as examples of a rule, never as the rule. Validation expectations name songs because they are expectations; the blind song exists to catch a rule that only fits the known ones. A finding that is true of one record and not of the music in general (such as the register separator in `register-split.md`) is recorded and not adopted.
+
 ## 2. What listening established on 2026-10-04
 
 The owner listened to twelve clips cut from the run folders (guitar stem with clicks on the printed pattern, mix excerpts followed by a synthesised triad, and mix excerpts with a beep at a detected boundary). These are the ear facts this design rests on:
