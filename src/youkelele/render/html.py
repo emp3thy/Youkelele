@@ -84,6 +84,11 @@ def render_html(score: Score) -> str:
     passing = ", ".join(
         f"{d.name} {fret_notation(d.shape)}" for d in score.chord_diagrams if d.passing
     )
+    # the shapes without the capo: only under one, each shape in fret notation, barres marked
+    without_capo = ", ".join(
+        f"{d.name} {fret_notation(d.shape)}{' (barre)' if d.shape.barres else ''}"
+        for d in score.alternative_diagrams
+    )
     # the badge and its legend line belong to the full tier; the easy tier prints the plain name
     power_badge = score.tier == "full"
     power_lines = (
@@ -138,6 +143,7 @@ def render_html(score: Score) -> str:
         tuning=" ".join(score.instrument.tuning),
         diagrams=diagrams,
         passing=passing or None,
+        without_capo=without_capo if capo > 0 and without_capo else None,
         power_badge=power_badge,
         power_lines=power_lines,
         sections=sections,

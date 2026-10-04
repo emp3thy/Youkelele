@@ -246,6 +246,7 @@ class ScoreBar(_Artifact):
     index: int
     chords: list[ScoreChord]
     pickup: bool = False
+    struck: bool = False  # at least one strike was detected in the bar; the worked example prefers these
 
 
 class ScoreSection(_Artifact):
@@ -273,5 +274,6 @@ class Score(_Artifact):
     strum_source: Literal["guitar_stem", "other_stem", "mix"]
     strums_uncertain: bool
     chord_diagrams: list[ChordDiagram]
+    alternative_diagrams: list[ChordDiagram] = []  # the no-capo shapes, only under a capo
     sections: list[ScoreSection]
     trailing_bars_dropped: int = 0  # bars after the last chord left off the sheet

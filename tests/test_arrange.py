@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from youkelele.music.arrange import (
+    capo_scores,
     choose_capo,
     score_capo,
     select_voicings,
@@ -239,3 +240,11 @@ def test_passing_ignores_blank_events_and_counts_filled_ones():
     assert passing_labels(events, 2.0) == {"B:maj"}
     filled = events[-1].model_copy(update={"filled": True})
     assert passing_labels(events[:-1] + [filled], 2.0) == {"B:maj"}
+
+
+def test_capo_scores_are_the_per_capo_scores_choose_capo_minimises(db):
+    scores = capo_scores(EB_LABELS, db)
+    assert len(scores) == 6
+    assert scores == [score_capo(EB_LABELS, c, db) for c in range(6)]
+    assert scores.index(min(scores)) == choose_capo(EB_LABELS, db)[0] == 3
+    assert len(capo_scores(EB_LABELS, db, max_capo=2)) == 3

@@ -493,3 +493,36 @@ def test_html_headings_and_strum_as_in_use_display_names():
     headings = re.findall(r"<h2>(.*?)</h2>", html)
     assert headings == ["Verse 1", "Chorus", "Verse 2", "Bridge", "Verse 3"]
     assert "Strum as in Verse 2 (uncertain)" in _section_html(html, "Verse 3")
+
+
+CSHARP = Shape(frets=[1, 1, 1, 4], fingers=[1, 1, 1, 4], base_fret=1, barres=[1])
+FSHARP = Shape(frets=[3, 1, 2, 4], fingers=[3, 1, 2, 4], base_fret=1, barres=[])
+
+
+def _alternative_score(capo: int) -> Score:
+    return _two_sections(capo=capo).model_copy(
+        update={
+            "alternative_diagrams": [
+                ChordDiagram(name="C#", shape=CSHARP),
+                ChordDiagram(name="F#", shape=FSHARP),
+                ChordDiagram(name="B", shape=B),
+            ]
+        }
+    )
+
+
+def test_html_no_capo_line_in_fret_notation_with_barre_marks():
+    html = render_html(_alternative_score(3))
+    assert "Without a capo: C# 1114 (barre), F# 3124, B 4322 (barre)" in html
+    assert html.index('class="legend"') < html.index("Without a capo:") < html.index('class="sections"')
+    # under the Passing line when there is one
+    passing = _alternative_score(3).model_copy(
+        update={"chord_diagrams": [ChordDiagram(name="C", shape=C), ChordDiagram(name="B", shape=B, passing=True)]}
+    )
+    shown = render_html(passing)
+    assert shown.index("Passing:") < shown.index("Without a capo:")
+
+
+def test_html_no_capo_line_absent_without_a_capo():
+    assert "Without a capo" not in render_html(_alternative_score(0))
+    assert "Without a capo" not in render_html(_two_sections(capo=3))

@@ -86,6 +86,9 @@
   {% if passing is not none %}
   <p class="passing">Passing: {{ passing }}</p>
   {% endif %}
+  {% if without_capo is not none %}
+  <p class="passing without-capo">Without a capo: {{ without_capo }}</p>
+  {% endif %}
   {% for line in power_lines %}
   <p class="power-note">{{ line }}</p>
   {% endfor %}

@@ -16,6 +16,7 @@ from youkelele.schemas import (
     Grid,
     Key,
     Meter,
+    ScoreBar,
     Section,
     SectionPattern,
     Shape,
@@ -616,3 +617,65 @@ def test_score_uses_refined_labels():
     )
     assert [s.label for s in score.sections] == ["verse", "bridge", "chorus"]
     assert [s.label for s in grid.sections] == ["verse", "verse", "chorus"]
+
+
+CSHARP = Shape(frets=[1, 1, 1, 4], fingers=[1, 1, 1, 4], base_fret=1, barres=[1])
+FSHARP = Shape(frets=[3, 1, 2, 4], fingers=[3, 1, 2, 4], base_fret=1, barres=[])
+
+
+def _capo_score(capo, alternative):
+    evs = [
+        ChordEvent(bar=i, beat=0, start=i * BAR, end=(i + 1) * BAR, label="C", triad="C", confidence=0.9)
+        for i in range(4)
+    ]
+    shapes = [C, G, C, F]
+    arranged = [
+        ArrangedChord(event=i, name=name, shape=shape)
+        for i, (name, shape) in enumerate(zip(["C", "G", "C", "F"], shapes))
+    ]
+    return build_score(
+        _source(), _grid(4), Chords(key=Key(tonic="C", mode="major", confidence=0.9), events=evs),
+        _strums(),
+        Arrangement(
+            capo=capo, transpose=-capo, tier="easy", chords=arranged, substitutions=[],
+            no_capo_alternative=alternative,
+        ),
+        UKULELE_TUNING, "Ukulele",
+    )
+
+
+def test_score_alternative_diagrams_only_under_capo():
+    alternative = [
+        ArrangedChord(event=0, name="C#", shape=CSHARP),
+        ArrangedChord(event=1, name="F#", shape=FSHARP),
+        ArrangedChord(event=2, name="C#", shape=CSHARP),  # the same shape again: one diagram
+        ArrangedChord(event=3, name="F#", shape=FSHARP, passing=True),
+    ]
+    score = _capo_score(3, alternative)
+    assert [(d.name, d.shape) for d in score.alternative_diagrams] == [("C#", CSHARP), ("F#", FSHARP)]
+    assert [d.passing for d in score.alternative_diagrams] == [False, False]  # one full use wins
+    assert [d.name for d in score.chord_diagrams] == ["C", "G", "F"]  # the played diagrams are untouched
+    assert _capo_score(0, alternative).alternative_diagrams == []
+    assert _capo_score(3, []).alternative_diagrams == []
+
+
+def test_score_bar_struck_flag_from_bar_onsets():
+    strums = _strums()
+    strums = strums.model_copy(
+        update={"bar_onsets": [list("--------"), list("D-------"), list("-------U")]}
+    )
+    evs = [
+        ChordEvent(bar=0, beat=0, start=0.0, end=4 * BAR, label="C", triad="C", confidence=0.9)
+    ]
+    score = build_score(
+        _source(), _grid(4), Chords(key=Key(tonic="C", mode="major", confidence=0.9), events=evs),
+        strums,
+        Arrangement(
+            capo=0, transpose=0, tier="easy", substitutions=[],
+            chords=[ArrangedChord(event=0, name="C", shape=C)],
+        ),
+        UKULELE_TUNING, "Ukulele",
+    )
+    # bar 3 has no bar_onsets entry at all: not struck
+    assert [b.struck for b in score.sections[0].bars] == [False, True, True, False]
+    assert ScoreBar(index=0, chords=[]).struck is False

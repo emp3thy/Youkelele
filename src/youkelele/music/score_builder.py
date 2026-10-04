@@ -120,9 +120,7 @@ def build_score(
     arranged = {a.event: a for a in arrangement.chords}
     starts = _bar_starts(grid, chords, arranged, spb)
 
-    diagrams: list[ChordDiagram] = []
-
-    def diagram_index(a: ArrangedChord) -> int:
+    def diagram_index(diagrams: list[ChordDiagram], a: ArrangedChord) -> int:
         for i, d in enumerate(diagrams):
             if d.name == a.name and d.shape == a.shape:
                 d.passing = d.passing and a.passing  # one full use makes a full diagram
@@ -132,6 +130,12 @@ def build_score(
             ChordDiagram(name=a.name, shape=a.shape, passing=a.passing, power=a.power)
         )
         return len(diagrams) - 1
+
+    diagrams: list[ChordDiagram] = []
+    alternative: list[ChordDiagram] = []
+    if arrangement.capo > 0:  # the open-position shapes, deduped as the played ones are
+        for a in arrangement.no_capo_alternative:
+            diagram_index(alternative, a)
 
     # rows follow the chord-change phrase; grid.json and the section count are unchanged
     aligned = aligned_starts(
@@ -163,7 +167,7 @@ def build_score(
                 a = slot_map[slot]
                 chord_list.append(
                     ScoreChord(
-                        name=a.name, diagram=diagram_index(a), start_slot=slot,
+                        name=a.name, diagram=diagram_index(diagrams, a), start_slot=slot,
                         slots=list(pattern.slots[slot:end]),
                         filled=chords.events[a.event].filled, passing=a.passing, power=a.power,
                     )
@@ -179,7 +183,11 @@ def build_score(
                     ScoreChord(name="N.C.", diagram=-1, start_slot=0, slots=list(pattern.slots))
                 )
             bars.append(
-                ScoreBar(index=bar_idx, chords=chord_list, pickup=grid.bars[bar_idx].pickup)
+                ScoreBar(
+                    index=bar_idx, chords=chord_list, pickup=grid.bars[bar_idx].pickup,
+                    struck=bar_idx < len(strums.bar_onsets)
+                    and any(slot != "-" for slot in strums.bar_onsets[bar_idx]),
+                )
             )
         sections.append(
             ScoreSection(
@@ -208,6 +216,7 @@ def build_score(
         strum_source=strums.source,
         strums_uncertain=strums.uncertain,
         chord_diagrams=diagrams,
+        alternative_diagrams=alternative,
         sections=sections,
         trailing_bars_dropped=dropped,
     )

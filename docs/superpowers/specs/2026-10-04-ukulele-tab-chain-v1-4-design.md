@@ -102,7 +102,7 @@ Measured by: the README renders on GitHub with the image showing; every command 
 
 ## 6. Data format changes
 
-All defaulted; schema version stays 1; version 1.3 files load. `Key.method`, `Key.margin`, `Key.mode_margin`, `Key.runner_up`, `Key.mix: Key | None`; `ChordEvent.power: bool = False`; `Grid.bar_vocal_db: list[float] = []`; `Score.alternative_diagrams: list[ChordDiagram] = []`; `ScoreSection.label` carries the refined bare label; `manifest.json` gains `video_id` and `title_slug` and the notes `capo_margin`, `capo_scores`, `tonic_pair_rule`. The harness (`evaluate`) prints the key with its method and margins, the vocal runs, and each section's label.
+All defaulted; schema version stays 1; version 1.3 files load. `Key.method`, `Key.margin`, `Key.mode_margin`, `Key.runner_up`, `Key.mix: Key | None`; `ChordEvent.power: bool = False`; `Grid.bar_vocal_db: list[float] = []`; `Score.alternative_diagrams: list[ChordDiagram] = []`; `ScoreBar.struck: bool = False` (at least one detected strike in the bar, set from `strums.bar_onsets`, read by `example_bars`); `ScoreSection.label` carries the refined bare label; `manifest.json` gains `video_id` and `title_slug` and the notes `capo_margin`, `capo_scores`, `tonic_pair_rule`. The harness (`evaluate`) prints the key with its method and margins, the vocal runs, and each section's label.
 
 ## 7. Validation
 

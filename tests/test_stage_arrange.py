@@ -166,3 +166,17 @@ def test_arrange_stage_passing_uses_full_bar_median_not_pickup(tmp_path):
         durations=[60.0, 60.0, 40.0, 1.6], grid=grid,
     )
     assert [c.passing for c in arr.chords] == [False, False, False, True]
+
+
+def test_capo_scores_and_margin_note(tmp_path):
+    from youkelele.music.arrange import capo_scores
+    from youkelele.music.shapes import ShapeDB
+
+    labels = ["D#:maj", "A#:maj", "C:min", "G#:maj"] * 2
+    ctx, arr = _run(tmp_path, labels)
+    scores = capo_scores(labels, ShapeDB.load())
+    assert ctx.notes["capo_scores"] == ",".join(f"{s:.2f}" for s in scores)
+    runner_up = min(s for i, s in enumerate(scores) if i != arr.capo)
+    assert arr.capo == 3
+    assert ctx.notes["capo_margin"] == f"{runner_up - scores[arr.capo]:.2f}"
+    assert float(ctx.notes["capo_margin"]) > 0
