@@ -150,6 +150,22 @@ def test_html_no_capo_shows_key_once():
     assert "(shapes)" not in head
 
 
+def _head(html: str) -> str:
+    return html[html.index('<header class="sheet-head">'):html.index("</header>")]
+
+
+def test_header_hedges_key_and_shape_key_under_capo():
+    score = _two_sections().model_copy(update={"key": "G major", "key_hedge": "D major"})
+    head = _head(render_html(score))
+    assert "<b>Key</b> G major (or D major)" in head
+    capo = _two_sections(capo=2).model_copy(update={"key": "G major", "key_hedge": "D major"})
+    head = _head(render_html(capo))
+    assert "F major (or C major) (shapes)" in head
+    assert "Sounding key: G major (or D major)" in head
+    plain = _head(render_html(_two_sections().model_copy(update={"key": "G major"})))
+    assert "(or" not in plain
+
+
 def test_html_fixed_sheet_width_for_print():
     html = render_html(_two_sections())
     assert ".sheet { width: 182mm; margin: 0 auto }" in html

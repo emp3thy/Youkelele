@@ -14,6 +14,7 @@ from collections.abc import Sequence
 import mir_eval.chord
 import numpy as np
 
+from youkelele.music.chroma import chroma_of
 from youkelele.music.triads import to_triad
 from youkelele.schemas import Bar, ChordEvent
 
@@ -52,20 +53,14 @@ def chord_template(label: str) -> np.ndarray | None:
 
 
 def bar_chroma(y: np.ndarray, sr: int, bars: Sequence[Bar]) -> np.ndarray:
-    """Mean CQT chroma per bar (bars x 12); zeros for a bar with no frames."""
-    import librosa
+    """Mean CQT chroma per bar (bars x 12); zeros for a bar with no frames.
 
-    out = np.zeros((len(bars), 12))
-    if not bars or not np.any(y):  # silence: no pitch to estimate tuning from
-        return out
-    hop = 512
-    chroma = librosa.feature.chroma_cqt(y=np.asarray(y, dtype=np.float32), sr=sr, hop_length=hop)
-    times = librosa.frames_to_time(np.arange(chroma.shape[1]), sr=sr, hop_length=hop)
-    for i, bar in enumerate(bars):
-        mask = (times >= bar.start) & (times < bar.end)
-        if mask.any():
-            out[i] = chroma[:, mask].mean(axis=1)
-    return out
+    A thin wrapper: the harmony stage computes the chroma once with
+    `music.chroma.harmonic_chroma` and reads its `bar_means` directly.
+    """
+    if not bars:
+        return np.zeros((0, 12))
+    return chroma_of(y, sr).bar_means(bars)
 
 
 def bar_energy(y: np.ndarray, sr: int, bars: Sequence[Bar]) -> np.ndarray:
@@ -80,6 +75,23 @@ def bar_energy(y: np.ndarray, sr: int, bars: Sequence[Bar]) -> np.ndarray:
 
 def _overlap(event: ChordEvent, bar: Bar) -> float:
     return min(event.end, bar.end) - max(event.start, bar.start)
+
+
+def chorded_energy_reference(
+    events: Sequence[ChordEvent], bars: Sequence[Bar], energy: np.ndarray
+) -> float | None:
+    """Median energy of the bars holding a chord; None when no bar does or it is silent.
+
+    The fill and the key's chroma mask both measure a bar's energy against this.
+    """
+    chorded = [
+        i for i, bar in enumerate(bars)
+        if any(e.label not in _NO_CHORD and _overlap(e, bar) > _EPS for e in events)
+    ]
+    if not chorded:
+        return None
+    reference = float(np.median([energy[i] for i in chorded]))
+    return reference if reference > 0 else None
 
 
 def _split_n_at_bars(events: Sequence[ChordEvent], bars: Sequence[Bar]) -> list[ChordEvent]:
@@ -150,11 +162,8 @@ def fill_silent_bars(
         return split
 
     overlapping = [[e for e in split if _overlap(e, bar) > _EPS] for bar in bars]
-    chorded = [i for i, evs in enumerate(overlapping) if any(e.label not in _NO_CHORD for e in evs)]
-    if not chorded:
-        return split
-    reference = float(np.median([energy[i] for i in chorded]))
-    if reference <= 0:
+    reference = chorded_energy_reference(split, bars, energy)
+    if reference is None:
         return split
 
     fills: dict[int, ChordEvent] = {}

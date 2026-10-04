@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from youkelele.music.key import hedge_tonic
 from youkelele.music.phrase import NO_CHORD, aligned_starts, bar_change_bars
 from youkelele.music.trailing import trailing_silent_bars
 from youkelele.schemas import (
@@ -182,6 +183,8 @@ def build_score(
             )
         )
 
+    other = hedge_tonic(chords.key)
+    hedge = f"{other} {chords.key.mode}" if other is not None else None
     return Score(
         instrument=Instrument(
             name=instrument_name, strings=len(tuning.pitches), tuning=list(tuning.pitches),
@@ -190,6 +193,7 @@ def build_score(
         title=source.title,
         artist=source.artist,
         key=f"{chords.key.tonic} {chords.key.mode}",
+        key_hedge=hedge,
         bpm=grid.bpm,
         meter=grid.meter,
         tier=arrangement.tier,

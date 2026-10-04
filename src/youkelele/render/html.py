@@ -40,6 +40,14 @@ def _shape_key(key: str, capo: int) -> str:
     return f"{shaped} {mode}".strip()
 
 
+def _key_fact(key: str, hedge: str | None, capo: int = 0) -> str:
+    """The key as printed, `G major (or D major)` when hedged; both moved by the capo."""
+    shaped = _shape_key(key, capo) if capo > 0 else key
+    if hedge is None:
+        return shaped
+    return f"{shaped} (or {_shape_key(hedge, capo) if capo > 0 else hedge})"
+
+
 def _shown_cells(grid: SectionGrid) -> list[Cell]:
     """Every cell the sheet prints for a section: the pickup, then each block's rows once."""
     lead = [grid.pickup] if grid.pickup is not None else []
@@ -96,8 +104,12 @@ def render_html(score: Score) -> str:
         capo=_capo(capo),
         capo_note=CAPO_NOTE if capo > 0 else None,
         filled_note=FILLED_NOTE if any_filled else None,
-        key_fact=f"{_shape_key(score.key, capo)} (shapes)" if capo > 0 else score.key,
-        sounding_key=score.key if capo > 0 else None,
+        key_fact=(
+            f"{_key_fact(score.key, score.key_hedge, capo)} (shapes)"
+            if capo > 0
+            else _key_fact(score.key, score.key_hedge)
+        ),
+        sounding_key=_key_fact(score.key, score.key_hedge) if capo > 0 else None,
         tempo=round(score.bpm),
         tuning=" ".join(score.instrument.tuning),
         diagrams=diagrams,

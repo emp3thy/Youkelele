@@ -150,6 +150,45 @@ def test_harmony_stage_requires_harmonic_stems_and_fills(tmp_path):
     assert sorted(p.name for p in out.rglob("*") if p.is_file()) == ["chords.json", "spans.lab"]
 
 
+def test_harmony_stage_key_from_chords_and_notes(tmp_path):
+    labels = ["D:maj", "G:maj", "A:maj", "D:maj", "B:min", "G:maj", "A:maj", "D:maj"]
+    spans = [LabelSpan(i * 2.0, (i + 1) * 2.0, lab) for i, lab in enumerate(labels)]
+    logged: list[str] = []
+    stage = HarmonyStage(
+        recogniser=_recogniser(spans),
+        chroma=lambda wav: np.eye(12)[0] + 0.1,  # the mix estimate points away from D
+    )
+
+    def guitar(stem_path):
+        write_chord_loop(stem_path("guitar"), labels, 2.0)
+
+    ctx, out = _ctx(
+        tmp_path, stage, 8, 2.0, lambda p: write_chord_loop(p, labels, 2.0), guitar
+    )
+    ctx.log = logged.append
+    stage.run(ctx)
+    key = load_model(ctx.output("harmony/chords.json"), Chords).key
+    assert (key.tonic, key.mode, key.method) == ("D", "major", "chords_stems")
+    assert key.mix is not None and key.mix.tonic != "D"
+    assert key.runner_up is not None and key.margin is not None and key.mode_margin > 0.05
+    assert key.confidence == key.mode_margin
+    assert ctx.notes["key_method"] == "chords_stems"
+    assert ctx.notes["key_margin"] == f"{key.margin:.3f}"
+    assert ctx.notes["tonic_pair_rule"].startswith("D by ")
+    assert any("key D major (or" in line and "chords+stems, margin" in line for line in logged)
+
+
+def test_harmony_stage_key_falls_back_to_the_mix_with_few_chords(tmp_path):
+    spans = [LabelSpan(0.0, 2.0, "C:maj"), LabelSpan(2.0, 4.0, "G:maj")]
+    stage = HarmonyStage(recogniser=_recogniser(spans), chroma=lambda wav: np.eye(12)[0] + 0.1)
+    ctx, out = _ctx(tmp_path, stage, 2, 2.0, lambda p: write_chord_loop(p, ["C:maj"], 2.0, bars=2))
+    stage.run(ctx)
+    key = load_model(ctx.output("harmony/chords.json"), Chords).key
+    assert key.method == "mix_krumhansl" and key.margin is None and key.mix is None
+    assert ctx.notes["key_method"] == "mix_krumhansl"
+    assert ctx.notes["tonic_pair_rule"] == "none"
+
+
 @pytest.mark.slow
 def test_harmony_real_model_on_synthetic_loop(tmp_path):
     from youkelele.vendoring import chord_model_ready

@@ -109,7 +109,14 @@ class BeatsRaw(_Artifact):
 class Key(_Artifact):
     tonic: str
     mode: Literal["major", "minor"]
-    confidence: float
+    confidence: float  # the mode margin for a chords_stems key
+    # chords_stems: tonic from the chord stream, mode from the harmonic stems (1.4);
+    # mix_krumhansl: the 24-way profile search on the mix (1.3 files, or too few chords)
+    method: Literal["mix_krumhansl", "chords_stems"] = "mix_krumhansl"
+    margin: float | None = None  # the deciding tonic margin (by score, or by the pair rule)
+    mode_margin: float | None = None  # major minus minor correlation at the tonic, absolute
+    runner_up: str | None = None  # the runner-up tonic under the deciding rule
+    mix: Key | None = None  # the mix estimate, kept for comparison
 
 
 class ChordEvent(_Artifact):
@@ -251,6 +258,7 @@ class Score(_Artifact):
     title: str
     artist: str | None
     key: str
+    key_hedge: str | None = None  # "D major" when the key is a close call: printed "(or D major)"
     bpm: float
     meter: Meter
     tier: str

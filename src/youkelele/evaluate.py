@@ -12,7 +12,7 @@ import numpy as np
 from youkelele.jsonio import load_model
 from youkelele.music.as_played import explained_onsets
 from youkelele.music.trailing import trailing_silent_bars
-from youkelele.schemas import Chords, Grid, Strums
+from youkelele.schemas import Chords, Grid, Key, Strums
 
 BAR_START_TOLERANCE = 0.06  # a chord change this close to a bar start counts as on the bar
 MOSTLY_RESTS = 0.75  # a printed-as-certain pattern with at least this share of rests
@@ -51,6 +51,7 @@ class Report:
     changes_on_bar_share: float | None = None
     sub_beat_events: int | None = None
     key_confidence: float | None = None
+    key: Key | None = None
     boxes_mostly_rests: int | None = None
     sections: list[SectionDiag] = field(default_factory=list)
     truth_given: bool = False  # a truth directory was supplied: print the truth lines (n/a if absent)
@@ -176,6 +177,7 @@ def _chord_diagnostics(grid: Grid, chords: Chords) -> dict[str, float | int | No
         "changes_on_bar_share": changes_on_bar,
         "sub_beat_events": sub_beat,
         "key_confidence": chords.key.confidence,
+        "key": chords.key,
     }
 
 
@@ -352,6 +354,19 @@ def _section_line(d: SectionDiag) -> str:
     )
 
 
+def _key_line(key: Key | None) -> str:
+    """`Key: tonic mode (method, margin, mode margin, runner-up[, mix tonic mode])`."""
+    if key is None:
+        return "Key: n/a"
+    figures = (
+        f"{key.method}, margin {_num(key.margin, '.3f')}, "
+        f"mode margin {_num(key.mode_margin, '.3f')}, runner-up {key.runner_up or 'n/a'}"
+    )
+    if key.mix is not None:
+        figures += f", mix {key.mix.tonic} {key.mix.mode}"
+    return f"Key: {key.tonic} {key.mode} ({figures})"
+
+
 def format_report(r: Report) -> str:
     lines = [
         f"N share: {_pct(r.n_share)}",
@@ -359,6 +374,7 @@ def format_report(r: Report) -> str:
         f"Filled bars: {_num(r.filled_bars)}",
         f"Changes on bar: {_pct(r.changes_on_bar_share)}",
         f"Sub-beat events: {_num(r.sub_beat_events)}",
+        _key_line(r.key),
         f"Key confidence: {_num(r.key_confidence, '.2f')}",
         f"Boxes mostly rests: {_num(r.boxes_mostly_rests)}",
     ]

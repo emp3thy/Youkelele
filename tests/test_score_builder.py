@@ -116,6 +116,23 @@ def test_diagrams_unique_in_first_appearance_order():
     assert section.bar_repeat == 0.9
 
 
+def test_score_carries_key_hedge_from_chords_key():
+    def build(key):
+        return build_score(
+            _source(), _grid(1), Chords(key=key, events=[]), _strums(),
+            Arrangement(capo=0, transpose=0, tier="easy", chords=[], substitutions=[]),
+            UKULELE_TUNING, "Ukulele",
+        )
+
+    close = Key(tonic="G", mode="major", confidence=0.3, method="chords_stems", margin=0.02,
+                mode_margin=0.3, runner_up="D")
+    score = build(close)
+    assert (score.key, score.key_hedge) == ("G major", "D major")
+    clear = close.model_copy(update={"margin": 0.2})
+    assert build(clear).key_hedge is None
+    assert build(Key(tonic="C", mode="major", confidence=0.9)).key_hedge is None
+
+
 def test_score_copies_explained():
     score = _score(1, [(0, 1, "C")], {"C": C}, explained=0.85)
     assert score.sections[0].explained == 0.85

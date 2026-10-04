@@ -165,6 +165,30 @@ def test_bar_chroma_of_silence_is_zero():
     assert not bar_chroma(np.zeros(44100), 22050, _bars(1)).any()
 
 
+def test_bar_chroma_and_energy_match_shared_chroma():
+    import librosa
+
+    from youkelele.music.chroma import harmonic_chroma
+
+    sr = 22050
+    t = np.arange(2 * sr) / sr
+    c_major = sum(np.sin(2 * np.pi * f * t) for f in (261.63, 329.63, 392.0)) * 0.2
+    g_major = sum(np.sin(2 * np.pi * f * t) for f in (392.0, 493.88, 587.33)) * 0.1
+    guitar = np.concatenate([c_major, np.zeros(2 * sr)])
+    bass = np.concatenate([np.zeros(2 * sr), g_major])
+    bars = _bars(2)
+    shared, y = harmonic_chroma([guitar, bass], sr)
+    # the wrapper gives what the shared chroma gives, and both what 1.3 computed directly
+    assert bar_chroma(y, sr, bars) == pytest.approx(shared.bar_means(bars))
+    frames = librosa.feature.chroma_cqt(y=np.asarray(y, dtype=np.float32), sr=sr, hop_length=512)
+    times = librosa.frames_to_time(np.arange(frames.shape[1]), sr=sr, hop_length=512)
+    before = np.stack(
+        [frames[:, (times >= b.start) & (times < b.end)].mean(axis=1) for b in bars]
+    )
+    assert shared.bar_means(bars) == pytest.approx(before)
+    assert bar_energy(y, sr, bars) == pytest.approx([0.2 * np.sqrt(1.5), 0.1 * np.sqrt(1.5)], rel=0.01)
+
+
 def test_chord_event_filled_defaults_false_for_v1_1_files():
     event = ChordEvent.model_validate(
         {"schema": 1, "bar": 0, "beat": 0, "start": 0.0, "end": 1.0, "label": "C:maj",

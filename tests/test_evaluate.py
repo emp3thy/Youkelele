@@ -89,16 +89,17 @@ def test_cli_evaluate_prints_report(tmp_path, capsys):
     code = main(["evaluate", "demo", "--truth", str(EXAMPLE), "--runs-dir", str(tmp_path / "runs")])
     out = capsys.readouterr().out.splitlines()
     assert code == 0
-    assert out[:7] == [
+    assert out[:8] == [
         "N share: 0.0%",
         "All-N bars: 0",
         "Filled bars: 0",
         "Changes on bar: 100.0%",
         "Sub-beat events: 0",
+        "Key: C major (mix_krumhansl, margin n/a, mode margin n/a, runner-up n/a)",
         "Key confidence: 0.90",
         "Boxes mostly rests: n/a",
     ]
-    assert out[7:] == [
+    assert out[8:] == [
         "Beat F-measure: 100.0%",
         "Downbeat F-measure: 100.0%",
         "Chord root: 100.0%",
@@ -309,6 +310,19 @@ def test_format_report_prints_na_for_missing():
     assert "N share: n/a" in text
     assert "Key confidence: n/a" in text
     assert "Beat F-measure" not in text
+
+
+def test_evaluate_prints_key_method_and_margins(tmp_path):
+    key = Key(
+        tonic="D", mode="major", confidence=0.302, method="chords_stems", margin=0.052,
+        mode_margin=0.302, runner_up="A", mix=Key(tonic="A", mode="major", confidence=0.05),
+    )
+    chords = _chords().model_copy(update={"key": key})
+    text = format_report(evaluate_run(_run_with(tmp_path / "new", chords=chords)))
+    assert "Key: D major (chords_stems, margin 0.052, mode margin 0.302, runner-up A, mix A major)" in text
+    old = format_report(evaluate_run(_run_with(tmp_path / "old")))
+    assert "Key: C major (mix_krumhansl, margin n/a, mode margin n/a, runner-up n/a)" in old
+    assert "Key: n/a" in format_report(Report(None, None, None, None, None))
 
 
 def test_format_report_prints_section_lines(tmp_path):
