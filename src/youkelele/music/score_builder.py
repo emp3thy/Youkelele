@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 from youkelele.music.key import hedge_text
 from youkelele.music.phrase import NO_CHORD, aligned_starts, bar_change_bars
-from youkelele.music.relabel import default_plan
+from youkelele.music.relabel import default_plan, section_plan
 from youkelele.music.trailing import trailing_silent_bars
 from youkelele.schemas import (
     ArrangedChord,
@@ -35,6 +35,23 @@ def _plan(grid: Grid, strums: Strums, chords: Chords) -> list[PlannedSection]:
     return strums.plan or default_plan(grid, chords)
 
 
+def _planned_text(p: PlannedSection) -> str:
+    return f"bars {p.start_bar} to {p.end_bar}, {p.label}, grid sections {p.members}"
+
+
+def _plan_difference(stored: list[PlannedSection], current: list[PlannedSection]) -> str | None:
+    """What differs between the stored plan and the one the inputs give now (the section count,
+    then the first planned section that differs), or None."""
+    parts: list[str] = []
+    if len(stored) != len(current):
+        parts.append(f"strums.json plans {len(stored)} sections but grid.json and chords.json give {len(current)}")
+    for k, (old, new) in enumerate(zip(stored, current)):
+        if old != new:
+            parts.append(f"planned section {k} is {_planned_text(old)} in strums.json but {_planned_text(new)} now")
+            break
+    return "; ".join(parts) or None
+
+
 def check_strums_match_grid(grid: Grid, strums: Strums, chords: Chords) -> None:
     """Fail clearly when grid.json was edited after strums.json was made from it."""
     plan = _plan(grid, strums, chords)
@@ -49,28 +66,13 @@ def check_strums_match_grid(grid: Grid, strums: Strums, chords: Chords) -> None:
             f"strums.json patterns are for sections {indices} but {where} has sections "
             f"{list(range(m))}; re-run from strums"
         )
-    if strums.plan:  # the plan must still describe grid.json: an edit since strums ran shows here
-        covered = [i for p in plan for i in p.members]
-        if covered != list(range(len(grid.sections))) or not all(p.members for p in plan):
+    if strums.plan:  # the plan must still be the one grid.json and chords.json give: any edit since shows
+        difference = _plan_difference(strums.plan, section_plan(grid, chords))
+        if difference:
             raise ValueError(
-                f"strums.json's section plan covers grid sections {covered} but grid.json has "
-                f"{len(grid.sections)}; re-run from strums"
+                f"strums.json's section plan no longer matches grid.json and chords.json: {difference}; "
+                "re-run from strums"
             )
-        for k, p in enumerate(plan):
-            span = (grid.sections[p.members[0]].start_bar, grid.sections[p.members[-1]].end_bar)
-            if (p.start_bar, p.end_bar) != span:
-                raise ValueError(
-                    f"strums.json's planned section {k} spans bars {p.start_bar} to {p.end_bar} but "
-                    f"its grid sections {p.members} span {span[0]} to {span[1]} in grid.json; "
-                    "re-run from strums"
-                )
-    n_bars = len(grid.bars)
-    outside = [(p.start_bar, p.end_bar) for p in plan if not 0 <= p.start_bar < p.end_bar <= n_bars]
-    if outside:
-        raise ValueError(
-            f"strums.json plans sections {outside} outside the {n_bars} bars of grid.json; "
-            "re-run from strums"
-        )
     num = grid.meter.numerator
     if strums.slots_per_bar not in (2 * num, 4 * num):
         raise ValueError(
