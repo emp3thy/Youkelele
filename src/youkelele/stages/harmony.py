@@ -15,7 +15,7 @@ import numpy as np
 import soundfile as sf
 
 from youkelele.jsonio import load_model, save_model
-from youkelele.models.chords import LabelSpan, recognise_chords
+from youkelele.models.chords import LabelSpan, beat_positions, recognise_chords
 from youkelele.music.fill import bar_chroma, bar_energy, fill_silent_bars
 from youkelele.music.key import chroma_mean_for, estimate_key
 from youkelele.music.snap import snap_to_beats
@@ -67,7 +67,7 @@ class HarmonyStage(Stage):
         out.parent.mkdir(parents=True, exist_ok=True)
         work_dir = Path(tempfile.mkdtemp(dir=out.parent, prefix="work-"))
         try:
-            spans = self._recogniser(wav, work_dir, ctx.log)
+            spans = self._recogniser(wav, work_dir, ctx.log, beats=beat_positions(grid))
             shutil.copyfile(work_dir / "out.lab", ctx.output("harmony/spans.lab"))  # the raw model output
         finally:
             shutil.rmtree(work_dir, ignore_errors=True)
@@ -86,3 +86,4 @@ class HarmonyStage(Stage):
         prefixes = ",".join(h[:8] for h in CHORD_MODEL_CHECKPOINT_SHA256.values())
         ctx.note("checkpoints", prefixes)
         ctx.note("filled", str(filled))
+        ctx.note("decoding", "beats+downbeats")

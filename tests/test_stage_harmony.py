@@ -57,10 +57,12 @@ def _ctx(tmp_path, stage, n_bars, bar_seconds, write_audio, write_stems=None):
     return ctx, out
 
 
-def _recogniser(spans):
+def _recogniser(spans, seen=None):
     """A fake recogniser that writes out.lab into work_dir, as the real one does."""
+    seen = [] if seen is None else seen
 
-    def recognise(wav, work_dir, log=print):
+    def recognise(wav, work_dir, log=print, beats=None):
+        seen.append(beats)
         (work_dir / "out.lab").write_text(
             "".join(f"{s.start}\t{s.end}\t{s.label}\n" for s in spans), encoding="utf-8"
         )
@@ -82,6 +84,17 @@ def test_harmony_stage_writes_chords_with_triads(tmp_path):
     assert [e.triad for e in chords.events] == ["C:maj", "G:maj", "A:min", "F:maj"]
     assert chords.key.tonic
     assert sorted(p.name for p in out.rglob("*") if p.is_file()) == ["chords.json", "spans.lab"]
+
+
+def test_harmony_stage_passes_beats_and_notes_decoding(tmp_path):
+    seen: list = []
+    spans = [LabelSpan(0.0, 2.0, "C:maj"), LabelSpan(2.0, 4.0, "G:maj")]
+    stage = HarmonyStage(recogniser=_recogniser(spans, seen), chroma=lambda wav: np.eye(12)[0] + 0.1)
+    ctx, out = _ctx(tmp_path, stage, 2, 2.0, lambda p: write_chord_loop(p, ["C:maj"], 2.0, bars=2))
+    stage.run(ctx)
+    assert len(seen) == 1
+    assert seen[0] == [(i * 0.5, i % 4 + 1) for i in range(8)]
+    assert ctx.notes["decoding"] == "beats+downbeats"
 
 
 def test_harmony_stage_keeps_raw_spans(tmp_path):
