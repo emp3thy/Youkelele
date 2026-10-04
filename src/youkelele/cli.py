@@ -47,8 +47,8 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--separator", choices=("demucs", "roformer-sw"), default=None)
     run.add_argument("--chord-model", choices=("cnn-lstm", "chordmini"), default=None)
     run.add_argument(
-        "--debug", action="store_const", const=True, default=None,
-        help="also export intermediate diagnostics, such as the strums stage onsets as an Audacity label track",
+        "--debug", action=argparse.BooleanOptionalAction, default=None,
+        help="also export the strums stage onsets as an Audacity label track; --no-debug turns a saved --debug off",
     )
     run.add_argument("--from", dest="start", default=None)
     run.add_argument("--to", dest="end", default=None)

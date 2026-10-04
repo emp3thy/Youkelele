@@ -14,12 +14,22 @@ import numpy as np
 from youkelele.music.onsets import StrikeClass, render_directions
 from youkelele.schemas import Meter, Slot
 
-UNCERTAIN_BELOW = 0.45  # a section pattern with lower confidence is uncertain
+UNCERTAIN_BELOW = 0.45  # on the eighth-note grid, a section pattern with lower confidence is uncertain
+# On the sixteenth grid a dense two-part or noisy section strikes many slots, which inflates the
+# mean Jaccard. Pour Some Sugar On Me's two-guitar sections reach 0.472 at 16 slots, Fame's certain
+# sections start at 0.625, and 0.55 is the midpoint; a random 16-slot spray striking half the slots
+# has a median confidence of 0.527, so 0.50 would pass noise (spec 1.3, section 4.2).
+UNCERTAIN_BELOW_SIXTEENTH = 0.55
 MIN_SECTION_BARS = 4  # shorter sections inherit a neighbour's pattern
 STAGE_UNCERTAIN_GRID_FIT = 0.6  # the whole stage is uncertain below this grid fit
 STRIKE_SHARE = 1 / 3  # a slot struck in more than this share of a section's bars is kept
 DENSITY_FLOOR = 0.6  # the pattern keeps at least this share of the median strikes per bar
 EXPLAINED_BELOW = 0.6  # a section whose pattern explains less of its strokes is uncertain
+
+
+def eighth_grid(slots_per_bar: int, meter: Meter) -> bool:
+    """Two slots per beat; any finer grid is the sixteenth grid."""
+    return slots_per_bar == meter.numerator * 2
 
 
 def jaccard(a: Sequence[StrikeClass], b: Sequence[StrikeClass]) -> float:

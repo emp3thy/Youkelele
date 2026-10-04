@@ -100,8 +100,8 @@ class Grid(_Artifact):
 class BeatsRaw(_Artifact):
     """The beat detector's output before gap filling and octave normalisation."""
 
-    detected_beats: list[float]
-    detected_downbeats: list[float]
+    detected_beats: list[float]  # taken after the end-of-clip filter: a beat at the clip's end is not kept
+    detected_downbeats: list[float]  # likewise filtered
     inserted_beats: list[float]  # added by fill_gaps
     dropped_beats: list[float]  # removed by normalise_octave (empty unless the octave is halved)
 

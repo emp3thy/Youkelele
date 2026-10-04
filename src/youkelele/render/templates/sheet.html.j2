@@ -92,8 +92,11 @@
           <h2>{{ section.label }}</h2>
           {% if section.no_instrument %}
           <span class="no-instrument">No strummed instrument detected</span>
+          {% elif section.inherited_from is not none %}
+          {# an inherited pattern's covers figure is the donor's, so it is not printed #}
+          <span class="strum-label">Strum as in {{ section.inherited_from }}{% if section.uncertain %} (uncertain){% endif %}</span>
           {% else %}
-          <span class="strum-label">Strum heard in this section; covers {{ "%d" % (section.explained * 100) }}% of detected strokes. Up and down follow the beat{% if section.uncertain %} (uncertain){% endif %}{% if section.inherited_from is not none %}, same as {{ section.inherited_from }}{% endif %}</span>
+          <span class="strum-label">Strum heard in this section{% if section.show_covers %}; covers {{ section.explained_pct }}% of detected strokes{% endif %}. Up and down follow the beat{% if section.uncertain %} (uncertain){% endif %}</span>
           {% endif %}
         </div>
         {% if section.example is not none %}

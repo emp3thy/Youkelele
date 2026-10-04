@@ -227,6 +227,18 @@ def test_run_parser_debug_defaults_to_none():
 
     assert build_parser().parse_args(["run", "song.wav"]).debug is None
     assert build_parser().parse_args(["run", "song.wav", "--debug"]).debug is True
+    assert build_parser().parse_args(["run", "song.wav", "--no-debug"]).debug is False
+
+
+def test_run_no_debug_switches_a_saved_debug_off(tmp_path, monkeypatch):
+    seen = recording_chain(monkeypatch)
+    runs = ["--runs-dir", str(tmp_path)]
+    assert main(["run", "song.wav", "--debug", *runs]) == 0
+    assert seen[-1].debug is True
+    assert main(["run", "song.wav", "--from", "1", "--no-debug", *runs]) == 0
+    assert seen[-1].debug is False
+    assert main(["run", "song.wav", "--from", "1", *runs]) == 0
+    assert seen[-1].debug is False  # the switch-off is saved like any other option
 
 
 def test_run_debug_flag_reaches_options_and_is_saved(tmp_path, monkeypatch):

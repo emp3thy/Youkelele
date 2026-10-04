@@ -61,7 +61,7 @@ class GridStage(Stage):
         if len(beats) < 2:
             raise ValueError(f"only {len(beats)} beat(s) detected; cannot build a grid")
 
-        detected_beats = list(beats)
+        detected_beats = list(beats)  # for beats_raw.json: after the end-of-clip filter above
         beats = fill_gaps(beats)
         inserted_beats = sorted(set(beats) - set(detected_beats))
         detected_bpm = bpm_from_beats(beats)

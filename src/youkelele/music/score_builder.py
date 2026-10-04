@@ -133,6 +133,8 @@ def build_score(
         [(s.start_bar, s.end_bar) for s in grid.sections], bar_change_bars(_bar_ends(starts))
     )
 
+    # the strums stage calls trailing_silent_bars the same way to leave these bars out of the
+    # last section's pattern; the two calls must stay in step
     last = grid.sections[-1]
     drop = trailing_silent_bars(chords, grid.bars, cap=last.end_bar - last.start_bar)
 

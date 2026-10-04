@@ -3,13 +3,15 @@ from __future__ import annotations
 import random
 
 from youkelele.music.as_played import (
-    MIN_SECTION_BARS,
-    STAGE_UNCERTAIN_GRID_FIT,
-    UNCERTAIN_BELOW,
-    bar_repeat,
     DENSITY_FLOOR,
     EXPLAINED_BELOW,
+    MIN_SECTION_BARS,
+    STAGE_UNCERTAIN_GRID_FIT,
     STRIKE_SHARE,
+    UNCERTAIN_BELOW,
+    UNCERTAIN_BELOW_SIXTEENTH,
+    bar_repeat,
+    eighth_grid,
     explained_onsets,
     fill_to_floor,
     jaccard,
@@ -19,6 +21,7 @@ from youkelele.music.as_played import (
 from youkelele.schemas import Meter
 
 m44 = Meter(numerator=4, denominator=4)
+m34 = Meter(numerator=3, denominator=4)
 
 
 def _random_bars(n: int, slots: int, seed: int = 7) -> list[list[str]]:
@@ -28,11 +31,19 @@ def _random_bars(n: int, slots: int, seed: int = 7) -> list[list[str]]:
 
 def test_constants():
     assert UNCERTAIN_BELOW == 0.45
+    assert UNCERTAIN_BELOW_SIXTEENTH == 0.55
     assert MIN_SECTION_BARS == 4
     assert STAGE_UNCERTAIN_GRID_FIT == 0.6
     assert STRIKE_SHARE == 1 / 3
     assert DENSITY_FLOOR == 0.6
     assert EXPLAINED_BELOW == 0.6
+
+
+def test_eighth_grid_is_two_slots_per_beat():
+    assert eighth_grid(8, m44)
+    assert not eighth_grid(16, m44)
+    assert eighth_grid(6, m34)
+    assert not eighth_grid(12, m34)
 
 
 def test_jaccard_over_strike_positions_with_half_credit_for_mute():
@@ -136,10 +147,13 @@ def test_bar_repeat_one_for_identical_bars_low_for_random():
     assert bar_repeat(_random_bars(16, 16)) < 0.5
 
 
-def test_section_summary_confidence_below_floor_on_random_bars():
-    _, confidence, repeat, _ = section_summary(_random_bars(16, 16, seed=3), 16, m44)
-    assert confidence < 0.6  # the third-share vote keeps more slots, so noise scores higher than before
-    assert repeat < UNCERTAIN_BELOW
+def test_random_sixteenth_bars_pass_explained_and_the_eighth_floor_but_not_the_sixteenth_floor():
+    # noise striking half the slots: the third-share vote keeps most slots, so explained is high
+    # and the mean Jaccard clears 0.45; only the sixteenth-grid floor and bar_repeat show it
+    _, confidence, repeat, explained = section_summary(_random_bars(16, 16, seed=3), 16, m44)
+    assert explained >= EXPLAINED_BELOW
+    assert UNCERTAIN_BELOW <= confidence < UNCERTAIN_BELOW_SIXTEENTH
+    assert repeat < 0.4
 
 
 def test_repeated_vector_absent_from_any_textbook_pattern_is_returned_as_is():

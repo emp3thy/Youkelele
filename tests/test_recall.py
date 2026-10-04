@@ -13,7 +13,6 @@ from youkelele.music.recall import (
     SILENT_BAR_SHARE,
     SPARSE_SHARE,
     SectionDecision,
-    eighth_grid,
     gate_section,
     merge_onsets,
     silent_bar_mask,
@@ -67,12 +66,6 @@ def test_constants_are_the_measured_values():
     assert FIT_TOLERANCE == 0.05
     assert SILENT_BAR_SHARE == 0.25
 
-
-def test_eighth_grid_is_two_slots_per_beat():
-    assert eighth_grid(8, m44)
-    assert not eighth_grid(16, m44)
-    assert eighth_grid(6, m34)
-    assert not eighth_grid(12, m34)
 
 
 def test_merge_onsets_drops_extra_within_60ms_and_marks_added():
@@ -159,6 +152,26 @@ def test_gate_skips_dense_section():
     assert decision.before == decision.after == 4.0
     assert onsets.times.tolist() == base.times.tolist()
     assert not added.any()
+
+
+def test_gate_sparse_boundary_in_3_4_is_exact():
+    # 3/4 has 6 slots and 0.4 x 6 is 2.4000000000000004 in floating point; 12 strikes over 5 bars
+    # is 2.4 per bar, on the boundary, so the section is dense
+    bars = [
+        Bar(index=i, start=i * BAR_SECONDS, end=(i + 1) * BAR_SECONDS, beats=list(range(3 * i, 3 * i + 3)))
+        for i in range(5)
+    ]
+    y = _signal([0.3] * 5)
+    on_boundary = {0: (0, 2, 4), 1: (0, 2, 4), 2: (0, 2), 3: (0, 2), 4: (0, 2)}
+    extra = _onsets(_times(_every_bar((1, 3, 5), 5), slots=6))
+    base = _onsets(_times(on_boundary, slots=6))
+    _, _, decision = gate_section(base, extra, y, SR, bars, 6, 1.0, m34)
+    assert decision.before == 2.4
+    assert decision.reason == "dense"
+    # one strike fewer is sparse, so the gate goes on to try the union
+    under = {**on_boundary, 1: (0, 2)}
+    _, _, decision = gate_section(_onsets(_times(under, slots=6)), extra, y, SR, bars, 6, 1.0, m34)
+    assert decision.reason != "dense"
 
 
 def test_gate_skips_section_without_onsets():

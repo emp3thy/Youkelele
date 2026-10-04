@@ -11,6 +11,7 @@ import numpy as np
 
 from youkelele.jsonio import load_model
 from youkelele.music.as_played import explained_onsets
+from youkelele.music.trailing import trailing_silent_bars
 from youkelele.schemas import Chords, Grid, Strums
 
 BAR_START_TOLERANCE = 0.06  # a chord change this close to a bar start counts as on the bar
@@ -178,13 +179,24 @@ def _chord_diagnostics(grid: Grid, chords: Chords) -> dict[str, float | int | No
     }
 
 
-def _section_diags(grid: Grid, strums: Strums) -> list[SectionDiag]:
+def _section_diags(grid: Grid, strums: Strums, chords: Chords) -> list[SectionDiag]:
+    """Per-section strum figures over the bars the strums stage analysed.
+
+    The last section loses its trailing no-chord bars exactly as in the strums stage, so the
+    figures match the pattern's own `explained`.
+    """
     diags: list[SectionDiag] = []
+    last = len(grid.sections) - 1
+    drop = 0
+    if grid.sections:
+        tail = grid.sections[last]
+        drop = trailing_silent_bars(chords, grid.bars, cap=tail.end_bar - tail.start_bar)
     for pattern in strums.patterns:
         if not 0 <= pattern.section < len(grid.sections):
             continue
         section = grid.sections[pattern.section]
-        bars = strums.bar_onsets[section.start_bar : section.end_bar]
+        end = section.end_bar - (drop if pattern.section == last else 0)
+        bars = strums.bar_onsets[section.start_bar : end]
         strikes = sum(1 for bar in bars for cell in bar if cell != "-")
         rests = sum(1 for slot in pattern.slots if slot == "-")
         diags.append(
@@ -221,7 +233,7 @@ def _diagnose(run_dir: Path) -> tuple[Report, Strums | None]:
     strums = _load_strums(run_dir)
     report = Report(None, None, None, None, None, **_chord_diagnostics(grid, chords))
     if strums is not None:
-        report.sections = _section_diags(grid, strums)
+        report.sections = _section_diags(grid, strums, chords)
         report.boxes_mostly_rests = _boxes_mostly_rests(strums, report.sections)
     return report, strums
 
@@ -385,12 +397,11 @@ def format_comparison(c: Comparison) -> str:
         f"overseg {_num(c.overseg, '.3f')}  underseg {_num(c.underseg, '.3f')}  "
         f"seg {_num(c.seg, '.3f')}  majmin {_num(c.majmin, '.3f')}"
     ]
+    if c.sections:
+        lines.append("  sections: strikes per bar/explained/rests; unc = uncertain, boost = recall boost")
     for i, (left, right) in enumerate(c.sections):
         side = left if left is not None else right
         delta = c.deltas[i] if i < len(c.deltas) else None
-        lines.append(
-            f"  {side.index} {side.label}: A {_cell(left)}  B {_cell(right)}  B-A {_delta(delta)}"
-            "  (strikes per bar/explained/rests; unc = uncertain, boost = recall boost)"
-        )
+        lines.append(f"  {side.index} {side.label}: A {_cell(left)}  B {_cell(right)}  B-A {_delta(delta)}")
     lines.extend(f"note: {note}" for note in c.notes)
     return "\n".join(lines)

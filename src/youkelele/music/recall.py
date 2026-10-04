@@ -15,7 +15,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from youkelele.music.as_played import section_summary
+from youkelele.music.as_played import eighth_grid, section_summary
 from youkelele.music.onsets import Onsets, grid_fit, quantise_bar
 from youkelele.schemas import Bar, Meter
 
@@ -25,6 +25,7 @@ MERGE_MS = 60.0  # a high-band onset within 60 ms of one of today's is the same 
 MIN_GAIN = 1.0  # 0.5 gives the same decisions; the outro and intro gain 0.1 to 0.3 (measurements doc, sections 1 and 3)
 FIT_TOLERANCE = 0.05  # the lowest accepted section fit is 0.02 under its song's (measurements doc, section 5.1)
 SILENT_BAR_SHARE = 0.25  # silent entry bars sit at 0.135 or less, struck bars at 0.446 or more (measurements doc, section 5.2)
+_EPS = 1e-9  # 0.4 x 6 is 2.4000000000000004, so the sparse boundary is compared on totals with a margin
 
 
 @dataclass
@@ -33,10 +34,6 @@ class SectionDecision:
     before: float  # strikes per bar today
     after: float  # strikes per bar with the union (equal to before when the union was not tried)
     reason: str  # "accepted" or the first check that failed or skipped the section
-
-
-def eighth_grid(slots_per_bar: int, meter: Meter) -> bool:
-    return slots_per_bar == meter.numerator * 2
 
 
 def _take(onsets: Onsets, mask: np.ndarray) -> Onsets:
@@ -130,7 +127,7 @@ def gate_section(
         return own, unchanged, SectionDecision(False, before, before, "sixteenth grid")
     if len(own.times) == 0:
         return own, unchanged, SectionDecision(False, 0.0, 0.0, "no onsets")
-    if before >= SPARSE_SHARE * slots_per_bar:
+    if before * len(bars) >= SPARSE_SHARE * slots_per_bar * len(bars) - _EPS:
         return own, unchanged, SectionDecision(False, before, before, "dense")
 
     idx = bar_index(extra.times, bars, slots_per_bar)

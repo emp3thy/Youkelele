@@ -73,7 +73,11 @@ def render_html(score: Score) -> str:
             {
                 "label": section.label,
                 "uncertain": section.uncertain,
-                "explained": section.explained,
+                # truncated, not rounded, so 0.597 never prints as 60% beside a 60 percent threshold;
+                # the epsilon keeps 0.29 (0.28999... in binary) at 29
+                "explained_pct": int(section.explained * 100 + 1e-9),
+                # a pre-1.3 score.json has no explained figure: a certain section then omits it
+                "show_covers": section.explained > 0 or section.uncertain,
                 "no_instrument": section.no_instrument,
                 "inherited_from": inherited,
                 "example": (

@@ -204,14 +204,21 @@ def test_html_shows_song_level_strum_uncertainty_note():
     assert STRUMS_NOTE not in render_html(_two_sections())
 
 
-def test_html_names_the_section_a_pattern_was_inherited_from():
+def test_html_inherited_section_names_its_donor_without_the_donors_covers_figure():
     score = _score(
-        [_section("Verse", 4, 0), _section("Pre-chorus", 2, 4, inherited_from=0)]
+        [
+            _section("Verse", 4, 0, explained=0.97),
+            _section("Pre-chorus", 2, 4, uncertain=True, inherited_from=0, explained=0.97),
+        ]
     )
     html = render_html(score)
-    assert html.count("same as") == 1
-    assert "same as Verse" in _section_html(html, "Pre-chorus")
-    assert "inherited from" not in html
+    pre = _section_html(html, "Pre-chorus")
+    assert "Strum as in Verse (uncertain)" in pre
+    assert "covers" not in pre  # 97% is the donor's figure, not this section's
+    assert "Strum heard" not in pre
+    assert 'class="strum-box"' not in pre  # uncertain, so no strip, as before
+    assert "covers 97% of detected strokes" in _section_html(html, "Verse")
+    assert "same as" not in html and "inherited from" not in html
 
 
 def test_html_prints_explained_not_repeatable():
@@ -226,6 +233,23 @@ def test_html_prints_explained_not_repeatable():
 def test_html_explained_percentage_truncates_not_rounds():
     score = _score([_section("Verse 1", 2, 0, explained=0.859)])
     assert "covers 85% of detected strokes" in render_html(score)
+    # never 60% beside the 60 percent threshold when the figure is under it
+    score = _score([_section("Verse 1", 2, 0, explained=0.597)])
+    assert "covers 59% of detected strokes" in render_html(score)
+    # 0.29 is 28.999... per cent in binary; the epsilon keeps it at 29
+    score = _score([_section("Verse 1", 2, 0, explained=0.29)])
+    assert "covers 29% of detected strokes" in render_html(score)
+
+
+def test_html_certain_section_without_explained_omits_the_covers_clause():
+    # a score.json written before version 1.3 has explained 0.0 on every section
+    html = render_html(_score([_section("Verse 1", 2, 0, explained=0.0)]))
+    verse = _section_html(html, "Verse 1")
+    assert "Strum heard in this section. Up and down follow the beat" in verse
+    assert "covers" not in verse
+    # an uncertain section keeps its 0% figure: nothing it heard is on the pattern
+    html = render_html(_score([_section("Verse 1", 2, 0, uncertain=True, explained=0.0)]))
+    assert "covers 0% of detected strokes" in html
 
 
 B = Shape(frets=[4, 3, 2, 2], fingers=[3, 2, 1, 1], base_fret=1, barres=[2])

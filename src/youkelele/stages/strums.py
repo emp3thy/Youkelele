@@ -10,10 +10,12 @@ import soundfile as sf
 
 from youkelele.jsonio import load_model, save_model
 from youkelele.music.as_played import (
-    MIN_SECTION_BARS,
     EXPLAINED_BELOW,
+    MIN_SECTION_BARS,
     STAGE_UNCERTAIN_GRID_FIT,
     UNCERTAIN_BELOW,
+    UNCERTAIN_BELOW_SIXTEENTH,
+    eighth_grid,
     section_summary,
 )
 from youkelele.music.onsets import (
@@ -32,6 +34,9 @@ from youkelele.music.recall import HIGH_BAND_FMIN, gate_section
 from youkelele.music.trailing import trailing_silent_bars
 from youkelele.schemas import Chords, Grid, SectionPattern, Strums
 from youkelele.stage import Stage, StageContext
+
+
+_NO_ONSETS = Onsets(times=np.zeros(0), centroid=np.zeros(0), zcr=np.zeros(0))
 
 
 def _onset_label(muted: bool, added: bool = False) -> str:
@@ -100,7 +105,9 @@ class StrumsStage(Stage):
         slots = choose_slots_per_bar(today, bars, meter, grid.bpm)
         fit = grid_fit(today, bars, slots)
 
-        # bars after the last chord are silence or noise: the last section's vote and gate ignore them
+        # bars after the last chord are silence or noise: the last section's vote and gate ignore them.
+        # The score builder calls trailing_silent_bars the same way; the two calls must stay in step,
+        # or the sheet would print bars whose strokes the pattern never saw.
         last = len(grid.sections) - 1
         last_sec = grid.sections[last]
         drop = trailing_silent_bars(chords, bars, cap=last_sec.end_bar - last_sec.start_bar)
@@ -116,8 +123,10 @@ class StrumsStage(Stage):
             b = int(round(bars[analysed_end(i) - 1].end * sr))
             has_instrument.append(section_has_instrument(y[a:b], mix[a:b]))
 
-        # recall gate (spec 4.3): per section, today's onsets or their union with the high band's
-        high = self._detect(y, sr, fmin=HIGH_BAND_FMIN)
+        # recall gate (spec 4.3): per section, today's onsets or their union with the high band's.
+        # The gate is off on the sixteenth grid, so the high band is not detected there at all.
+        eighths = eighth_grid(slots, meter)
+        high = self._detect(y, sr, fmin=HIGH_BAND_FMIN) if eighths else _NO_ONSETS
         boosted = [False] * len(grid.sections)
         pieces: list[Onsets] = []
         for i, sec in enumerate(grid.sections):
@@ -144,6 +153,8 @@ class StrumsStage(Stage):
             (ctx.out_dir / "onsets.txt").write_text(_onsets_label_track(onsets, muted, added), encoding="utf-8")
         classes: list[list[StrikeClass]] = [quantise_bar(onsets, muted, bar, slots) for bar in bars]
 
+        # the confidence floor depends on the grid (spec 4.2; the evidence is beside the constants)
+        confidence_floor = UNCERTAIN_BELOW if eighths else UNCERTAIN_BELOW_SIXTEENTH
         patterns: list[SectionPattern | None] = [None] * len(grid.sections)
         short: list[int] = []
         for i, sec in enumerate(grid.sections):
@@ -158,7 +169,7 @@ class StrumsStage(Stage):
             long_enough = end - sec.start_bar >= MIN_SECTION_BARS
             patterns[i] = SectionPattern(
                 section=i, slots=rendered, confidence=confidence, bar_repeat=repeat,
-                uncertain=confidence < UNCERTAIN_BELOW or explained < EXPLAINED_BELOW or not long_enough,
+                uncertain=confidence < confidence_floor or explained < EXPLAINED_BELOW or not long_enough,
                 no_instrument=False, inherited_from=None, explained=explained, recall_boost=boosted[i],
             )
             if not long_enough:

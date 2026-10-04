@@ -410,6 +410,73 @@ def test_strums_stage_recall_gate_sees_only_the_music_bars(tmp_path, monkeypatch
     assert seen == [4]
 
 
+def _with_confidence(monkeypatch, confidence):
+    """Run the real section summary but replace its confidence; explained stays the real 1.0."""
+    real = strums_module.section_summary
+
+    def fake(bars, slots_per_bar, meter):
+        rendered, _, repeat, explained = real(bars, slots_per_bar, meter)
+        return rendered, confidence, repeat, explained
+
+    monkeypatch.setattr(strums_module, "section_summary", fake)
+
+
+def _sixteenths(n_bars: int) -> list[float]:
+    heavy = (0, 2, 4, 6, 8, 10, 3, 7, 11, 13)  # 120 bpm: chosen as 16 slots per bar
+    return [t for b in range(n_bars) for t in _bar_times(b, heavy, n_slots=16)]
+
+
+def test_confidence_floor_depends_on_the_grid(tmp_path, monkeypatch):
+    _with_confidence(monkeypatch, 0.47)
+    eighths, _, _ = _run(tmp_path / "eighths", _grid([8]), _detector(_island(8)))
+    assert eighths.slots_per_bar == 8
+    assert eighths.patterns[0].explained == 1.0
+    assert not eighths.patterns[0].uncertain  # 0.47 clears the eighth-grid floor of 0.45
+    sixteenths, _, _ = _run(tmp_path / "sixteenths", _grid([8]), _detector(_sixteenths(8)))
+    assert sixteenths.slots_per_bar == 16
+    assert sixteenths.patterns[0].explained == 1.0
+    assert sixteenths.patterns[0].uncertain  # 0.47 is under the sixteenth-grid floor of 0.55
+
+
+def test_strums_stage_skips_the_high_band_on_the_sixteenth_grid(tmp_path):
+    detector = _detector(_sixteenths(8))
+    strums, _, _ = _run(tmp_path, _grid([8]), detector)
+    assert strums.slots_per_bar == 16
+    assert detector.calls == [(SR, None)]  # the gate is off, so no second librosa pass
+    assert not strums.patterns[0].recall_boost
+
+
+def test_no_instrument_section_is_never_gated(tmp_path, monkeypatch):
+    seen: list[int] = []
+    real = strums_module.gate_section
+
+    def spy(today, high, y, sr, bars, *args, **kwargs):
+        seen.append(bars[0].index)
+        return real(today, high, y, sr, bars, *args, **kwargs)
+
+    monkeypatch.setattr(strums_module, "gate_section", spy)
+    other = np.concatenate([_tone(8 * BAR_SECONDS, 0.3), np.zeros(int(8 * BAR_SECONDS * SR))])
+    strums, _, _ = _run(tmp_path, _grid([8, 8]), _detector(_island(16)), other=other)
+    assert strums.patterns[1].no_instrument
+    assert seen == [0]  # only the first section, which has an instrument, reaches the gate
+
+
+def test_trimmed_last_section_under_four_bars_is_short_uncertain_and_inherited(tmp_path):
+    # the outro is 5 bars, but its last 3 come after the last chord: 2 bars are analysed, so it
+    # is short and takes the verse's pattern, as Wet Leg's one-bar outro does
+    grid = _grid([8, 5])
+    times = _island(10) + [t for b in range(10, 13) for t in _bar_times(b, range(8))]
+    strums, _, _ = _run(
+        tmp_path, grid, _detector(times), chords=_chords(grid, (0, 10, "C"), (10, 13, "N"))
+    )
+    verse, outro = strums.patterns
+    assert not verse.uncertain and verse.inherited_from is None
+    assert outro.inherited_from == 0
+    assert outro.uncertain
+    assert not outro.no_instrument
+    assert outro.slots == verse.slots
+
+
 def test_strums_stage_logs_nothing_about_trailing_bars_when_none_dropped(tmp_path):
     lines: list[str] = []
     _run(tmp_path, _grid([8]), _detector(_island(8)), log=lines.append)

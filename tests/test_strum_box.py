@@ -115,6 +115,14 @@ def test_worked_example_svg_two_bars_have_a_bar_line():
     assert 'class="bar-line"' not in one
 
 
+def test_no_dot_under_a_long_chord_name():
+    # at 20 px a slot, "Cmaj7" runs to about 48 px and covers the dots of slots 1 and 2
+    long_name = worked_example_svg(ISLAND, [_bar(0, ("Cmaj7", 0))], FOUR_FOUR, 20)
+    assert long_name.count('class="held"') == 5  # slots 3 to 7
+    short_name = worked_example_svg(ISLAND, [_bar(0, ("C", 0))], FOUR_FOUR, 20)
+    assert short_name.count('class="held"') == 7  # slots 1 to 7
+
+
 def test_strip_with_no_bars_still_draws_the_pattern():
     svg = worked_example_svg(ISLAND, [], FOUR_FOUR, 28)
     assert 'width="224"' in svg

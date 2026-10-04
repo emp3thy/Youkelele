@@ -275,6 +275,25 @@ def test_evaluate_boxes_mostly_rests_ignores_uncertain_and_no_instrument(tmp_pat
     assert evaluate_run(run).boxes_mostly_rests == 0
 
 
+def test_evaluate_leaves_trailing_no_chord_bars_out_of_the_last_section(tmp_path):
+    # bar 3 starts after the last chord ends: the strums stage ignores it, and so does the harness
+    events = [
+        _event(0, 0, 0.0, 2.0, "C:maj"),
+        _event(1, 0, 2.0, 4.0, "G:maj"),
+        _event(2, 0, 4.0, 6.0, "A:min"),
+        _event(3, 0, 6.0, 8.0, "N"),
+    ]
+    chords = Chords(key=Key(tonic="C", mode="major", confidence=0.7), events=events)
+    bar_onsets = [["D", "-", "U", "-"]] * 2 + [["D", "-", "-", "-"], ["D", "D", "D", "D"]]
+    patterns = [_pattern(0, ["D", "-", "U", "-"]), _pattern(1, ["D", "-", "-", "-"])]
+    run = _run_with(tmp_path / "run", grid=_sectioned_grid(), chords=chords,
+                    strums=_strums(bar_onsets, patterns))
+    verse, chorus = evaluate_run(run).sections
+    assert verse.strikes_per_bar == 2.0 and verse.explained == 1.0
+    assert chorus.strikes_per_bar == 1.0  # bar 2 only; with bar 3 it would be 2.5
+    assert chorus.explained == 1.0  # with bar 3 it would be 2 of 5
+
+
 def test_evaluate_without_strums_json_reports_na(tmp_path):
     report = evaluate_run(_run_with(tmp_path / "run"))
     assert report.sections == []
@@ -397,7 +416,9 @@ def test_compare_reports_section_deltas_and_flags(tmp_path):
     text = format_comparison(comparison)
     assert "+1.0/-33.3pp/+0.0pp" in text
     assert "+2.0/+0.0pp/-50.0pp" in text
-    verse_line, chorus_line = text.splitlines()[1:3]
+    legend, verse_line, chorus_line = text.splitlines()[1:4]
+    assert legend == "  sections: strikes per bar/explained/rests; unc = uncertain, boost = recall boost"
+    assert text.count("strikes per bar/explained/rests") == 1  # the legend is printed once
     assert "25.0% unc" in chorus_line and "% unc" not in verse_line
 
 

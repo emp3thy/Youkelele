@@ -4,6 +4,7 @@ from datetime import datetime
 
 import pytest
 
+from youkelele.music import score_builder
 from youkelele.music.score_builder import build_score
 from youkelele.profiles.ukulele import UKULELE_TUNING
 from youkelele.schemas import (
@@ -500,6 +501,35 @@ def test_score_trailing_drop_is_capped_to_leave_the_last_section_a_bar():
     )
     assert [len(s.bars) for s in score.sections] == [8, 1]
     assert score.trailing_bars_dropped == 1
+
+
+def test_score_trailing_drop_is_clamped_again_after_a_phrase_shift(monkeypatch):
+    # the drop is capped on the grid's outro (6 bars, so at most 5); a phrase shift then starts
+    # the outro a bar later, and the second clamp still leaves it one bar
+    monkeypatch.setattr(score_builder, "aligned_starts", lambda ranges, changes: [(0, 7, 0), (7, 12, 1)])
+    grid = _grid(12).model_copy(
+        update={
+            "sections": [
+                Section(label="Verse", start_bar=0, end_bar=6, confidence=0.5),
+                Section(label="Outro", start_bar=6, end_bar=12, confidence=0.5),
+            ]
+        }
+    )
+    evs = [_ev(0, 7, "C"), _ev(7, 12, "N")]
+    score = build_score(
+        _source(), grid,
+        Chords(key=Key(tonic="C", mode="major", confidence=0.9), events=evs),
+        _two_section_strums(),
+        Arrangement(
+            capo=0, transpose=0, tier="easy",
+            chords=[ArrangedChord(event=0, name="C", shape=C)], substitutions=[],
+        ),
+        UKULELE_TUNING, "Ukulele",
+    )
+    verse, outro = score.sections
+    assert [b.index for b in verse.bars] == list(range(7))
+    assert [b.index for b in outro.bars] == [7]  # without the second clamp the outro would be empty
+    assert score.trailing_bars_dropped == 4
 
 
 def test_score_json_without_trailing_field_loads():

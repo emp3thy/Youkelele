@@ -212,6 +212,7 @@ def test_render_stage_sheet_has_a_worked_example_per_strum_box(tmp_path):
     example = bridge[bridge.index('class="worked-example"'):bridge.index('class="grid')]
     assert re.findall(r'class="chord">([^<]*)<', example) == ["Am", "G", "F"]
 
+
 def test_render_stage_declares_contract():
     assert RenderStage.name == "render"
     assert RenderStage.requires == ("score/score.json",)
