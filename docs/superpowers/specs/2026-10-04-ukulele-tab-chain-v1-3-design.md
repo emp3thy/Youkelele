@@ -8,7 +8,7 @@ Version 1.2 made the sheet compact and filled its gaps. Its validation named the
 
 ## 2. Scope
 
-In: a truth-free measurement harness with a run-to-run compare; the strike vote and the `explained` figure; recovery of strums in loud sustained sections; dropping trailing non-song bars; beat-aware chord decoding. Out: the key mode (validation item 3), earlier phrase shifts (item 4), fill refinement (item 5), section naming (item 6), the strum stem switch (refuted by ear, section 8), separating two guitars in one stem (Pour Some Sugar On Me stays uncertain).
+In: a truth-free measurement harness with a run-to-run compare; the strike vote and the `explained` figure; recovery of strums in loud sustained sections; dropping trailing non-song bars; beat-aware chord decoding; a worked example on the sheet tying each section's pattern to its chords. Out: the key mode (validation item 3), earlier phrase shifts (item 4), fill refinement (item 5), section naming (item 6), the strum stem switch (refuted by ear, section 8), separating two guitars in one stem (Pour Some Sugar On Me stays uncertain).
 
 ## 3. What the ear check established
 
@@ -69,6 +69,7 @@ Measured by the decoding spike (section 8) on Summer of '69: changes on bar star
 - The strum box line becomes "Strum heard in this section; covers NN% of detected strokes. Up and down follow the beat", with "(uncertain)" and "same as <label>" kept as today. "NN% repeatable" goes.
 - Nothing marks a section whose recall gate fired; the pattern is what the sheet owes the reader.
 - Dropped trailing bars do not print.
+- **The worked example.** The box and the grid were unrelated: the box gave a pattern and the grid gave chords, and nothing said on which stroke a chord change falls. Under each section's strum box a two-bar strip, drawn in the box's SVG style, shows the stroke row (D, U, -, x per slot) over a chord row in which each chord name sits at the slot it starts on (`ScoreChord.start_slot`) with dots for the slots it holds, and a bar line between the bars. The bars shown are the section's first two; if neither has a change inside the bar and a later bar in the section does, that bar replaces the second, so a section with half-bar changes always shows one. Sections with no strummed instrument have no box and no example; inherited and uncertain patterns show the example beside their box as today. Render-only: no new data.
 
 ## 6. Data format changes
 
@@ -85,7 +86,7 @@ Keep the five 1.2 run folders as the baseline (copy before re-running). Re-run t
 | Pour Some Sugar On Me | sub-beat events gone; the recall gate does not fire on its choruses (two guitars in one stem, judged by ear) and every section stays uncertain as today; capo 4 kept |
 | Wet Leg "mangetout" | onsets and patterns identical to 1.2; trailing bars dropped; two pages |
 | David Bowie "Fame" | onsets and patterns identical to 1.2; bar 100 dropped; the chain completes |
-| All | `boxes_mostly_rests` 4, 4, 4, 1, 0 falls to at most 0, 1, 2, 0, 0; `evaluate <run>` works with no truth; `evaluate --compare` of a run with itself gives identity; chord label sets unchanged except removed slivers; no section gets sparser |
+| All | `boxes_mostly_rests` 4, 4, 4, 1, 0 falls to at most 0, 1, 2, 0, 0; `evaluate <run>` works with no truth; `evaluate --compare` of a run with itself gives identity; chord label sets unchanged except removed slivers; no section gets sparser; every section with a box has a worked example, and on Pour Some Sugar On Me's choruses (half-bar E and A changes) the example shows the second chord at its stroke |
 
 ## 8. Spikes run for this design
 
