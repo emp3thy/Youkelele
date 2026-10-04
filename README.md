@@ -6,25 +6,29 @@ Youkelele turns a song into a printable ukulele sheet. Give it a YouTube link or
 
 ![Page 1 of a sample sheet: the title, a header line with key, capo, tempo and tuning, four chord diagrams, and the Intro, Verse 1, Pre-chorus and Chorus 1 sections, each with its chord grid and most with a two-bar strum strip above it.](docs/images/sample-sheet.png)
 
-*Page 1 of the sheet for "Synthetic Song", the project's own made-up test song (no real song's chart is published here). At the top, the header gives the key in ukulele shapes (C major), the capo (fret 2), the tempo (120 bpm), the tuning and the tier, with notes that italic chords were inferred, that shapes are relative to the capo and that the song sounds in D major. Below it are the diagrams for C, G, Am and F, and a passing B named without a diagram. Each section then opens with its two-bar worked example (down and up arrows over the counts 1 & 2 & 3 & 4 &, with the chord under the stroke it starts on), followed by its chord grid: one box per bar, a pickup bar marked as such, and a repeat count such as ×4 where rows repeat. The Pre-chorus has no strip because its pattern was too uncertain to print.*
+*Page 1 of the sheet for "Synthetic Song", the project's own made-up test song (no real song's chart is published here).*
+
+*At the top, the header gives the key in ukulele shapes (C major), the capo (fret 2), the tempo (120 bpm), the tuning and the tier, with notes that italic chords were inferred, that shapes are relative to the capo and that the song sounds in D major. Below it are the diagrams for C, G, Am and F, and a passing B, named with its fret numbers but no diagram.*
+
+*Each section then opens with its two-bar worked example (down and up arrows over the counts 1 & 2 & 3 & 4 &, with the chord under the stroke it starts on), followed by its chord grid: one box per bar, a pickup bar marked as such, and a repeat count such as ×4 where rows repeat. The Pre-chorus has no strip because its pattern was too uncertain to print.*
 
 ## Using it without coding (Windows)
 
-You do not need to know anything about programming for this. Each step is one thing to do.
+You need Windows 10 or 11 with an internet connection, and nothing else installed. You do not need to know anything about programming for this. Each step is one thing to do.
 
 1. On this repository's GitHub page, press the green **Code** button, then **Download ZIP**.
-2. Find the downloaded file (it is called `Youkelele-main.zip`, usually in your Downloads folder). Right-click it, choose **Extract All**, and pick a place you will find again, such as your Documents folder. This makes a folder called `Youkelele-main`.
+2. Find the downloaded file (it is called `Youkelele-main.zip`, usually in your Downloads folder). Right-click it, choose **Extract All**, and pick a place you will find again, such as your Documents folder. This makes a folder called `Youkelele-main`. If you open it and see only another folder with the same name, open that one too.
 3. Open the `Youkelele-main` folder and double-click `install.cmd`. A black window opens and works through four steps.
-   - Windows may show a blue box saying **Windows protected your PC**. This happens because the files came from the internet. Choose **More info**, then **Run anyway**. If instead a box asks whether you want to run the file, choose **Run**.
-   - The first time, it downloads about 800 MB and uses about 3 GB of disk space, so leave it until it finishes.
+   - Windows will probably first show a box saying **The publisher could not be verified. Are you sure you want to run this software?** This happens because the files came from the internet. Choose **Run**. If instead a blue box says **Windows protected your PC**, choose **More info**, then **Run anyway**.
+   - The first time, it downloads a little over 800 MB and uses about 3 GB of disk space, so leave it until it finishes. Some download progress bars may show as rows of odd characters; that is harmless.
 4. Wait until the window says **Ready**, then press any key to close it. You only need to do steps 1 to 4 once.
-5. Double-click `run-youkelele.cmd`. When it asks, paste the YouTube link (press Ctrl+V, or right-click in the window) and press Enter.
-   - The first song takes longer, because it downloads another 140 MB or so of song-analysis models. Later songs skip this.
-6. When it is done, the sheet opens as a PDF. It is also saved inside the `Youkelele-main` folder, under `runs`, then the song's name, then `07_render`, as `sheet.pdf`.
+5. Double-click `run-youkelele.cmd`. It may show the same security box the first time; choose **Run** again. When it asks, paste the YouTube link (press Ctrl+V, or right-click in the window) and press Enter.
+   - Then wait: a song takes several minutes while the window shows the eight steps going by, and the first song takes longer, because it downloads another 140 MB or so of song-analysis models. Later songs skip this.
+6. When it is done, the sheet opens as a PDF and the black window closes by itself; that is normal. The sheet is also saved inside the `Youkelele-main` folder, under `runs`, then the song's name, then `07_render`, as `sheet.pdf`.
 
-You can also drag an audio file (an MP3 or WAV, say) onto `run-youkelele.cmd` instead of pasting a link. Giving it the same link again makes that song's sheet again from the start.
+You can also drag an audio file (an MP3 or WAV, say) onto `run-youkelele.cmd` instead of pasting a link. Giving it the same link again makes that song's sheet again from the start. Each song's folder in `runs` keeps the separated audio, about 200 to 350 MB, so delete old song folders when space runs short.
 
-**If something goes wrong.** If a window closes before you can read it, or says that something is not installed or is missing, double-click `install.cmd` again (it only fetches what is missing), then try the song again. If it still goes wrong, the window says **Something went wrong**: take a screenshot of the window, or copy its text, and send it to the person who gave you the tool, with the folder it names.
+**If something goes wrong.** If a window closes before you can read it, or says that something is not installed or is missing, double-click `install.cmd` again (it only fetches what is missing), then try the song again. If it still goes wrong, the window says **Something went wrong**: take a screenshot of the window, or copy its text, and send it to the person who gave you the tool, and, if it names a folder, that folder.
 
 On a Mac or Linux computer the same steps use `install.sh` and `run-youkelele.sh`, run from a terminal; these two scripts are written but have not been tried.
 
@@ -137,7 +141,10 @@ Options for `run`. A run resumed with `--from` keeps the options saved in its `m
 - The key's hedge names a second possible tonic but not the other mode. A song whose stems carry little harmony and whose tonic chord is ambiguous can get the wrong mode.
 - Inferred chords cover only bars whose harmonic stems clearly match one of the song's own chords. A lead line over the band still prints as N.C., and a faint guitar in a sparse verse can be filled with a chord the record may not have; inferred chords are italic so a reader can tell.
 - Phrase alignment only moves a section start one bar later. When the phrase starts a bar earlier, the rows still start mid-phrase.
-- Most real songs print on three pages; each section's two-bar worked example adds height to the page.
+- Real songs print on two to four pages (of the seven measured, two print on two, four on three and one on four); each section's two-bar worked example adds height to the page, and a song cut into many short sections runs longer.
+- Verse and chorus are told apart by sound and repetition, not by chord content, so on a song cut into many short sections the same chord cycle can print under both names.
+- The power-chord mark (a raised 5 after the chord name) prints only in the full tier, and the line explaining it is left out if the record also plays that chord as a full minor chord anywhere.
+- An artist name given wholly in capitals is printed in title case, so "INXS" prints as "Inxs".
 
 ## Project history
 
@@ -147,7 +154,7 @@ Each version has a design spec and a record of how it did on real songs, all und
 - 1.1: the sheet becomes a strum box and a chord grid per section, short enough to use. [Spec](docs/superpowers/specs/2026-10-03-ukulele-tab-chain-v1-1-design.md); [validation](docs/superpowers/specs/2026-10-03-v1-1-validation.md).
 - 1.2: four-bar sections, inferred and passing chords, phrase-aligned starts, repeated rows printed once. [Spec](docs/superpowers/specs/2026-10-03-ukulele-tab-chain-v1-2-design.md); [validation](docs/superpowers/specs/2026-10-03-v1-2-validation.md).
 - 1.3: the measurement harness, a more reliable strum pattern, chord changes on the bar lines, the two-bar worked example. [Spec](docs/superpowers/specs/2026-10-04-ukulele-tab-chain-v1-3-design.md); [validation](docs/superpowers/specs/2026-10-04-v1-3-validation.md).
-- 1.4: the key from the chords with a hedge, power chords, section names from the vocals, the no-capo line, run folders named after the song, install and run scripts for non-coders, and this README. [Spec](docs/superpowers/specs/2026-10-04-ukulele-tab-chain-v1-4-design.md); validation in progress.
+- 1.4: the key from the chords with a hedge, power chords, section names from the vocals, the no-capo line, run folders named after the song, install and run scripts for non-coders, and this README. [Spec](docs/superpowers/specs/2026-10-04-ukulele-tab-chain-v1-4-design.md); [validation](docs/superpowers/specs/2026-10-04-v1-4-validation.md).
 
 The quality research behind versions 1.3 and 1.4 is in [docs/superpowers/research/2026-10-03-quality](docs/superpowers/research/2026-10-03-quality/README.md).
 
@@ -172,6 +179,8 @@ The tool ships or downloads these components, each under its own licence, checke
 | chords-db ukulele shapes | included in this repository, with its licence, under `src/youkelele/data/chords-db` | MIT License, "Copyright (c) 2016 David Rubert" ([LICENSE](https://github.com/tombatossals/chords-db/blob/master/LICENSE)) |
 | Demucs `htdemucs_6s` weights, run by audio-separator | downloaded on first use from Meta's server | The [Demucs README](https://github.com/facebookresearch/demucs) says "Demucs is released under the MIT license"; it makes no separate statement about the weights, so their terms are taken to be the repository's but are not stated outright. The repository is archived. audio-separator itself is MIT. |
 | Beat This! `final0` checkpoint | downloaded on first use | MIT License for the code; the maintainer [states](https://github.com/CPJKU/beat_this/issues/16) "The MIT license also applies to the model weights." |
+| yt-dlp, which fetches the audio | installed with the Python packages | The Unlicense, a public-domain dedication ("This is free and unencumbered software released into the public domain", [LICENSE](https://github.com/yt-dlp/yt-dlp/blob/master/LICENSE)) |
+| Playwright and its Chromium, which print the PDF | Playwright installed with the Python packages; Chromium downloaded by `playwright install chromium` | Playwright: Apache License 2.0 ([LICENSE](https://github.com/microsoft/playwright-python/blob/main/LICENSE)). Chromium: BSD 3-Clause, "Copyright 2015 The Chromium Authors" ([LICENSE](https://chromium.googlesource.com/chromium/src/+/main/LICENSE)), with its bundled third-party components under their own licences |
 | static-ffmpeg | installed with the Python packages | MIT License ([PyPI](https://pypi.org/project/static-ffmpeg/)) |
 | ffmpeg, fetched by static-ffmpeg | downloaded by `setup` | On Windows this is the gyan.dev 8.0.1 "essentials" build, configured with `--enable-gpl --enable-version3`, so it is under the [GNU GPL version 3 or later](https://www.ffmpeg.org/legal.html) (as `ffmpeg -L` reports). It is not included in this repository and the tool runs it as a separate program. The builds for other systems were not checked. |
 
