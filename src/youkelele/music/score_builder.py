@@ -38,16 +38,32 @@ def _plan(grid: Grid, strums: Strums, chords: Chords) -> list[PlannedSection]:
 def check_strums_match_grid(grid: Grid, strums: Strums, chords: Chords) -> None:
     """Fail clearly when grid.json was edited after strums.json was made from it."""
     plan = _plan(grid, strums, chords)
-    where = "the section plan in strums.json" if strums.plan else "grid.json"
     n, m = len(strums.patterns), len(plan)
     if n != m:
-        raise ValueError(f"strums.json has {n} patterns for {m} sections in {where}; re-run from strums")
+        where = "planned sections in strums.json" if strums.plan else "sections in grid.json"
+        raise ValueError(f"strums.json has {n} patterns for {m} {where}; re-run from strums")
     indices = [p.section for p in strums.patterns]
     if indices != list(range(m)):
+        where = "the section plan in strums.json" if strums.plan else "grid.json"
         raise ValueError(
             f"strums.json patterns are for sections {indices} but {where} has sections "
             f"{list(range(m))}; re-run from strums"
         )
+    if strums.plan:  # the plan must still describe grid.json: an edit since strums ran shows here
+        covered = [i for p in plan for i in p.members]
+        if covered != list(range(len(grid.sections))) or not all(p.members for p in plan):
+            raise ValueError(
+                f"strums.json's section plan covers grid sections {covered} but grid.json has "
+                f"{len(grid.sections)}; re-run from strums"
+            )
+        for k, p in enumerate(plan):
+            span = (grid.sections[p.members[0]].start_bar, grid.sections[p.members[-1]].end_bar)
+            if (p.start_bar, p.end_bar) != span:
+                raise ValueError(
+                    f"strums.json's planned section {k} spans bars {p.start_bar} to {p.end_bar} but "
+                    f"its grid sections {p.members} span {span[0]} to {span[1]} in grid.json; "
+                    "re-run from strums"
+                )
     n_bars = len(grid.bars)
     outside = [(p.start_bar, p.end_bar) for p in plan if not 0 <= p.start_bar < p.end_bar <= n_bars]
     if outside:

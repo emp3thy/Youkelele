@@ -814,3 +814,39 @@ def test_trailing_drop_falls_on_the_last_planned_section_capped_by_the_grid_sect
     score = _plan_score(grid, chords, _strums_with_plan(plan, [_pattern(0), _pattern(1)]), arrangement)
     assert [b.index for b in score.sections[1].bars] == list(range(8, 15))
     assert score.trailing_bars_dropped == 1
+
+
+def _three_section_plan_strums() -> Strums:
+    """A plan made from grid sections (0, 8), (8, 14), (14, 16), the last two merged."""
+    plan = [
+        PlannedSection(start_bar=0, end_bar=8, label="verse", members=[0]),
+        PlannedSection(start_bar=8, end_bar=16, label="chorus", members=[1, 2]),
+    ]
+    return _strums_with_plan(plan, [_pattern(0), _pattern(1)])
+
+
+def test_check_strums_match_grid_accepts_the_grid_the_plan_was_made_from():
+    grid = _sectioned(16, [(0, 8), (8, 14), (14, 16)])
+    check_strums_match_grid(grid, _three_section_plan_strums(), _CHORDS)
+
+
+def test_check_strums_match_grid_catches_a_grid_section_split_after_strums_ran():
+    # the plan was made from three grid sections; grid.json now splits the first in two
+    split = _sectioned(16, [(0, 4), (4, 8), (8, 14), (14, 16)])
+    with pytest.raises(ValueError, match=r"covers grid sections \[0, 1, 2\] but grid.json has 4; re-run from strums"):
+        check_strums_match_grid(split, _three_section_plan_strums(), _CHORDS)
+
+
+def test_check_strums_match_grid_catches_a_span_that_disagrees_with_its_members():
+    # same section count, but a boundary moved: grid section 0 now ends at bar 10
+    moved = _sectioned(16, [(0, 10), (10, 14), (14, 16)])
+    with pytest.raises(ValueError, match="planned section 0 spans bars 0 to 8 .*re-run from strums"):
+        check_strums_match_grid(moved, _three_section_plan_strums(), _CHORDS)
+
+
+def test_plan_pattern_count_mismatch_names_the_planned_sections():
+    strums = _three_section_plan_strums()
+    strums = strums.model_copy(update={"patterns": strums.patterns[:1]})
+    with pytest.raises(ValueError) as e:
+        check_strums_match_grid(_sectioned(16, [(0, 8), (8, 14), (14, 16)]), strums, _CHORDS)
+    assert str(e.value) == "strums.json has 1 patterns for 2 planned sections in strums.json; re-run from strums"
