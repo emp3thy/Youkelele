@@ -3,6 +3,8 @@ name = "youkelele"
 version = "0.4.0"
 description = "Turn a YouTube URL into a ukulele chord-and-strum sheet"
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = "==3.12.*"
 dependencies = [
     "yt-dlp[default,deno]",

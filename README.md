@@ -42,7 +42,8 @@ Options are saved in `runs/<slug>/manifest.json`. A `--from` run reuses them and
 
 ### Requirements
 
-- `youkelele setup` needs git on PATH and network access: it clones the chord model and downloads ffmpeg.
+- `youkelele setup` needs network access, not git: it downloads the chord model as a zip of its pinned commit (about 27 MB) and downloads ffmpeg. A model folder cloned by an earlier version is still accepted.
+- On Windows, `install.cmd` installs everything (uv, the tool, the models, Chromium) and `run-youkelele.cmd` makes a sheet from a pasted link or a dropped audio file; `install.sh` and `run-youkelele.sh` are their macOS and Linux equivalents, written but untested.
 - Rendering the PDF needs Playwright's Chromium. If preflight reports that Chromium is missing, run `uv run playwright install chromium`.
 - Fast test suite (seconds, no network, no models): `uv run pytest -q -W error -m "not slow"`.
 - Slow suite (real models on a bundled clip, after `youkelele setup`): `uv run pytest -q -m slow`.
