@@ -105,7 +105,7 @@ class GridStage(Stage):
         runs = vocal_runs(flags, keep_trailing=True)  # the trailing run only pins boundaries
         boundaries = insert_vocal_boundaries(boundaries, runs, len(bars), min_bars=MIN_SECTION_BARS)
         sections, margin = label_sections(boundaries, merged_ids, loudness, vocal=flags)
-        ctx.log(f"  vocal runs {runs_text(vocal_runs(flags))}")
+        ctx.log(f"  vocal runs {runs_text(runs, len(bars))}")
 
         full_bars = [bar for bar in bars if len(bar.beats) == meter.numerator] or bars
         bar_len = float(np.median([bar.end - bar.start for bar in full_bars]))

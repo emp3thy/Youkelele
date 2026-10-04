@@ -14,6 +14,7 @@ from youkelele.music.sections import (
     boundaries_from_clusters,
     insert_vocal_boundaries,
     label_sections,
+    runs_text,
     segment_bars,
     vocal_flags,
     vocal_runs,
@@ -286,6 +287,10 @@ def test_vocal_runs_skip_short_runs_and_trailing_run():
     assert vocal_runs(flags, keep_trailing=True) == [(0, 4), (12, 17), (19, 23)]
     assert vocal_runs([T] * 10) == []
     assert vocal_runs([F] * 10) == []  # one run that is the trailing run
+    assert runs_text(vocal_runs(flags, keep_trailing=True), len(flags)) == (
+        "(0, 4), (12, 17), (19, 23) trailing"
+    )
+    assert runs_text([]) == "none"
 
 
 def test_vocal_runs_run_followed_by_fewer_than_four_bars_is_trailing():
@@ -324,6 +329,8 @@ def test_insert_vocal_boundaries_moves_nearest_within_three_bars():
     assert insert_vocal_boundaries([0, 8, 12, 30], [(10, 20)], 40) == [0, 8, 12, 20, 30]
     # a boundary on one run's edge is not moved off it by the next run: 20 stays, 30 moves to 27
     assert insert_vocal_boundaries([0, 30, 50], [(10, 20), (22, 27)], 60) == [0, 10, 20, 27, 50]
+    # nor off a later run's edge: 22 is already the start of (22, 30), so edge 20 cannot take it
+    assert insert_vocal_boundaries([0, 22, 50], [(12, 20), (22, 30)], 60) == [0, 12, 22, 30, 50]
 
 
 def test_insert_vocal_boundaries_never_moves_first_boundary():
@@ -373,6 +380,30 @@ def test_label_sections_instrumental_intro_and_merge():
     vocal = vocal[:32] + [True] * 8 + [False] * 8 + part
     sections, _ = label_sections(bounds, ids, loud, vocal=vocal)
     assert [(s.label, s.start_bar, s.end_bar) for s in sections][-1] == ("outro", 40, 56)
+
+
+def test_label_sections_split_section_counts_once():
+    # A C B C D C, all vocal, B loudest but once-only: B and D are bridges, C the chorus
+    bounds = [0, 8, 16, 40, 48, 56]
+    ids = _segments(bounds, 64, [0, 2, 1, 2, 3, 2])
+    loud = [{0: -20.0, 1: -10.0, 2: -15.0, 3: -20.0}[c] for c in ids]
+    sections, _ = label_sections(bounds, ids, loud, vocal=[True] * 64)
+    assert [s.label for s in sections] == ["intro", "chorus", "bridge", "chorus", "bridge 2", "chorus"]
+    # a non-vocal run (24, 32) inside B cuts it into sung, instrumental, sung: still one B
+    vocal = [True] * 24 + [False] * 8 + [True] * 32
+    split = insert_vocal_boundaries(bounds, vocal_runs(vocal), 64)
+    assert split == [0, 8, 16, 24, 32, 40, 48, 56]
+    sections, _ = label_sections(split, ids, loud, vocal=vocal)
+    assert [(s.label, s.start_bar, s.end_bar) for s in sections] == [
+        ("intro", 0, 8),
+        ("chorus", 8, 16),
+        ("bridge", 16, 24),
+        ("instrumental", 24, 32),
+        ("bridge", 32, 40),
+        ("chorus", 40, 48),
+        ("bridge 2", 48, 56),
+        ("chorus", 56, 64),
+    ]
 
 
 def test_label_sections_chorus_needs_half_vocal_share():

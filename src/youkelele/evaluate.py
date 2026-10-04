@@ -57,6 +57,7 @@ class Report:
     key: Key | None = None
     boxes_mostly_rests: int | None = None
     vocal_runs: list[tuple[int, int]] | None = None  # None when the grid has no vocal levels
+    vocal_bars: int | None = None  # the bar count, so a trailing run prints marked
     sections: list[SectionDiag] = field(default_factory=list)
     truth_given: bool = False  # a truth directory was supplied: print the truth lines (n/a if absent)
 
@@ -241,7 +242,8 @@ def _diagnose(run_dir: Path) -> tuple[Report, Strums | None]:
     strums = _load_strums(run_dir)
     report = Report(None, None, None, None, None, **_chord_diagnostics(grid, chords))
     if grid.bar_vocal_db:
-        report.vocal_runs = vocal_runs(vocal_flags(grid.bar_vocal_db))
+        report.vocal_runs = vocal_runs(vocal_flags(grid.bar_vocal_db), keep_trailing=True)
+        report.vocal_bars = len(grid.bar_vocal_db)
     if strums is not None:
         report.sections = _section_diags(grid, strums, chords)
         report.boxes_mostly_rests = _boxes_mostly_rests(strums, report.sections)
@@ -385,7 +387,7 @@ def format_report(r: Report) -> str:
         _key_line(r.key),
         f"Key confidence: {_num(r.key_confidence, '.2f')}",
         f"Boxes mostly rests: {_num(r.boxes_mostly_rests)}",
-        f"Vocal runs: {'n/a' if r.vocal_runs is None else runs_text(r.vocal_runs)}",
+        f"Vocal runs: {'n/a' if r.vocal_runs is None else runs_text(r.vocal_runs, r.vocal_bars)}",
     ]
     lines.extend(_section_line(d) for d in r.sections)
     truth = [r.beat_f, r.downbeat_f, r.chord_root, r.chord_majmin, r.chord_triads]

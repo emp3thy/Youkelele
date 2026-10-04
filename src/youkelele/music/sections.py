@@ -249,9 +249,12 @@ def vocal_runs(flags: Sequence[bool], keep_trailing: bool = False) -> list[tuple
     return runs
 
 
-def runs_text(runs: Sequence[tuple[int, int]]) -> str:
-    """`(0, 20), (93, 108)`, or `none`."""
-    return ", ".join(f"({s}, {e})" for s, e in runs) or "none"
+def runs_text(runs: Sequence[tuple[int, int]], n_bars: int | None = None) -> str:
+    """`(0, 20), (93, 108)`, or `none`; with `n_bars`, a trailing run reads `(108, 113) trailing`."""
+    return ", ".join(
+        f"({s}, {e})" + (" trailing" if n_bars is not None and _is_trailing(e, n_bars) else "")
+        for s, e in runs
+    ) or "none"
 
 
 def insert_vocal_boundaries(
@@ -270,13 +273,11 @@ def insert_vocal_boundaries(
     if not bounds:
         return bounds
     frozen_from = min((s for s, e in runs if _is_trailing(e, n_bars)), default=n_bars)
-    pinned = {bounds[0]}
     inside = [(s, e) for s, e in runs if not _is_trailing(e, n_bars)]
-    for edge in sorted({edge for s, e in inside for edge in (s, e)}):
-        if edge in bounds:
-            pinned.add(edge)
-            continue
-        if not bounds[0] < edge < n_bars:
+    edges = sorted({edge for s, e in inside for edge in (s, e)})
+    pinned = {bounds[0]} | (set(edges) & set(bounds))  # boundaries already on an edge stay
+    for edge in edges:
+        if edge in bounds or not bounds[0] < edge < n_bars:
             continue
         i = bisect.bisect_left(bounds, edge)
         left, right = bounds[i - 1], bounds[i] if i < len(bounds) else n_bars
@@ -314,6 +315,23 @@ def _low_vocal(
     return [False] * len(starts) if all(low) else low
 
 
+def _occurrences(segc: list[int], low: list[bool]) -> dict[int, int]:
+    """Per sung segment index, the index of the first segment of its occurrence.
+
+    Sung segments of the same cluster separated only by low-vocal segments (or by
+    nothing) are one occurrence: a non-vocal run inside a section splits it into sung
+    pieces that must not make a once-only cluster look recurring.
+    """
+    occurrence: dict[int, int] = {}
+    previous: int | None = None
+    for i, c in enumerate(segc):
+        if low[i]:
+            continue
+        occurrence[i] = occurrence[previous] if previous is not None and segc[previous] == c else i
+        previous = i
+    return occurrence
+
+
 def label_sections(
     boundaries: Sequence[int],
     cluster_ids: Sequence[int],
@@ -336,8 +354,10 @@ def label_sections(
     `intro` (first), `outro` (last) or `instrumental` whatever its cluster, with
     confidence 0.5, and adjacent such segments merge into one. Those segments take no
     part in the cluster rules above (the 60% test counts the remaining bars), and
-    chorus candidates need a bar-weighted vocal share of at least 0.5. When every
-    segment would be low-vocal the flags are ignored.
+    chorus candidates need a bar-weighted vocal share of at least 0.5. Sung segments of
+    one cluster separated only by low-vocal segments count as one occurrence, so a
+    section cut by an inner non-vocal run stays once-only and its pieces share a label.
+    When every segment would be low-vocal the flags are ignored.
     """
     n_bars = len(cluster_ids)
     starts = list(boundaries)
@@ -348,7 +368,8 @@ def label_sections(
     sung_bars = sum(e - s for s, e, _ in sung)
     loud = np.asarray(bar_loudness_db, dtype=float)
     flags = np.ones(n_bars) if vocal is None else np.asarray(vocal, dtype=float)
-    occ = Counter(c for _, _, c in sung)
+    occurrence = _occurrences(segc, low)
+    occ = Counter(segc[i] for i in set(occurrence.values()))
     bars_of = {c: sum(e - s for s, e, cc in sung if cc == c) for c in occ}
     db_of = {c: float(np.mean(np.concatenate([loud[s:e] for s, e, cc in sung if cc == c]))) for c in occ}
     sung_of = {c: float(np.mean(np.concatenate([flags[s:e] for s, e, cc in sung if cc == c]))) for c in occ}
@@ -373,8 +394,10 @@ def label_sections(
     )
     confidence = 0.3 if margin is not None and margin < LOW_MARGIN_DB else 0.5
 
+    last = len(segc) - 1
+    reaches_end = {occurrence[i] for i in occurrence if i == last}
     sections: list[Section] = []
-    n_bridge = 0
+    bridge_no: dict[int, int] = {}  # occurrence -> bridge number
     for i, (s, e, c) in enumerate(zip(starts, ends, segc)):
         if low[i]:
             if i > 0 and low[i - 1]:  # merge with the low-vocal segment before, keeping its start
@@ -387,13 +410,13 @@ def label_sections(
         elif c == chorus:
             label = "chorus"
         elif occ[c] == 1:
-            if i == 0:
+            if occurrence[i] == 0:
                 label = "intro"
-            elif i == len(segc) - 1:
+            elif occurrence[i] in reaches_end:
                 label = "outro"
             else:
-                n_bridge += 1
-                label = "bridge" if n_bridge == 1 else f"bridge {n_bridge}"
+                n = bridge_no.setdefault(occurrence[i], len(bridge_no) + 1)
+                label = "bridge" if n == 1 else f"bridge {n}"
         else:
             label = f"verse {others.index(c) + 2}"
         sections.append(Section(label=label, start_bar=s, end_bar=e, confidence=confidence))

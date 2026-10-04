@@ -280,7 +280,7 @@ def test_grid_stage_requires_vocals_and_stores_bar_vocal_db(tmp_path, monkeypatc
     assert [(s.label, s.start_bar, s.end_bar) for s in grid.sections] == [
         ("intro", 0, 5), ("verse", 5, 12),
     ]
-    assert "vocal runs (0, 5)" in "\n".join(messages)
+    assert "  vocal runs (0, 5)" in messages  # no trailing run here
 
 
 def test_grid_stage_silent_vocals_stem_changes_nothing(tmp_path, monkeypatch):

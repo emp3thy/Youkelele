@@ -503,3 +503,7 @@ def test_evaluate_prints_vocal_runs_and_labels(tmp_path):
     assert "Vocal runs: n/a" in format_report(evaluate_run(_run_with(tmp_path / "old")))
     sung = grid.model_copy(update={"bar_vocal_db": [-20.0] * 12})
     assert "Vocal runs: none" in format_report(evaluate_run(_run_with(tmp_path / "all", grid=sung)))
+    # a trailing run is listed and marked, not silently left out
+    faded = grid.model_copy(update={"bar_vocal_db": [-120.0] * 5 + [-20.0] * 3 + [-120.0] * 4})
+    text = format_report(evaluate_run(_run_with(tmp_path / "fade", grid=faded)))
+    assert "Vocal runs: (0, 5), (8, 12) trailing" in text.splitlines()
