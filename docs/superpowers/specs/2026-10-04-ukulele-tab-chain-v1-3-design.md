@@ -79,7 +79,7 @@ Measured by the decoding spike (section 8) on Summer of '69: changes on bar star
 
 ## 6. Data format changes
 
-`SectionPattern.explained: float = 0.0`, `SectionPattern.recall_boost: bool = False`, `ScoreSection.explained: float = 0.0`, `Score.trailing_bars_dropped: int = 0`; new optional artefacts `02_grid/beats_raw.json`, `03_harmony/spans.lab`, `04_strums/onsets.txt` (with `--debug`). Schema version stays 1; version 1.2 files load.
+`SectionPattern.explained: float = 0.0`, `SectionPattern.recall_boost: bool = False`, `ScoreSection.explained: float = 0.0`, `Score.trailing_bars_dropped: int = 0`; new artefacts `02_grid/beats_raw.json` and `03_harmony/spans.lab` (written on every run) and `04_strums/onsets.txt` (only with `--debug`). Schema version stays 1; version 1.2 files load.
 
 ## 7. Validation
 
