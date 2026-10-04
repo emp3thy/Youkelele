@@ -46,6 +46,7 @@ class SectionDiag:
     riff: bool = False
     riff_entropy: float | None = None
     riff_single_share: float | None = None
+    riff_onsets: int | None = None  # the detector's own onsets the riff pair rests on
 
 
 def _label_text(d: SectionDiag) -> str:
@@ -264,6 +265,7 @@ def _section_diags(grid: Grid, strums: Strums, chords: Chords) -> list[SectionDi
                 riff=pattern.riff,
                 riff_entropy=pattern.riff_entropy,
                 riff_single_share=pattern.riff_single_share,
+                riff_onsets=pattern.riff_onsets,
             )
         )
     return diags
@@ -412,6 +414,8 @@ def _section_line(d: SectionDiag) -> str:
         if d.riff_entropy is not None and d.riff_single_share is not None
         else "n/a"
     )
+    if d.riff_onsets is not None:  # 0 onsets gives "n/a (0 onsets)"
+        features += f" ({d.riff_onsets} onset{'' if d.riff_onsets == 1 else 's'})"
     return (
         f"  {d.index} {_label_text(d)} bars {d.start_bar}-{d.end_bar}: strikes/bar {d.strikes_per_bar:.1f}, "
         f"explained {_pct(d.explained)}, rests {_pct(d.rest_share)}, "

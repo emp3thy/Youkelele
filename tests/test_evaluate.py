@@ -577,12 +577,16 @@ def test_section_line_prints_members_p_density_and_riff():
         index=2, label="verse", strikes_per_bar=3.1, explained=1.0, rest_share=0.25,
         uncertain=False, recall_boost=False, start_bar=55, end_bar=110, members=[4, 5, 6],
         member_labels=["verse"] * 3, chance_p=0.003, strike_density=0.58, riff=True,
-        riff_entropy=0.66, riff_single_share=0.58,
+        riff_entropy=0.66, riff_single_share=0.58, riff_onsets=8,
     )
     assert _section_line(d) == (
         "  2 verse (grid 4, 5, 6: verse, verse, verse) bars 55-110: strikes/bar 3.1, "
-        "explained 100.0%, rests 25.0%, p 0.003, density 0.58, riff 0.66/0.58 riff"
+        "explained 100.0%, rests 25.0%, p 0.003, density 0.58, riff 0.66/0.58 (8 onsets) riff"
     )
+    one = SectionDiag(**{**d.__dict__, "riff_onsets": 1, "riff": False})
+    assert _section_line(one).endswith("riff 0.66/0.58 (1 onset)")
+    # a 1.5 file written before the count was stored prints the pair alone
+    assert _section_line(SectionDiag(**{**d.__dict__, "riff_onsets": None})).endswith("riff 0.66/0.58 riff")
 
 
 def test_section_line_prints_na_for_a_1_4_section_and_no_group_for_one_member():
@@ -602,7 +606,7 @@ def _plan_run(tmp_path, riff=False, uncertain=False):
     plan = [PlannedSection(start_bar=0, end_bar=4, label="verse", members=[0, 1])]
     patterns = [
         _pattern(0, ["D", "-", "U", "-"], uncertain=uncertain, chance_p=0.02, strike_density=0.5,
-                 riff=riff, riff_entropy=0.4, riff_single_share=0.7)
+                 riff=riff, riff_entropy=0.4, riff_single_share=0.7, riff_onsets=12)
     ]
     strums = _strums([["D", "-", "U", "-"]] * 4, patterns, plan=plan)
     return _run_with(tmp_path, grid=_sectioned_grid(), strums=strums)
@@ -679,5 +683,5 @@ def test_evaluate_prints_the_plan_section_line_and_the_votes(tmp_path):
     assert any(line.endswith("votes score C pair C mix G (agreement))") for line in lines)
     assert (
         "  0 verse (grid 0, 1: verse, chorus) bars 0-4: strikes/bar 2.0, explained 100.0%, "
-        "rests 50.0%, p 0.020, density 0.50, riff 0.40/0.70 riff"
+        "rests 50.0%, p 0.020, density 0.50, riff 0.40/0.70 (12 onsets) riff"
     ) in lines

@@ -11,6 +11,7 @@ from youkelele.jsonio import load_model, save_model
 from youkelele.layout import RunLayout
 from youkelele.music.onsets import Onsets
 from youkelele.music.recall import HIGH_BAND_FMIN
+from youkelele.music.riff import is_riff, riff_features
 from youkelele.options import RunOptions
 from youkelele.schemas import Bar, ChordEvent, Chords, Grid, Key, Meter, Section, Strums
 from youkelele.stage import StageContext
@@ -623,12 +624,46 @@ def test_riff_flag_and_features_are_recorded_per_section(tmp_path):
     assert strum.riff_entropy is not None and strum.riff_entropy > riff.riff_entropy
 
 
+def test_riff_features_rest_on_the_detectors_own_onsets_not_the_recall_gates(tmp_path):
+    # the detector hears single notes on slots 0 and 4; the high band adds chords on 2, 5 and 6,
+    # which the gate accepts (2 -> 5 strikes per bar). Read over the spliced list the chords
+    # would be the majority and the section would lose its riff flag (spec 4.3).
+    grid = _grid([8])
+    seconds = 8 * BAR_SECONDS
+    own = [t for b in range(8) for t in _bar_times(b, (0, 4))]
+    gate = [t for b in range(8) for t in _bar_times(b, (2, 5, 6))]
+    g7 = [196.0, 246.9, 293.7, 349.2]
+    other = _notes([[196.0]] * len(own), own, seconds) + _notes([g7] * len(gate), gate, seconds)
+    lines: list[str] = []
+    strums, ctx, _ = _run(
+        tmp_path, grid, _detector(own, high=sorted(own + gate)), other=other, mix_amp=0.1,
+        log=lines.append,
+    )
+    (pattern,) = strums.patterns
+    assert pattern.recall_boost and any("recall boost: section 0" in line for line in lines)
+    assert "".join(pattern.slots) == "D-D-DUD-"  # the strum still counts the gate's onsets
+
+    y, sr = strums_module._read_mono(ctx.input("separate/stems/other.wav"))
+    expected = riff_features(strums_module._onset_chroma_at_riff_rate(y, sr, np.asarray(own)))
+    spliced = riff_features(strums_module._onset_chroma_at_riff_rate(y, sr, np.asarray(sorted(own + gate))))
+    assert not is_riff(*spliced)  # the post-gate list would hide the riff
+    assert (pattern.riff_entropy, pattern.riff_single_share) == pytest.approx(expected)
+    assert pattern.riff and is_riff(*expected)
+    assert pattern.riff_onsets == len(own)
+
+
+def test_riff_onsets_count_only_the_longest_members_bars(tmp_path):
+    # a 16-bar verse and a 6-bar fragment merged into it: the features rest on bars 0 to 16 only
+    strums, _, _ = _run_notes(tmp_path, _grid_with_fragment(), _detector(_island(22)))
+    assert strums.patterns[0].riff_onsets == 16 * len(ISLAND)
+
+
 def test_no_instrument_section_has_no_riff_features_and_no_p(tmp_path):
     other = np.concatenate([_tone(8 * BAR_SECONDS, 0.3), np.zeros(int(8 * BAR_SECONDS * SR))])
     strums, _, _ = _run_notes(tmp_path, _grid([8, 8]), _detector(_island(16)), other=other)
     silent = next(p for p in strums.patterns if p.no_instrument)
     assert (silent.riff, silent.riff_entropy, silent.chance_p) == (False, None, None)
-    assert (silent.riff_single_share, silent.strike_density) == (None, None)
+    assert (silent.riff_single_share, silent.strike_density, silent.riff_onsets) == (None, None, None)
 
 
 def test_inherited_section_has_no_riff_features_and_no_p(tmp_path):
@@ -641,7 +676,7 @@ def test_inherited_section_has_no_riff_features_and_no_p(tmp_path):
     short = strums.patterns[1]
     assert short.inherited_from == 2
     assert (short.riff, short.riff_entropy, short.riff_single_share) == (False, None, None)
-    assert (short.chance_p, short.strike_density) == (None, None)
+    assert (short.chance_p, short.strike_density, short.riff_onsets) == (None, None, None)
     assert strums.patterns[2].strike_density == 1.0
 
 

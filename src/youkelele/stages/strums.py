@@ -202,9 +202,12 @@ class StrumsStage(Stage):
             not any(_bar_has_chord(chords, bars[b]) for b in last_bars)
             and not any(d != "-" for b in last_bars for d in render_directions(classes[b], slots, meter))
         )
-        # the riff marker (spec 4.3): one constant-Q pass over the whole source, read per section
+        # the riff marker (spec 4.3): one constant-Q pass over the whole source, read per section.
+        # It reads the detector's own onsets, before the recall gate: the thresholds were measured
+        # on those, and the gate's percussive additions would move the features.
+        riff_times = today.times
         chroma = (
-            _onset_chroma_at_riff_rate(y, sr, onsets.times) if any(has_instrument) else np.zeros((0, 12))
+            _onset_chroma_at_riff_rate(y, sr, riff_times) if any(has_instrument) else np.zeros((0, 12))
         )
         for i in range(len(plan)):
             if not has_instrument[i] or (ends_song(i) and empty_outro):
@@ -218,7 +221,7 @@ class StrumsStage(Stage):
             rendered, confidence, repeat, explained = section_summary(section_classes, slots, meter)
             # the vote the section prints, as strike classes; the seed makes a re-run identical
             structured, p, density = structure_test(section_classes, _topped_vote(section_classes), seed=start)
-            inside = (onsets.times >= bars[start].start) & (onsets.times < bars[end - 1].end)
+            inside = (riff_times >= bars[start].start) & (riff_times < bars[end - 1].end)
             entropy, single_share = riff_features(chroma[inside])
             long_enough = end - start >= MIN_SECTION_BARS
             patterns[i] = SectionPattern(
@@ -230,6 +233,7 @@ class StrumsStage(Stage):
                 no_instrument=False, inherited_from=None, explained=explained, recall_boost=boosted[i],
                 chance_p=p, strike_density=density,
                 riff=is_riff(entropy, single_share), riff_entropy=entropy, riff_single_share=single_share,
+                riff_onsets=int(np.count_nonzero(inside)),
             )
             if not long_enough:
                 short.append(i)
@@ -245,8 +249,9 @@ class StrumsStage(Stage):
                 continue  # keeps its own majority vector, already uncertain
             j = max(neighbours, key=lambda k: plan[k].end_bar - plan[k].start_bar)
             src = patterns[j]
-            # the chance test and the riff features are the donor's bars' facts, not this
-            # section's, so they are not copied
+            # only the donor's slots and figures are copied: the donor's chance test and riff
+            # features describe the donor's bars, and this section's own measured ones are
+            # discarded with them, since a section this short gives too few bars to judge
             patterns[i] = SectionPattern(
                 section=i, slots=list(src.slots), confidence=src.confidence, bar_repeat=src.bar_repeat,
                 uncertain=True, no_instrument=False, inherited_from=j, explained=src.explained,

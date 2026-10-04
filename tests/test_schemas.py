@@ -230,6 +230,12 @@ def test_section_pattern_new_fields_default():
         uncertain=True, no_instrument=True, inherited_from=None,
     )
     assert (p.chance_p, p.strike_density, p.riff, p.riff_entropy, p.riff_single_share) == (None, None, False, None, None)
+    assert p.riff_onsets is None
+
+
+def test_1_4_strums_patterns_load_without_riff_onsets():
+    s = Strums.model_validate_json(_fixture("v14/strums.json"))
+    assert all(p.riff_onsets is None for p in s.patterns)
 
 
 def test_key_votes_default_none_and_load_1_3_and_1_4_keys():

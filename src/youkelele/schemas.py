@@ -183,6 +183,7 @@ class SectionPattern(_Artifact):
     riff: bool = False  # the section's guitar plays single notes rather than chords (a riff, not a strum)
     riff_entropy: float | None = None  # median over the section's onsets of each onset's normalised chroma entropy; low means single notes; None before 1.5
     riff_single_share: float | None = None  # share of onsets with a single pitch class at half the maximum or more; None before 1.5
+    riff_onsets: int | None = None  # the detector's own onsets (before the recall gate) the riff features rest on; None before 1.5
 
 
 class PlannedSection(_Artifact):
