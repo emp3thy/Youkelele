@@ -474,7 +474,7 @@ def test_agreement_records_itself_and_the_mix_only_hedges():
     assert key.tonic_votes.decided_by == "agreement" and key_text(key) == "G major (or D major)"
 
 
-def test_close_score_margin_keeps_the_pair_rule_decision_and_runner_up_hedge():
+def test_close_score_margin_keeps_the_pair_rule_decision():
     key, decision = key_and_decision(events_close_d_a, bars, sections, chroma_d, mix_key_d)
     assert decision.rule == "pair rule" and key.tonic_votes.decided_by == "pair rule"
 

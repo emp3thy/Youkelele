@@ -329,7 +329,7 @@ def test_two_eligible_neighbours_the_earlier_wins_on_a_tie():
     assert [(p.start_bar, p.end_bar, p.members) for p in plan] == [(0, 12, [0, 1]), (12, 20, [2])]
 
 
-def test_all_fragment_song_terminates_without_cascading():
+def test_all_fragment_song_cascades_to_a_fixed_point_and_never_absorbs_the_intro():
     # five verses of 4 bars each on the same chords: 4-bar fragments join a neighbour at least
     # as long; the rule reaches a fixed point and never produces a section over an intro
     plan = _plan_of([("verse", (EM, D, G), 4)] * 5)

@@ -99,9 +99,11 @@ def _svg_open(width: int, height: int) -> str:
 
 
 def example_bars(section: ScoreSection) -> list[ScoreBar]:
-    """The bars the worked example shows: the first two full bars (a leading pickup is skipped),
-    unless neither changes chord mid-bar and a later bar does, which then replaces the second;
-    one bar if the section has one. A section that is only a pickup shows the pickup.
+    """The candidate bars for the worked example: the first two full bars (a leading pickup is
+    skipped), unless neither changes chord mid-bar and a later bar does, which then replaces the
+    second; one bar if the section has one. A section that is only a pickup gives the pickup.
+    `strip_bars` decides what the strip draws from these: both when one changes chord inside
+    the bar, otherwise the first alone.
 
     Only bars with a detected strike count, so the strip does not open on bars before the
     instrument comes in; a section with no struck bar keeps the choice above over all its bars."""

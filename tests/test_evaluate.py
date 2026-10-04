@@ -659,6 +659,30 @@ def test_section_diags_measure_the_longest_member_with_the_trailing_drop(tmp_pat
     assert diag.strikes_per_bar == 2.0 and diag.explained == 1.0
 
 
+def test_section_diags_drop_nothing_when_the_longest_member_is_not_the_grids_last_section():
+    # members 0 (bars 0-3) and 1 (bar 3); bar 3 follows the last chord, so the song drops 1 bar,
+    # but the figures are read over member 0, which does not end the song: bar 2 still counts
+    grid = _grid().model_copy(
+        update={
+            "sections": [
+                Section(label="verse", start_bar=0, end_bar=3, confidence=0.5),
+                Section(label="verse", start_bar=3, end_bar=4, confidence=0.5),
+            ]
+        }
+    )
+    events = [
+        _event(0, 0, 0.0, 2.0, "C:maj"), _event(1, 0, 2.0, 4.0, "G:maj"),
+        _event(2, 0, 4.0, 6.0, "A:min"), _event(3, 0, 6.0, 8.0, "N"),
+    ]
+    chords = Chords(key=Key(tonic="C", mode="major", confidence=0.7), events=events)
+    bar_onsets = [["D", "-", "U", "-"], ["D", "-", "U", "-"], ["D", "D", "D", "D"], ["-", "-", "-", "-"]]
+    plan = [PlannedSection(start_bar=0, end_bar=4, label="verse", members=[0, 1])]
+    strums = _strums(bar_onsets, [_pattern(0, ["D", "-", "U", "-"])], plan=plan)
+    (diag,) = _section_diags(grid, strums, chords)
+    assert diag.analysed_start == 0
+    assert diag.strikes_per_bar == 8 / 3  # with bar 2 dropped it would be 2.0
+
+
 def test_key_line_prints_the_votes():
     key = Key(tonic="F", mode="major", confidence=0.1,
               tonic_votes=TonicVotes(score="C", pair="F", mix="F", decided_by="mix"))
