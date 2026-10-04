@@ -119,8 +119,15 @@ def containment_distance(a: Sequence[str], b: Sequence[str]) -> float:
     longer, the windows also shifted one bar before the start and one bar past the end
     (the part of such a window outside the longer sequence is dropped, not padded), the
     least of them divided by the shorter length. 0.0 when the shorter sequence is empty.
+    With two sequences of one length, each is tried as the shorter and the lower kept,
+    so the distance does not depend on the order of the arguments.
     """
-    short, long = (a, b) if len(a) <= len(b) else (b, a)
+    if len(a) == len(b) and a:
+        return min(_contained(a, b), _contained(b, a))
+    return _contained(a, b) if len(a) <= len(b) else _contained(b, a)
+
+
+def _contained(short: Sequence[str], long: Sequence[str]) -> float:
     n, total = len(short), len(long)
     if n == 0:
         return 0.0

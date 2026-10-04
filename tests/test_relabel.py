@@ -227,6 +227,10 @@ def test_containment_distance_takes_the_shorter_either_way_and_uses_the_shifted_
     assert containment_distance(["a", "b", "c", "d"], ["X", "a", "b"]) == pytest.approx(1 / 3)
     # and one past the end: c d X against a b c d leaves c d
     assert containment_distance(["c", "d", "X"], ["a", "b", "c", "d"]) == pytest.approx(1 / 3)
+    # with equal lengths each is tried as the shorter (a a b in a c a's windows needs two
+    # edits, a c a in a a b's needs one) and the lower is kept whichever order is given
+    a, b = ["a", "a", "b"], ["a", "c", "a"]
+    assert containment_distance(a, b) == containment_distance(b, a) == pytest.approx(1 / 3)
 
 
 def test_pair_novelty_is_the_share_of_fragment_chord_bars_on_a_triad_the_neighbour_lacks():
