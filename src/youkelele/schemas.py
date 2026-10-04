@@ -178,11 +178,11 @@ class SectionPattern(_Artifact):
     inherited_from: int | None
     explained: float = 0.0  # share of the section's detected strokes on struck slots
     recall_boost: bool = False  # the recall gate kept high-band onsets for this section
-    chance_p: float | None = None  # chance of the structure test passing by luck; None before 1.5
-    strike_density: float | None = None  # share of the section's slots that are struck; None before 1.5
-    riff: bool = False  # the section is a one-bar riff rather than a strum
-    riff_entropy: float | None = None  # entropy of the section's bar patterns, behind the riff marker
-    riff_single_share: float | None = None  # share of bars carrying the single most common pattern
+    chance_p: float | None = None  # share of shuffled copies scoring at least this section's confidence; low means structured; None before 1.5
+    strike_density: float | None = None  # share of the section's cells that are not rests, mutes counted as strikes; None before 1.5
+    riff: bool = False  # the section's guitar plays single notes rather than chords (a riff, not a strum)
+    riff_entropy: float | None = None  # median over the section's onsets of each onset's normalised chroma entropy; low means single notes; None before 1.5
+    riff_single_share: float | None = None  # share of onsets with a single pitch class at half the maximum or more; None before 1.5
 
 
 class PlannedSection(_Artifact):
@@ -286,7 +286,7 @@ class ScoreSection(_Artifact):
     inherited_from: int | None = None
     explained: float = 0.0
     shifted: int = 0  # bars the start moved from grid.json to sit in phase with the chords
-    riff: bool = False  # copied from the pattern: a one-bar riff rather than a strum
+    riff: bool = False  # copied from the pattern: the section's guitar plays single notes rather than chords (a riff, not a strum)
     members: list[int] = []  # copied from the plan: grid section indices merged into this section
 
 
