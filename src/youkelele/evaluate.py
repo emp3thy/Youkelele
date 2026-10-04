@@ -11,7 +11,7 @@ import numpy as np
 
 from youkelele.jsonio import load_model
 from youkelele.music.as_played import explained_onsets
-from youkelele.music.relabel import refine_labels
+from youkelele.music.relabel import default_plan, longest_member
 from youkelele.music.sections import runs_text, vocal_flags, vocal_runs
 from youkelele.music.trailing import trailing_silent_bars
 from youkelele.schemas import ChordEvent, Chords, Grid, Key, Strums
@@ -39,12 +39,22 @@ class SectionDiag:
     recall_boost: bool
     start_bar: int = 0
     end_bar: int = 0  # exclusive
-    refined: str | None = None  # the label the sheet prints (`refine_labels`)
+    members: list[int] = field(default_factory=list)  # the grid sections the planned section covers
+    member_labels: list[str] = field(default_factory=list)  # their grid labels, in order
+    chance_p: float | None = None  # the structure test's p-value; None before 1.5 or for a full vote
+    strike_density: float | None = None
+    riff: bool = False
+    riff_entropy: float | None = None
+    riff_single_share: float | None = None
 
 
 def _label_text(d: SectionDiag) -> str:
-    """`verse`, or `verse -> bridge` when the sheet prints another label."""
-    return f"{d.label} -> {d.refined}" if d.refined and d.refined != d.label else d.label
+    """The planned label, with `(grid a, b: l1, l2)` after it when it merges several grid sections."""
+    if len(d.members) < 2:
+        return d.label
+    return (
+        f"{d.label} (grid {', '.join(str(m) for m in d.members)}: {', '.join(d.member_labels)})"
+    )
 
 
 def _scored_label(event: ChordEvent) -> str:
@@ -81,6 +91,19 @@ class SectionDelta:
     strikes_per_bar: float
     explained: float
     rest_share: float
+    riff_changed: bool = False  # the riff flag differs between the runs
+    certainty_changed: bool = False  # the uncertain flag differs between the runs
+
+    @property
+    def changed(self) -> bool:
+        """Any figure moved, or the riff flag or the certainty flipped."""
+        return bool(
+            self.riff_changed
+            or self.certainty_changed
+            or self.strikes_per_bar
+            or self.explained
+            or self.rest_share
+        )
 
 
 @dataclass
@@ -199,29 +222,33 @@ def _chord_diagnostics(grid: Grid, chords: Chords) -> dict[str, float | int | No
 
 
 def _section_diags(grid: Grid, strums: Strums, chords: Chords) -> list[SectionDiag]:
-    """Per-section strum figures over the bars the strums stage analysed.
+    """Per planned section strum figures over the bars the strums stage analysed.
 
-    The last section loses its trailing no-chord bars exactly as in the strums stage, so the
-    figures match the pattern's own `explained`.
+    Pattern `k` belongs to planned section `k` (the strums' own plan, or one section per grid
+    section for a file before 1.5). The figures are read over the planned section's longest
+    member; that member loses the last section's trailing no-chord bars exactly as in the
+    strums stage, so the figures match the pattern's own `explained`.
     """
     diags: list[SectionDiag] = []
-    last = len(grid.sections) - 1
+    plan = strums.plan or default_plan(grid, chords)
     drop = 0
+    tail_end = None
     if grid.sections:
-        tail = grid.sections[last]
+        tail = grid.sections[-1]
+        tail_end = tail.end_bar
         drop = trailing_silent_bars(chords, grid.bars, cap=tail.end_bar - tail.start_bar)
-    refined = refine_labels(grid, chords)  # the labels the sheet prints
-    for pattern in strums.patterns:
-        if not 0 <= pattern.section < len(grid.sections):
+    for k, pattern in enumerate(strums.patterns):
+        if not 0 <= k < len(plan):
             continue
-        section = grid.sections[pattern.section]
-        end = section.end_bar - (drop if pattern.section == last else 0)
-        bars = strums.bar_onsets[section.start_bar : end]
+        section = plan[k]
+        start, end = longest_member(section, grid)
+        end -= drop if end == tail_end else 0
+        bars = strums.bar_onsets[start:end]
         strikes = sum(1 for bar in bars for cell in bar if cell != "-")
         rests = sum(1 for slot in pattern.slots if slot == "-")
         diags.append(
             SectionDiag(
-                index=pattern.section,
+                index=k,
                 label=section.label,
                 strikes_per_bar=strikes / len(bars) if bars else 0.0,
                 explained=explained_onsets(bars, pattern.slots),
@@ -230,7 +257,13 @@ def _section_diags(grid: Grid, strums: Strums, chords: Chords) -> list[SectionDi
                 recall_boost=bool(getattr(pattern, "recall_boost", False)),
                 start_bar=section.start_bar,
                 end_bar=section.end_bar,
-                refined=refined[pattern.section],
+                members=list(section.members),
+                member_labels=[grid.sections[m].label for m in section.members],
+                chance_p=pattern.chance_p,
+                strike_density=pattern.strike_density,
+                riff=pattern.riff,
+                riff_entropy=pattern.riff_entropy,
+                riff_single_share=pattern.riff_single_share,
             )
         )
     return diags
@@ -354,6 +387,8 @@ def compare_runs(a: Path, b: Path) -> Comparison:
             right.strikes_per_bar - left.strikes_per_bar,
             right.explained - left.explained,
             right.rest_share - left.rest_share,
+            riff_changed=left.riff != right.riff,
+            certainty_changed=left.uncertain != right.uncertain,
         )
         if left is not None and right is not None
         else None
@@ -372,9 +407,16 @@ def _num(value: float | int | None, spec: str = "") -> str:
 
 def _section_line(d: SectionDiag) -> str:
     flags = (" uncertain" if d.uncertain else "") + (" recall-boost" if d.recall_boost else "")
+    features = (
+        f"{d.riff_entropy:.2f}/{d.riff_single_share:.2f}"
+        if d.riff_entropy is not None and d.riff_single_share is not None
+        else "n/a"
+    )
     return (
         f"  {d.index} {_label_text(d)} bars {d.start_bar}-{d.end_bar}: strikes/bar {d.strikes_per_bar:.1f}, "
-        f"explained {_pct(d.explained)}, rests {_pct(d.rest_share)}{flags}"
+        f"explained {_pct(d.explained)}, rests {_pct(d.rest_share)}, "
+        f"p {_num(d.chance_p, '.3f')}, density {_num(d.strike_density, '.2f')}, "
+        f"riff {features}{' riff' if d.riff else ''}{flags}"
     )
 
 
@@ -388,6 +430,12 @@ def _key_line(key: Key | None) -> str:
     )
     if key.mix is not None:
         figures += f", mix {key.mix.tonic} {key.mix.mode}"
+    if key.tonic_votes is not None:
+        votes = key.tonic_votes
+        figures += (
+            f", votes score {votes.score or 'none'} pair {votes.pair or 'none'} "
+            f"mix {votes.mix or 'none'} ({votes.decided_by or 'none'})"
+        )
     return f"Key: {key.tonic} {key.mode} ({figures})"
 
 
@@ -422,15 +470,17 @@ def _cell(d: SectionDiag | None) -> str:
     if d is None:
         return "n/a"
     flags = (" unc" if d.uncertain else "") + (" boost" if d.recall_boost else "")
-    return f"{d.strikes_per_bar:.1f}/{_pct(d.explained)}/{_pct(d.rest_share)}{flags}"
+    riff = " riff" if d.riff else ""
+    return f"{d.strikes_per_bar:.1f}/{_pct(d.explained)}/{_pct(d.rest_share)}{flags} p {_num(d.chance_p, '.3f')}{riff}"
 
 
 def _delta(d: SectionDelta | None) -> str:
     if d is None:
         return "n/a"
-    return (
-        f"{d.strikes_per_bar:+.1f}/{d.explained * 100:+.1f}pp/{d.rest_share * 100:+.1f}pp"
+    marks = (" riff flag changed" if d.riff_changed else "") + (
+        " certainty changed" if d.certainty_changed else ""
     )
+    return f"{d.strikes_per_bar:+.1f}/{d.explained * 100:+.1f}pp/{d.rest_share * 100:+.1f}pp{marks}"
 
 
 def format_comparison(c: Comparison) -> str:
