@@ -2,17 +2,29 @@
 
 from __future__ import annotations
 
+import json
 import shutil
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
 from youkelele import jsonio
+from youkelele.layout import SOURCE_META_NAME
 from youkelele.models.ffmpeg import probe_duration, to_wav
 from youkelele.models.ytdl import DownloadResult, download_audio
 from youkelele.schemas import SourceInfo
 from youkelele.stage import Stage, StageContext
-from youkelele.titles import clean_artist, clean_title
+from youkelele.titles import clean_artist_from, clean_title
+
+
+def _fetched_details(run_dir: Path) -> dict | None:
+    """The video details saved when the run folder was named, if any and readable."""
+    path = Path(run_dir) / SOURCE_META_NAME
+    try:
+        details = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return details if isinstance(details, dict) else None
 
 
 class IngestStage(Stage):
@@ -40,12 +52,13 @@ class IngestStage(Stage):
                 ctx.log("downloading audio")
                 result = self._downloader(source, work)
                 self._converter(result.audio_path, wav)
-                info = result.info
+                # the details fetched to name the run folder, so folder and sheet agree
+                info = _fetched_details(ctx.layout.run_dir) or result.info
                 stem = result.audio_path.stem
                 video_id = info.get("id")
                 raw_title = info.get("title") or stem
                 raw_artist = info.get("artist") or info.get("uploader")
-                artist = clean_artist(raw_artist)
+                artist = clean_artist_from(raw_title, raw_artist)
                 title = clean_title(raw_title, raw_artist)
                 url, path = source, None
             finally:

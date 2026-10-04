@@ -1,4 +1,4 @@
-"""yt-dlp adapter: download the best audio stream with retries."""
+"""yt-dlp adapter: download the best audio stream with retries, or read the details only."""
 
 from __future__ import annotations
 
@@ -61,3 +61,26 @@ def download_audio(
                 sleep(BACKOFF_SECONDS[min(attempt, len(BACKOFF_SECONDS) - 1)])
     assert last_error is not None
     raise DownloadError(url, last_error)
+
+
+class MetadataError(Exception):
+    def __init__(self, url: str, cause: BaseException) -> None:
+        super().__init__(f"could not read the details of {url}: {cause}")
+        self.url = url
+        self.cause = cause
+
+
+_METADATA_FIELDS = ("id", "title", "uploader", "artist", "duration")
+
+
+def fetch_metadata(url: str) -> dict:
+    """The video's id, title, uploader, artist and duration, without downloading anything."""
+    options = {"skip_download": True, "quiet": True, "no_warnings": True}
+    try:
+        with yt_dlp.YoutubeDL(options) as ydl:
+            info = ydl.extract_info(url, download=False)
+    except (YtDlpError, OSError) as exc:
+        raise MetadataError(url, exc) from exc
+    if not isinstance(info, dict):
+        raise MetadataError(url, ValueError("no details returned"))
+    return {field: info.get(field) for field in _METADATA_FIELDS}

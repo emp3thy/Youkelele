@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import shutil
 from pathlib import Path
 
@@ -8,10 +9,16 @@ import soundfile as sf
 
 from tests.audio_fixtures import write_sine_wav
 from youkelele.jsonio import load_model
-from youkelele.layout import RunLayout
+from youkelele.layout import SOURCE_META_NAME, RunLayout
 from youkelele.models import ytdl
 from youkelele.models.ffmpeg import to_wav
-from youkelele.models.ytdl import DownloadError, DownloadResult, download_audio
+from youkelele.models.ytdl import (
+    DownloadError,
+    DownloadResult,
+    MetadataError,
+    download_audio,
+    fetch_metadata,
+)
 from youkelele.options import RunOptions
 from youkelele.schemas import SourceInfo
 from youkelele.stage import StageContext
@@ -96,6 +103,74 @@ def test_ingest_url_title_cases_capitalised_artist(tmp_path):
     stage.run(ctx)
     info = load_model(ctx.out_dir / "source.json", SourceInfo)
     assert (info.title, info.artist) == ("Song", "Def Leppard")
+
+
+def test_ingest_url_reuses_fetched_metadata(tmp_path):
+    def downloader(url, out_dir):
+        audio = out_dir / "source.webm"
+        audio.write_bytes(b"x")
+        return DownloadResult(audio, {"id": "abc", "title": "Other", "uploader": "Other"})
+
+    stage = IngestStage(downloader=downloader, converter=_copy, prober=lambda _p: 3.0)
+    ctx = _ctx(tmp_path, "https://youtu.be/abc", stage)
+    run_dir = ctx.layout.run_dir
+    run_dir.mkdir()
+    meta = {
+        "id": "xyz",
+        "title": "Pat Benatar - All Fired Up (Official Music Video)",
+        "uploader": "Benatar Giraldo",
+        "artist": None,
+        "duration": 250.0,
+    }
+    (run_dir / SOURCE_META_NAME).write_text(json.dumps(meta), encoding="utf-8")
+    stage.run(ctx)
+    info = load_model(ctx.out_dir / "source.json", SourceInfo)
+    assert (info.video_id, info.title, info.artist) == ("xyz", "All Fired Up", "Pat Benatar")
+    assert info.raw_title == meta["title"]
+
+
+def test_fetch_metadata_reads_details_without_downloading(monkeypatch):
+    seen = {}
+
+    class FakeYDL:
+        def __init__(self, opts):
+            seen["opts"] = opts
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def extract_info(self, url, download=True):
+            seen["download"] = download
+            return {"id": "abc", "title": "T", "uploader": "U", "duration": 9.0, "formats": []}
+
+    monkeypatch.setattr(ytdl.yt_dlp, "YoutubeDL", FakeYDL)
+    meta = fetch_metadata("https://youtu.be/abc")
+    assert meta == {"id": "abc", "title": "T", "uploader": "U", "artist": None, "duration": 9.0}
+    assert seen["download"] is False and seen["opts"]["skip_download"] is True
+
+
+def test_fetch_metadata_failure_raises_metadata_error(monkeypatch):
+    class FakeYDL:
+        def __init__(self, opts):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def extract_info(self, url, download=True):
+            raise ytdl.YtDlpError("Video unavailable")
+
+    monkeypatch.setattr(ytdl.yt_dlp, "YoutubeDL", FakeYDL)
+    with pytest.raises(MetadataError) as exc:
+        fetch_metadata("https://youtu.be/abc")
+    assert exc.value.url == "https://youtu.be/abc"
+    assert "Video unavailable" in str(exc.value.cause)
 
 
 def test_download_retries_three_times_then_raises(monkeypatch, tmp_path):

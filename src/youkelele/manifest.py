@@ -28,6 +28,9 @@ class Manifest(_Artifact):
     instrument: str
     options: RunOptions
     stages: dict[str, StageRecord]
+    # set from 1.4 on: the YouTube id in the source URL, and the run folder's name
+    video_id: str | None = None
+    title_slug: str | None = None
 
 
 def load_manifest(run_dir: Path) -> Manifest | None:

@@ -31,6 +31,13 @@ class Probes:
     source_exists: Callable[[str], bool] = lambda path: Path(path).is_file()
 
 
+def metadata_problem(cause: BaseException) -> Problem:
+    """The video's details could not be read before the run folder was chosen."""
+    return Problem(
+        f"could not read the video's details: {cause}", "check the link and your connection"
+    )
+
+
 def _ffmpeg_dir() -> Path | None:
     import static_ffmpeg.run
 
