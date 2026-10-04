@@ -30,7 +30,7 @@ from youkelele.music.tempo import (
     modal_phase,
     normalise_octave,
 )
-from youkelele.schemas import Grid, Meter
+from youkelele.schemas import BeatsRaw, Grid, Meter
 from youkelele.stage import Stage, StageContext
 
 MIN_SECTION_BARS = 4  # a section shorter than this merges into a neighbour
@@ -43,7 +43,7 @@ def _backbeat_text(ratio: float | None) -> str:
 class GridStage(Stage):
     name = "grid"
     requires = ("ingest/audio.wav", "separate/stems/drums.wav")
-    produces = ("grid/grid.json",)
+    produces = ("grid/grid.json", "grid/beats_raw.json")
 
     def __init__(self, detector: Callable[[Path], BeatResult] = detect_beats) -> None:
         self._detector = detector
@@ -61,7 +61,9 @@ class GridStage(Stage):
         if len(beats) < 2:
             raise ValueError(f"only {len(beats)} beat(s) detected; cannot build a grid")
 
+        detected_beats = list(beats)
         beats = fill_gaps(beats)
+        inserted_beats = sorted(set(beats) - set(detected_beats))
         detected_bpm = bpm_from_beats(beats)
         meter = Meter.parse(ctx.options.meter)
         drums_signal, drums_sr = sf.read(
@@ -76,8 +78,11 @@ class GridStage(Stage):
         octave = decide_octave(
             detected_bpm, ctx.options.beat_octave, backbeat_ratio=ratio, drums_silent=silent
         )
+        dropped_beats: list[float] = []
         if octave == "half":
+            before = beats
             beats, db_idx = normalise_octave(beats, db_idx, target_period=2 * 60.0 / detected_bpm)
+            dropped_beats = sorted(set(before) - set(beats))
         elif octave == "double":
             beats, db_idx = double_beats(beats, db_idx)
         bpm = mean_bpm(beats)  # stored tempo; the octave decision above used the median
@@ -115,4 +120,11 @@ class GridStage(Stage):
             drums_silent=silent,
         )
         save_model(ctx.output("grid/grid.json"), grid)
+        save_model(
+            ctx.output("grid/beats_raw.json"),
+            BeatsRaw(
+                detected_beats=detected_beats, detected_downbeats=downbeats,
+                inserted_beats=inserted_beats, dropped_beats=dropped_beats,
+            ),
+        )
         ctx.note("model", f"Beat This! {CHECKPOINT}")

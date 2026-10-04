@@ -49,7 +49,7 @@ class HarmonyStage(Stage):
         "grid/grid.json",
         *(f"separate/stems/{stem}.wav" for stem in HARMONIC_STEMS),
     )
-    produces = ("harmony/chords.json",)
+    produces = ("harmony/chords.json", "harmony/spans.lab")
 
     def __init__(
         self,
@@ -68,6 +68,7 @@ class HarmonyStage(Stage):
         work_dir = Path(tempfile.mkdtemp(dir=out.parent, prefix="work-"))
         try:
             spans = self._recogniser(wav, work_dir, ctx.log)
+            shutil.copyfile(work_dir / "out.lab", ctx.output("harmony/spans.lab"))  # the raw model output
         finally:
             shutil.rmtree(work_dir, ignore_errors=True)
         events = snap_to_beats(spans, grid)

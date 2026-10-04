@@ -97,6 +97,15 @@ class Grid(_Artifact):
         return self
 
 
+class BeatsRaw(_Artifact):
+    """The beat detector's output before gap filling and octave normalisation."""
+
+    detected_beats: list[float]
+    detected_downbeats: list[float]
+    inserted_beats: list[float]  # added by fill_gaps
+    dropped_beats: list[float]  # removed by normalise_octave (empty unless the octave is halved)
+
+
 class Key(_Artifact):
     tonic: str
     mode: Literal["major", "minor"]

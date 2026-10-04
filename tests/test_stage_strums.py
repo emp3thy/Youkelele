@@ -4,6 +4,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 import numpy as np
+import pytest
 import soundfile as sf
 
 from youkelele.jsonio import load_model, save_model
@@ -53,7 +54,7 @@ def _write(path: Path, mono: np.ndarray) -> None:
     sf.write(str(path), np.tile(mono[:, None], (1, 2)).astype(np.float32), SR, subtype="PCM_16")
 
 
-def _ctx(tmp_path, stage, grid: Grid, guitar: np.ndarray, other: np.ndarray, mix: np.ndarray):
+def _ctx(tmp_path, stage, grid: Grid, guitar: np.ndarray, other: np.ndarray, mix: np.ndarray, options=None):
     layout = RunLayout(tmp_path / "run", ["ingest", "separate", "grid", "harmony", "strums"])
     _write(layout.path("separate/stems/guitar.wav"), guitar)
     _write(layout.path("separate/stems/other.wav"), other)
@@ -63,7 +64,7 @@ def _ctx(tmp_path, stage, grid: Grid, guitar: np.ndarray, other: np.ndarray, mix
     save_model(grid_path, grid)
     out = tmp_path / "out"
     out.mkdir()
-    ctx = StageContext(layout, RunOptions(source="x.mp3"), out, lambda m: None, stage)
+    ctx = StageContext(layout, options or RunOptions(source="x.mp3"), out, lambda m: None, stage)
     return ctx, out
 
 
@@ -94,13 +95,32 @@ def _island(n_bars: int) -> list[float]:
     return [t for b in range(n_bars) for t in _bar_times(b, ISLAND)]
 
 
-def _run(tmp_path, grid, detector, guitar_amp=0.0, other_amp=0.3, mix_amp=0.5, other=None):
+def _run(tmp_path, grid, detector, guitar_amp=0.0, other_amp=0.3, mix_amp=0.5, other=None, options=None):
     seconds = grid.bars[-1].end
     stage = StrumsStage(onset_detector=detector)
     other_wave = _tone(seconds, other_amp) if other is None else other
-    ctx, out = _ctx(tmp_path, stage, grid, _tone(seconds, guitar_amp), other_wave, _tone(seconds, mix_amp))
+    ctx, out = _ctx(tmp_path, stage, grid, _tone(seconds, guitar_amp), other_wave, _tone(seconds, mix_amp), options)
     stage.run(ctx)
     return load_model(ctx.output("strums/strums.json"), Strums), ctx, out
+
+
+def test_strums_stage_writes_onsets_txt_only_with_debug(tmp_path):
+    times = _island(2)
+    _, _, out = _run(tmp_path / "plain", _grid([2]), _detector(times, muted_every=6))
+    assert not list(out.rglob("onsets.txt"))
+    assert "strums/onsets.txt" not in StrumsStage.produces
+
+    _, ctx, out = _run(
+        tmp_path / "dbg", _grid([2]), _detector(times, muted_every=6),
+        options=RunOptions(source="x.mp3", debug=True),
+    )
+    lines = (out / "onsets.txt").read_text(encoding="utf-8").splitlines()
+    assert len(lines) == len(times)
+    rows = [line.split("\t") for line in lines]
+    assert all(r[0] == r[1] and len(r) == 3 for r in rows)
+    assert [float(r[0]) for r in rows] == pytest.approx(times, abs=1e-3)
+    assert rows[0][0] == f"{times[0]:.3f}"
+    assert [r[2] for r in rows] == ["x" if i % 6 == 0 else "S" for i in range(len(times))]
 
 
 def test_strums_stage_uses_other_stem_when_louder(tmp_path):

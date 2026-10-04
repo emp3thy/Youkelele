@@ -57,11 +57,23 @@ def _ctx(tmp_path, stage, n_bars, bar_seconds, write_audio, write_stems=None):
     return ctx, out
 
 
+def _recogniser(spans):
+    """A fake recogniser that writes out.lab into work_dir, as the real one does."""
+
+    def recognise(wav, work_dir, log=print):
+        (work_dir / "out.lab").write_text(
+            "".join(f"{s.start}\t{s.end}\t{s.label}\n" for s in spans), encoding="utf-8"
+        )
+        return spans
+
+    return recognise
+
+
 def test_harmony_stage_writes_chords_with_triads(tmp_path):
     labels = ["C:maj", "G:maj7", "A:min7", "F:maj"]
     spans = [LabelSpan(i * 2.0, (i + 1) * 2.0, lab) for i, lab in enumerate(labels)]
     stage = HarmonyStage(
-        recogniser=lambda wav, work_dir, log=print: spans,
+        recogniser=_recogniser(spans),
         chroma=lambda wav: np.eye(12)[0] + 0.1,
     )
     ctx, out = _ctx(tmp_path, stage, 4, 2.0, lambda p: write_chord_loop(p, ["C:maj"], 2.0, bars=4))
@@ -69,7 +81,19 @@ def test_harmony_stage_writes_chords_with_triads(tmp_path):
     chords = load_model(ctx.output("harmony/chords.json"), Chords)
     assert [e.triad for e in chords.events] == ["C:maj", "G:maj", "A:min", "F:maj"]
     assert chords.key.tonic
-    assert [p.name for p in out.rglob("*") if p.is_file()] == ["chords.json"]
+    assert sorted(p.name for p in out.rglob("*") if p.is_file()) == ["chords.json", "spans.lab"]
+
+
+def test_harmony_stage_keeps_raw_spans(tmp_path):
+    from youkelele.models.chords import parse_lab
+
+    spans = [LabelSpan(0.0, 2.0, "C:maj7"), LabelSpan(2.0, 4.0, "G:maj"), LabelSpan(4.0, 6.0, "N")]
+    stage = HarmonyStage(recogniser=_recogniser(spans), chroma=lambda wav: np.eye(12)[0] + 0.1)
+    ctx, out = _ctx(tmp_path, stage, 3, 2.0, lambda p: write_chord_loop(p, ["C:maj"], 2.0, bars=3))
+    stage.run(ctx)
+    assert "harmony/spans.lab" in HarmonyStage.produces
+    assert parse_lab(ctx.output("harmony/spans.lab")) == spans
+    assert not list(out.rglob("work-*"))
 
 
 def test_harmony_stage_requires_harmonic_stems_and_fills(tmp_path):
@@ -80,7 +104,7 @@ def test_harmony_stage_requires_harmonic_stems_and_fills(tmp_path):
         LabelSpan(6.0, 8.0, "G:maj"),
     ]
     stage = HarmonyStage(
-        recogniser=lambda wav, work_dir, log=print: spans,
+        recogniser=_recogniser(spans),
         chroma=lambda wav: np.eye(12)[0] + 0.1,
     )
 
@@ -99,7 +123,7 @@ def test_harmony_stage_requires_harmonic_stems_and_fills(tmp_path):
         (3, "G:maj", False),
     ]
     assert ctx.notes["filled"] == "1"
-    assert [p.name for p in out.rglob("*") if p.is_file()] == ["chords.json"]
+    assert sorted(p.name for p in out.rglob("*") if p.is_file()) == ["chords.json", "spans.lab"]
 
 
 @pytest.mark.slow
@@ -116,7 +140,7 @@ def test_harmony_real_model_on_synthetic_loop(tmp_path):
     stage.run(ctx)
     chords = load_model(ctx.output("harmony/chords.json"), Chords)
     assert {"C:maj", "G:maj", "A:min", "F:maj"} <= {e.triad for e in chords.events}
-    assert [p.name for p in out.rglob("*") if p.is_file()] == ["chords.json"]
+    assert sorted(p.name for p in out.rglob("*") if p.is_file()) == ["chords.json", "spans.lab"]
 
 
 def test_recognise_chords_failure_includes_stderr(tmp_path, monkeypatch):

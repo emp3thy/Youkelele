@@ -21,7 +21,7 @@ def _chain(instrument: str) -> list[Stage]:
 
 
 _METER = re.compile(r"^([0-9]+)/([0-9]+)$")
-_CHOICE_FLAGS = ("instrument", "tier", "beat_octave", "separator", "chord_model")
+_CHOICE_FLAGS = ("instrument", "tier", "beat_octave", "separator", "chord_model", "debug")
 
 
 def _option_overrides(args: argparse.Namespace) -> dict[str, object] | str:

@@ -31,6 +31,18 @@ from youkelele.schemas import Grid, SectionPattern, Strums
 from youkelele.stage import Stage, StageContext
 
 
+def _onset_label(muted: bool) -> str:
+    """The Audacity label for one detected onset: S for a strike, x for a mute."""
+    return "x" if muted else "S"
+
+
+def _onsets_label_track(onsets: Onsets, muted: np.ndarray) -> str:
+    """Audacity label track: start, end (equal, a point label) and label, tab separated."""
+    return "".join(
+        f"{t:.3f}\t{t:.3f}\t{_onset_label(bool(m))}\n" for t, m in zip(onsets.times, muted)
+    )
+
+
 def _read_mono(path: Path) -> tuple[np.ndarray, int]:
     data, sr = sf.read(str(path), dtype="float32", always_2d=True)
     return data.mean(axis=1), int(sr)
@@ -65,6 +77,9 @@ class StrumsStage(Stage):
         slots = choose_slots_per_bar(onsets, bars, meter, grid.bpm)
         fit = grid_fit(onsets, bars, slots)
         muted = mute_mask(onsets, enabled=source != "mix")
+        if ctx.options.debug:
+            # optional diagnostic, so not in produces
+            (ctx.out_dir / "onsets.txt").write_text(_onsets_label_track(onsets, muted), encoding="utf-8")
         classes: list[list[StrikeClass]] = [quantise_bar(onsets, muted, bar, slots) for bar in bars]
 
         patterns: list[SectionPattern | None] = [None] * len(grid.sections)
