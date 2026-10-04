@@ -32,7 +32,7 @@ After the key, when all four hold, the tonic's events are relabelled: `key.mode 
 
 **Input.** `GridStage.requires` adds `separate/stems/vocals.wav`. The per-bar vocal level in dB is stored as `Grid.bar_vocal_db: list[float] = []`.
 
-**Flags and runs.** A bar is vocal when its level is within `VOCAL_BELOW_MEDIAN_DB = 12` of the median over bars above -60 dB; flags are median-filtered over 3 bars. A non-vocal run is `VOCAL_RUN_MIN_BARS = 4` or more consecutive non-vocal bars strictly inside the song; the trailing run and the first boundary are never touched (the prototype wrongly moved Summer of '69's boundary into the fade). Measured runs match the known arrangements: Chelsea Dagger (0, 20) and (93, 108); Summer of '69 (0, 3), (67, 75), (114, 118); Pour Some Sugar On Me (12, 15), (67, 77); Wet Leg none.
+**Flags and runs.** A bar is vocal when its level is within `VOCAL_BELOW_MEDIAN_DB = 12` of the median over bars above -60 dB; flags are median-filtered over 3 bars. A non-vocal run is `VOCAL_RUN_MIN_BARS = 4` or more consecutive non-vocal bars strictly inside the song; the trailing run and the first boundary are never touched. A run is trailing when fewer than `VOCAL_RUN_MIN_BARS` bars follow it, not only when it reaches the last bar: Summer of '69's run (114, 118) is followed by three fading vocal bars, and treating it as inside the song moved boundary 111 to 114, the fade move the research warned about (ruled during implementation). Measured runs match the known arrangements: Chelsea Dagger (0, 20) and (93, 108); Summer of '69 (0, 3), (67, 75), (114, 118); Pour Some Sugar On Me (12, 15), (67, 77); Wet Leg none.
 
 **Boundaries.** After `boundaries_from_clusters(min_bars=4)` and before labelling, each run's edges become boundaries when both resulting pieces keep at least four bars; otherwise the nearest existing boundary moves onto the edge when the move is at most 3 bars and both neighbours keep four. Measured on the current segmentation: Summer of '69's one-bar boundary F-score 0.609 to 0.735 (8 to 10 of 13 hits), Pour Some Sugar On Me 0.484 to 0.555, Wet Leg unchanged.
 
@@ -110,7 +110,7 @@ Seven songs: the five from 1.3 and two new blind songs run from scratch, Pat Ben
 
 | Song | Expectation |
 |---|---|
-| Summer of '69 | key D major, not hedged; `Intro`, `Bridge` for bars 58-69, `Instrumental` for the solo; strum boxes unchanged from 1.3 |
+| Summer of '69 | key D major, not hedged; `Intro`, `Bridge` for bars 58-68 (the solo's vocal run starts at 68 and pulls the boundary one bar earlier), `Instrumental 68-75` for the solo; the outro boundary at 111 unchanged; strum boxes unchanged from 1.3 |
 | Chelsea Dagger | key G major (or D major), hedged; `Intro 0-20`, no chorus before bar 20, `Instrumental 93-108`; the first-chorus strip starts on a struck bar |
 | Pour Some Sugar On Me | key C# minor; riff cells Am with the badge at capo 4 and the legend line; the no-capo line with six shapes; `Instrumental 67-77`; capo stays 4; every section still uncertain |
 | Wet Leg "mangetout" | key C major; the 35-bar bridge prints as a verse; boundaries unchanged; outro "No strummed instrument detected" |

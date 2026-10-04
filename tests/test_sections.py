@@ -288,6 +288,25 @@ def test_vocal_runs_skip_short_runs_and_trailing_run():
     assert vocal_runs([F] * 10) == []  # one run that is the trailing run
 
 
+def test_vocal_runs_run_followed_by_fewer_than_four_bars_is_trailing():
+    T, F = True, False
+    # Summer of '69-shaped: a run, then three fading vocal bars to the end
+    flags = [T] * 6 + [F] * 4 + [T] * 3
+    assert vocal_runs(flags) == []
+    assert vocal_runs(flags, keep_trailing=True) == [(6, 10)]
+    # four vocal bars after it: the run is inside the song
+    flags = [T] * 6 + [F] * 4 + [T] * 4
+    assert vocal_runs(flags) == [(6, 10)]
+    assert vocal_runs(flags, keep_trailing=True) == [(6, 10)]
+
+
+def test_insert_vocal_boundaries_treats_run_near_the_end_as_trailing():
+    # Summer of '69: run (114, 118) with three vocal bars after it leaves 111 alone
+    assert insert_vocal_boundaries([0, 95, 111], [(114, 118)], 121) == [0, 95, 111]
+    # with four bars after it the run is inside: edge 114 moves 111 by three bars
+    assert insert_vocal_boundaries([0, 95, 111], [(114, 118)], 122) == [0, 95, 114, 118]
+
+
 def test_insert_vocal_boundaries_adds_edges_when_pieces_keep_four_bars():
     # Chelsea-shaped: the end of the opening run splits the first chorus
     assert insert_vocal_boundaries([0, 9, 38, 61], [(0, 20), (45, 50)], 80) == [

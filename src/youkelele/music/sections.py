@@ -220,11 +220,18 @@ def vocal_flags(db: Sequence[float]) -> list[bool]:
     ]
 
 
+def _is_trailing(end: int, n_bars: int) -> bool:
+    """A run is trailing when fewer than VOCAL_RUN_MIN_BARS bars follow it (a fade)."""
+    return n_bars - end < VOCAL_RUN_MIN_BARS
+
+
 def vocal_runs(flags: Sequence[bool], keep_trailing: bool = False) -> list[tuple[int, int]]:
     """Non-vocal runs (start, end exclusive) of at least VOCAL_RUN_MIN_BARS bars.
 
-    A run may start at bar 0. The trailing run (one ending at the last bar, usually a
-    fade) is left out unless `keep_trailing`, in which case it comes last.
+    A run may start at bar 0. The trailing run, one followed by fewer than
+    VOCAL_RUN_MIN_BARS bars (Summer of '69's (114, 118) before three fading vocal
+    bars, not only a run reaching the last bar), is left out unless `keep_trailing`,
+    in which case it comes last.
     """
     runs: list[tuple[int, int]] = []
     n = len(flags)
@@ -236,7 +243,7 @@ def vocal_runs(flags: Sequence[bool], keep_trailing: bool = False) -> list[tuple
         j = i
         while j < n and not flags[j]:
             j += 1
-        if j - i >= VOCAL_RUN_MIN_BARS and (keep_trailing or j < n):
+        if j - i >= VOCAL_RUN_MIN_BARS and (keep_trailing or not _is_trailing(j, n)):
             runs.append((i, j))
         i = j
     return runs
@@ -255,16 +262,17 @@ def insert_vocal_boundaries(
     Each run edge becomes a boundary when both pieces it cuts keep `min_bars` bars;
     otherwise the nearest boundary moves onto the edge when the move is at most 3 bars
     and both of its neighbours keep `min_bars`. The first boundary never moves, nor a
-    boundary already on a run edge. A trailing run (ending at `n_bars`, as listed by
-    `vocal_runs(..., keep_trailing=True)`) adds no edges, and no boundary at or after
-    its start moves.
+    boundary already on a run edge. A trailing run (fewer than VOCAL_RUN_MIN_BARS bars
+    after it, as listed by `vocal_runs(..., keep_trailing=True)`) adds no edges, and no
+    boundary at or after its start moves.
     """
     bounds = sorted(set(boundaries))
     if not bounds:
         return bounds
-    frozen_from = min((s for s, e in runs if e >= n_bars), default=n_bars)
+    frozen_from = min((s for s, e in runs if _is_trailing(e, n_bars)), default=n_bars)
     pinned = {bounds[0]}
-    for edge in sorted({edge for s, e in runs if e < n_bars for edge in (s, e)}):
+    inside = [(s, e) for s, e in runs if not _is_trailing(e, n_bars)]
+    for edge in sorted({edge for s, e in inside for edge in (s, e)}):
         if edge in bounds:
             pinned.add(edge)
             continue
