@@ -277,7 +277,10 @@ def _section_diags(
         tail_end = tail.end_bar
         drop = trailing_silent_bars(chords, grid.bars, cap=tail.end_bar - tail.start_bar)
     names = display_names([section.label for section in plan])
-    strums = with_bars(strums, grid)
+    try:
+        strums = with_bars(strums, grid)
+    except ValueError:  # patterns that do not match the plan cannot be backfilled: no member lines
+        pass
     gates = {r.section: r for r in riffs.sections} if riffs is not None else {}
     for k, pattern in enumerate(strums.patterns):
         if not 0 <= k < len(plan):

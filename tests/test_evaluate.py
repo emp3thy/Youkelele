@@ -916,3 +916,10 @@ def test_compare_backfills_a_v15_run(tmp_path):
     c = compare_runs(a, b)
     assert c.deltas[0].pattern_changes == 2
     assert "patterns changed in 2 bars" in format_comparison(c)
+
+
+def test_evaluate_tolerates_a_1_5_file_with_more_patterns_than_plan_entries(tmp_path):
+    strums = _wide_strums(with_bars=False)
+    strums = strums.model_copy(update={"patterns": [strums.patterns[0], _pattern(1, SECTION_SLOTS)]})
+    text = format_report(evaluate_run(_wide_run(tmp_path / "run", strums)))
+    assert "  0 Verse" in text and "member" not in text
