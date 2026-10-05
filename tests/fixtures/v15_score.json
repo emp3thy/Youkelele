@@ -1,0 +1,4596 @@
+{
+  "schema": 1,
+  "instrument": {
+    "schema": 1,
+    "name": "Ukulele",
+    "strings": 4,
+    "tuning": [
+      "G4",
+      "C4",
+      "E4",
+      "A4"
+    ],
+    "capo": 0
+  },
+  "title": "All Fired Up",
+  "artist": "Pat Benatar",
+  "key": "G major",
+  "key_hedge": null,
+  "bpm": 139.89169675090255,
+  "meter": {
+    "schema": 1,
+    "numerator": 4,
+    "denominator": 4
+  },
+  "tier": "easy",
+  "slots_per_bar": 8,
+  "strum_source": "guitar_stem",
+  "strums_uncertain": false,
+  "chord_diagrams": [
+    {
+      "schema": 1,
+      "name": "Am",
+      "shape": {
+        "schema": 1,
+        "frets": [
+          2,
+          0,
+          0,
+          0
+        ],
+        "fingers": [
+          2,
+          0,
+          0,
+          0
+        ],
+        "base_fret": 1,
+        "barres": []
+      },
+      "passing": false,
+      "power": false
+    },
+    {
+      "schema": 1,
+      "name": "G",
+      "shape": {
+        "schema": 1,
+        "frets": [
+          0,
+          2,
+          3,
+          2
+        ],
+        "fingers": [
+          0,
+          1,
+          3,
+          2
+        ],
+        "base_fret": 1,
+        "barres": []
+      },
+      "passing": false,
+      "power": false
+    },
+    {
+      "schema": 1,
+      "name": "Em",
+      "shape": {
+        "schema": 1,
+        "frets": [
+          0,
+          4,
+          3,
+          2
+        ],
+        "fingers": [
+          0,
+          3,
+          2,
+          1
+        ],
+        "base_fret": 1,
+        "barres": []
+      },
+      "passing": false,
+      "power": false
+    },
+    {
+      "schema": 1,
+      "name": "D",
+      "shape": {
+        "schema": 1,
+        "frets": [
+          2,
+          2,
+          2,
+          0
+        ],
+        "fingers": [
+          1,
+          2,
+          3,
+          0
+        ],
+        "base_fret": 1,
+        "barres": []
+      },
+      "passing": false,
+      "power": false
+    }
+  ],
+  "alternative_diagrams": [],
+  "sections": [
+    {
+      "schema": 1,
+      "label": "intro",
+      "pattern": [
+        "D",
+        "x",
+        "x",
+        "U",
+        "D",
+        "U",
+        "D",
+        "-"
+      ],
+      "uncertain": true,
+      "bars": [
+        {
+          "schema": 1,
+          "index": 0,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "Am",
+              "diagram": 0,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "x",
+                "x",
+                "U",
+                "D",
+                "U",
+                "D",
+                "-"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": true,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 1,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "Am",
+              "diagram": 0,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "x",
+                "x",
+                "U",
+                "D",
+                "U",
+                "D",
+                "-"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 2,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "Am",
+              "diagram": 0,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "x",
+                "x",
+                "U",
+                "D",
+                "U",
+                "D",
+                "-"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 3,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "Am",
+              "diagram": 0,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "x",
+                "x",
+                "U",
+                "D",
+                "U",
+                "D",
+                "-"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 4,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "Am",
+              "diagram": 0,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "x",
+                "x",
+                "U",
+                "D",
+                "U",
+                "D",
+                "-"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 5,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "Am",
+              "diagram": 0,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "x",
+                "x",
+                "U",
+                "D",
+                "U",
+                "D",
+                "-"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 6,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "Am",
+              "diagram": 0,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "x",
+                "x",
+                "U",
+                "D",
+                "U",
+                "D",
+                "-"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 7,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "Am",
+              "diagram": 0,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "x",
+                "x",
+                "U",
+                "D",
+                "U",
+                "D",
+                "-"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 8,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "Am",
+              "diagram": 0,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "x",
+                "x",
+                "U",
+                "D",
+                "U",
+                "D",
+                "-"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 9,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "Am",
+              "diagram": 0,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "x",
+                "x",
+                "U",
+                "D",
+                "U",
+                "D",
+                "-"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 10,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "Am",
+              "diagram": 0,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "x",
+                "x",
+                "U",
+                "D",
+                "U",
+                "D",
+                "-"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 11,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "Am",
+              "diagram": 0,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "x",
+                "x",
+                "U",
+                "D",
+                "U",
+                "D",
+                "-"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 12,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "Am",
+              "diagram": 0,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "x",
+                "x",
+                "U",
+                "D",
+                "U",
+                "D",
+                "-"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 13,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "G",
+              "diagram": 1,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "x",
+                "x",
+                "U",
+                "D",
+                "U",
+                "D",
+                "-"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": false
+        },
+        {
+          "schema": 1,
+          "index": 14,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "G",
+              "diagram": 1,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "x",
+                "x",
+                "U",
+                "D",
+                "U",
+                "D",
+                "-"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 15,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "G",
+              "diagram": 1,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "x",
+                "x",
+                "U",
+                "D",
+                "U",
+                "D",
+                "-"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 16,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "G",
+              "diagram": 1,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "x",
+                "x",
+                "U",
+                "D",
+                "U",
+                "D",
+                "-"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 17,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "G",
+              "diagram": 1,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "x",
+                "x",
+                "U",
+                "D",
+                "U",
+                "D",
+                "-"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 18,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "G",
+              "diagram": 1,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "x",
+                "x",
+                "U",
+                "D",
+                "U",
+                "D",
+                "-"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 19,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "G",
+              "diagram": 1,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "x",
+                "x",
+                "U",
+                "D",
+                "U",
+                "D",
+                "-"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 20,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "G",
+              "diagram": 1,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "x",
+                "x",
+                "U",
+                "D",
+                "U",
+                "D",
+                "-"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 21,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "Em",
+              "diagram": 2,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "x",
+                "x",
+                "U",
+                "D",
+                "U",
+                "D",
+                "-"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 22,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "Em",
+              "diagram": 2,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "x",
+                "x",
+                "U",
+                "D",
+                "U",
+                "D",
+                "-"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 23,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "D",
+              "diagram": 3,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "x",
+                "x",
+                "U",
+                "D",
+                "U",
+                "D",
+                "-"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 24,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "D",
+              "diagram": 3,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "x",
+                "x",
+                "U",
+                "D",
+                "U",
+                "D",
+                "-"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": false
+        },
+        {
+          "schema": 1,
+          "index": 25,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "G",
+              "diagram": 1,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "x",
+                "x",
+                "U",
+                "D",
+                "U",
+                "D",
+                "-"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": false
+        },
+        {
+          "schema": 1,
+          "index": 26,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "G",
+              "diagram": 1,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "x",
+                "x",
+                "U",
+                "D",
+                "U",
+                "D",
+                "-"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 27,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "G",
+              "diagram": 1,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "x",
+                "x",
+                "U",
+                "D",
+                "U",
+                "D",
+                "-"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": false
+        },
+        {
+          "schema": 1,
+          "index": 28,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "G",
+              "diagram": 1,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "x",
+                "x",
+                "U",
+                "D",
+                "U",
+                "D",
+                "-"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": false
+        }
+      ],
+      "bar_repeat": 0.33988095238095234,
+      "no_instrument": false,
+      "inherited_from": null,
+      "explained": 0.91,
+      "shifted": 0,
+      "riff": false,
+      "members": [
+        0
+      ]
+    },
+    {
+      "schema": 1,
+      "label": "verse",
+      "pattern": [
+        "D",
+        "U",
+        "D",
+        "U",
+        "D",
+        "U",
+        "D",
+        "U"
+      ],
+      "uncertain": false,
+      "bars": [
+        {
+          "schema": 1,
+          "index": 29,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "G",
+              "diagram": 1,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "U",
+                "D",
+                "U",
+                "D",
+                "U",
+                "D",
+                "U"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 30,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "G",
+              "diagram": 1,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "U",
+                "D",
+                "U",
+                "D",
+                "U",
+                "D",
+                "U"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 31,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "G",
+              "diagram": 1,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "U",
+                "D",
+                "U",
+                "D",
+                "U",
+                "D",
+                "U"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 32,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "G",
+              "diagram": 1,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "U",
+                "D",
+                "U",
+                "D",
+                "U",
+                "D",
+                "U"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 33,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "Em",
+              "diagram": 2,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "U",
+                "D",
+                "U",
+                "D",
+                "U",
+                "D",
+                "U"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 34,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "Em",
+              "diagram": 2,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "U",
+                "D",
+                "U",
+                "D",
+                "U",
+                "D",
+                "U"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 35,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "D",
+              "diagram": 3,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "U",
+                "D",
+                "U",
+                "D",
+                "U",
+                "D",
+                "U"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 36,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "D",
+              "diagram": 3,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "U",
+                "D",
+                "U",
+                "D",
+                "U",
+                "D",
+                "U"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 37,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "G",
+              "diagram": 1,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "U",
+                "D",
+                "U",
+                "D",
+                "U",
+                "D",
+                "U"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 38,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "G",
+              "diagram": 1,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "U",
+                "D",
+                "U",
+                "D",
+                "U",
+                "D",
+                "U"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 39,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "G",
+              "diagram": 1,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "U",
+                "D",
+                "U",
+                "D",
+                "U",
+                "D",
+                "U"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 40,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "G",
+              "diagram": 1,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "U",
+                "D",
+                "U",
+                "D",
+                "U",
+                "D",
+                "U"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 41,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "Em",
+              "diagram": 2,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "U",
+                "D",
+                "U",
+                "D",
+                "U",
+                "D",
+                "U"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 42,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "Em",
+              "diagram": 2,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "U",
+                "D",
+                "U",
+                "D",
+                "U",
+                "D",
+                "U"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 43,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "D",
+              "diagram": 3,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "U",
+                "D",
+                "U",
+                "D",
+                "U",
+                "D",
+                "U"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 44,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "D",
+              "diagram": 3,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "U",
+                "D",
+                "U",
+                "D",
+                "U",
+                "D",
+                "U"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 45,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "G",
+              "diagram": 1,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "U",
+                "D",
+                "U",
+                "D",
+                "U",
+                "D",
+                "U"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 46,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "G",
+              "diagram": 1,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "U",
+                "D",
+                "U",
+                "D",
+                "U",
+                "D",
+                "U"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 47,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "G",
+              "diagram": 1,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "U",
+                "D",
+                "U",
+                "D",
+                "U",
+                "D",
+                "U"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 48,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "G",
+              "diagram": 1,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "U",
+                "D",
+                "U",
+                "D",
+                "U",
+                "D",
+                "U"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        }
+      ],
+      "bar_repeat": 0.48753968253968255,
+      "no_instrument": false,
+      "inherited_from": null,
+      "explained": 1.0,
+      "shifted": 1,
+      "riff": true,
+      "members": [
+        1,
+        2
+      ]
+    },
+    {
+      "schema": 1,
+      "label": "chorus",
+      "pattern": [
+        "D",
+        "U",
+        "D",
+        "-",
+        "D",
+        "-",
+        "D",
+        "-"
+      ],
+      "uncertain": false,
+      "bars": [
+        {
+          "schema": 1,
+          "index": 49,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "Em",
+              "diagram": 2,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "U",
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 50,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "Em",
+              "diagram": 2,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "U",
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 51,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "D",
+              "diagram": 3,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "U",
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 52,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "D",
+              "diagram": 3,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "U",
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 53,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "G",
+              "diagram": 1,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "U",
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 54,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "G",
+              "diagram": 1,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "U",
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        }
+      ],
+      "bar_repeat": 0.4904761904761905,
+      "no_instrument": false,
+      "inherited_from": null,
+      "explained": 0.8275862068965517,
+      "shifted": 0,
+      "riff": true,
+      "members": [
+        3
+      ]
+    },
+    {
+      "schema": 1,
+      "label": "verse",
+      "pattern": [
+        "D",
+        "-",
+        "D",
+        "-",
+        "D",
+        "-",
+        "D",
+        "U"
+      ],
+      "uncertain": false,
+      "bars": [
+        {
+          "schema": 1,
+          "index": 55,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "G",
+              "diagram": 1,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "U"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 56,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "G",
+              "diagram": 1,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "U"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 57,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "G",
+              "diagram": 1,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "U"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 58,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "G",
+              "diagram": 1,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "U"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 59,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "G",
+              "diagram": 1,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "U"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 60,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "G",
+              "diagram": 1,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "U"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 61,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "Em",
+              "diagram": 2,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "U"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 62,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "Em",
+              "diagram": 2,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "U"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 63,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "D",
+              "diagram": 3,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "U"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 64,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "D",
+              "diagram": 3,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "U"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 65,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "G",
+              "diagram": 1,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "U"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 66,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "G",
+              "diagram": 1,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "U"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 67,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "G",
+              "diagram": 1,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "U"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 68,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "G",
+              "diagram": 1,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "U"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 69,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "Em",
+              "diagram": 2,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "U"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 70,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "Em",
+              "diagram": 2,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "U"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 71,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "D",
+              "diagram": 3,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "U"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 72,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "D",
+              "diagram": 3,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "U"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 73,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "G",
+              "diagram": 1,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "U"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 74,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "G",
+              "diagram": 1,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "U"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 75,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "G",
+              "diagram": 1,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "U"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 76,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "G",
+              "diagram": 1,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "U"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 77,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "Em",
+              "diagram": 2,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "U"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 78,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "Em",
+              "diagram": 2,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "U"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 79,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "D",
+              "diagram": 3,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "U"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 80,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "D",
+              "diagram": 3,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "U"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 81,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "G",
+              "diagram": 1,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "U"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 82,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "G",
+              "diagram": 1,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "U"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 83,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "G",
+              "diagram": 1,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "U"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 84,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "G",
+              "diagram": 1,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "U"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 85,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "Em",
+              "diagram": 2,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "U"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 86,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "Em",
+              "diagram": 2,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "U"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 87,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "D",
+              "diagram": 3,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "U"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 88,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "D",
+              "diagram": 3,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "U"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 89,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "D",
+              "diagram": 3,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "U"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 90,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "D",
+              "diagram": 3,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "-",
+                "D",
+                "-"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            },
+            {
+              "schema": 1,
+              "name": "G",
+              "diagram": 1,
+              "start_slot": 4,
+              "slots": [
+                "D",
+                "-",
+                "D",
+                "U"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 91,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "G",
+              "diagram": 1,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "U"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": false
+        },
+        {
+          "schema": 1,
+          "index": 92,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "G",
+              "diagram": 1,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "U"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 93,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "G",
+              "diagram": 1,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "U"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 94,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "G",
+              "diagram": 1,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "U"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 95,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "G",
+              "diagram": 1,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "U"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 96,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "G",
+              "diagram": 1,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "U"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 97,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "G",
+              "diagram": 1,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            },
+            {
+              "schema": 1,
+              "name": "Em",
+              "diagram": 2,
+              "start_slot": 6,
+              "slots": [
+                "D",
+                "U"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 98,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "Em",
+              "diagram": 2,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "U"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 99,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "D",
+              "diagram": 3,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            },
+            {
+              "schema": 1,
+              "name": "G",
+              "diagram": 1,
+              "start_slot": 6,
+              "slots": [
+                "D",
+                "U"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 100,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "G",
+              "diagram": 1,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "U"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 101,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "G",
+              "diagram": 1,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "U"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 102,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "Em",
+              "diagram": 2,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "U"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 103,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "Em",
+              "diagram": 2,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "U"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 104,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "D",
+              "diagram": 3,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "U"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 105,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "D",
+              "diagram": 3,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "U"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 106,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "G",
+              "diagram": 1,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "U"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 107,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "G",
+              "diagram": 1,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "U"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 108,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "G",
+              "diagram": 1,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "U"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 109,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "G",
+              "diagram": 1,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "U"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        }
+      ],
+      "bar_repeat": 0.3692602040816326,
+      "no_instrument": false,
+      "inherited_from": null,
+      "explained": 0.7931034482758621,
+      "shifted": 0,
+      "riff": true,
+      "members": [
+        4,
+        5,
+        6,
+        7,
+        8
+      ]
+    },
+    {
+      "schema": 1,
+      "label": "chorus",
+      "pattern": [
+        "D",
+        "U",
+        "-",
+        "-",
+        "-",
+        "-",
+        "x",
+        "-"
+      ],
+      "uncertain": true,
+      "bars": [
+        {
+          "schema": 1,
+          "index": 110,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "Em",
+              "diagram": 2,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "U",
+                "-",
+                "-",
+                "-",
+                "-",
+                "x",
+                "-"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 111,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "Em",
+              "diagram": 2,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "U",
+                "-",
+                "-",
+                "-",
+                "-",
+                "x",
+                "-"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 112,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "Em",
+              "diagram": 2,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "U",
+                "-",
+                "-"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            },
+            {
+              "schema": 1,
+              "name": "D",
+              "diagram": 3,
+              "start_slot": 4,
+              "slots": [
+                "-",
+                "-",
+                "x",
+                "-"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 113,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "D",
+              "diagram": 3,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "U",
+                "-",
+                "-",
+                "-",
+                "-",
+                "x",
+                "-"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 114,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "N.C.",
+              "diagram": -1,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "U",
+                "-",
+                "-",
+                "-",
+                "-",
+                "x",
+                "-"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": false
+        },
+        {
+          "schema": 1,
+          "index": 115,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "N.C.",
+              "diagram": -1,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "U",
+                "-",
+                "-",
+                "-",
+                "-",
+                "x",
+                "-"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 116,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "G",
+              "diagram": 1,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "U",
+                "-",
+                "-",
+                "-",
+                "-",
+                "x",
+                "-"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": false
+        },
+        {
+          "schema": 1,
+          "index": 117,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "G",
+              "diagram": 1,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "U",
+                "-",
+                "-",
+                "-",
+                "-",
+                "x",
+                "-"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 118,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "G",
+              "diagram": 1,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "U",
+                "-",
+                "-",
+                "-",
+                "-",
+                "x",
+                "-"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 119,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "G",
+              "diagram": 1,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "U",
+                "-",
+                "-",
+                "-",
+                "-",
+                "x",
+                "-"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 120,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "Em",
+              "diagram": 2,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "U",
+                "-",
+                "-",
+                "-",
+                "-",
+                "x",
+                "-"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": false
+        },
+        {
+          "schema": 1,
+          "index": 121,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "Em",
+              "diagram": 2,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "U",
+                "-",
+                "-",
+                "-",
+                "-",
+                "x",
+                "-"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 122,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "D",
+              "diagram": 3,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "U",
+                "-",
+                "-",
+                "-",
+                "-",
+                "x",
+                "-"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": false
+        },
+        {
+          "schema": 1,
+          "index": 123,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "D",
+              "diagram": 3,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "U",
+                "-",
+                "-",
+                "-",
+                "-",
+                "x",
+                "-"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": false
+        }
+      ],
+      "bar_repeat": 0.17124542124542125,
+      "no_instrument": false,
+      "inherited_from": null,
+      "explained": 0.5714285714285714,
+      "shifted": 0,
+      "riff": true,
+      "members": [
+        9
+      ]
+    },
+    {
+      "schema": 1,
+      "label": "verse",
+      "pattern": [
+        "-",
+        "-",
+        "-",
+        "-",
+        "-",
+        "-",
+        "-",
+        "U"
+      ],
+      "uncertain": true,
+      "bars": [
+        {
+          "schema": 1,
+          "index": 124,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "G",
+              "diagram": 1,
+              "start_slot": 0,
+              "slots": [
+                "-",
+                "-",
+                "-",
+                "-",
+                "-",
+                "-",
+                "-",
+                "U"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": false
+        },
+        {
+          "schema": 1,
+          "index": 125,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "G",
+              "diagram": 1,
+              "start_slot": 0,
+              "slots": [
+                "-",
+                "-",
+                "-",
+                "-",
+                "-",
+                "-",
+                "-",
+                "U"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 126,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "G",
+              "diagram": 1,
+              "start_slot": 0,
+              "slots": [
+                "-",
+                "-",
+                "-",
+                "-",
+                "-",
+                "-",
+                "-",
+                "U"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": false
+        },
+        {
+          "schema": 1,
+          "index": 127,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "G",
+              "diagram": 1,
+              "start_slot": 0,
+              "slots": [
+                "-",
+                "-",
+                "-",
+                "-",
+                "-",
+                "-",
+                "-",
+                "U"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        }
+      ],
+      "bar_repeat": 0.0,
+      "no_instrument": false,
+      "inherited_from": null,
+      "explained": 0.6666666666666666,
+      "shifted": 0,
+      "riff": false,
+      "members": [
+        10
+      ]
+    },
+    {
+      "schema": 1,
+      "label": "chorus",
+      "pattern": [
+        "D",
+        "-",
+        "-",
+        "-",
+        "D",
+        "U",
+        "D",
+        "-"
+      ],
+      "uncertain": true,
+      "bars": [
+        {
+          "schema": 1,
+          "index": 128,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "Em",
+              "diagram": 2,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "-",
+                "-",
+                "-",
+                "D",
+                "U",
+                "D",
+                "-"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 129,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "Em",
+              "diagram": 2,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "-",
+                "-",
+                "-",
+                "D",
+                "U",
+                "D",
+                "-"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 130,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "D",
+              "diagram": 3,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "-",
+                "-",
+                "-",
+                "D",
+                "U",
+                "D",
+                "-"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 131,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "D",
+              "diagram": 3,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "-",
+                "-",
+                "-",
+                "D",
+                "U",
+                "D",
+                "-"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        }
+      ],
+      "bar_repeat": 0.2888888888888889,
+      "no_instrument": false,
+      "inherited_from": null,
+      "explained": 0.7857142857142857,
+      "shifted": 0,
+      "riff": false,
+      "members": [
+        11
+      ]
+    },
+    {
+      "schema": 1,
+      "label": "outro",
+      "pattern": [
+        "D",
+        "-",
+        "D",
+        "-",
+        "D",
+        "-",
+        "D",
+        "-"
+      ],
+      "uncertain": false,
+      "bars": [
+        {
+          "schema": 1,
+          "index": 132,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "G",
+              "diagram": 1,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 133,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "G",
+              "diagram": 1,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 134,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "G",
+              "diagram": 1,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 135,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "G",
+              "diagram": 1,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 136,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "Em",
+              "diagram": 2,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 137,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "Em",
+              "diagram": 2,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 138,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "D",
+              "diagram": 3,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 139,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "D",
+              "diagram": 3,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 140,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "G",
+              "diagram": 1,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 141,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "G",
+              "diagram": 1,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 142,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "G",
+              "diagram": 1,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 143,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "G",
+              "diagram": 1,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 144,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "Em",
+              "diagram": 2,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 145,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "Em",
+              "diagram": 2,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 146,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "D",
+              "diagram": 3,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 147,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "D",
+              "diagram": 3,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 148,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "G",
+              "diagram": 1,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 149,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "G",
+              "diagram": 1,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 150,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "G",
+              "diagram": 1,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 151,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "G",
+              "diagram": 1,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": false
+        },
+        {
+          "schema": 1,
+          "index": 152,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "G",
+              "diagram": 1,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 153,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "G",
+              "diagram": 1,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 154,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "G",
+              "diagram": 1,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        },
+        {
+          "schema": 1,
+          "index": 155,
+          "chords": [
+            {
+              "schema": 1,
+              "name": "G",
+              "diagram": 1,
+              "start_slot": 0,
+              "slots": [
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-",
+                "D",
+                "-"
+              ],
+              "filled": false,
+              "passing": false,
+              "power": false
+            }
+          ],
+          "pickup": false,
+          "struck": true
+        }
+      ],
+      "bar_repeat": 0.3696169772256729,
+      "no_instrument": false,
+      "inherited_from": null,
+      "explained": 0.7083333333333334,
+      "shifted": 0,
+      "riff": false,
+      "members": [
+        12
+      ]
+    }
+  ],
+  "trailing_bars_dropped": 0
+}

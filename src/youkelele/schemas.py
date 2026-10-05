@@ -184,6 +184,13 @@ class SectionPattern(_Artifact):
     riff_entropy: float | None = None  # median over the section's onsets of each onset's normalised chroma entropy; low means single notes; None before 1.5
     riff_single_share: float | None = None  # share of onsets with a single pitch class at half the maximum or more; None before 1.5
     riff_onsets: int | None = None  # the detector's own onsets (before the recall gate) the riff features rest on; None before 1.5
+    candidate: Literal["majority", "medoid"] = "majority"  # which candidate pattern was kept: the per-slot majority or the medoid bar
+    score_majority: float | None = None  # the majority candidate's score; None before 1.6
+    score_medoid: float | None = None  # the medoid candidate's score; None before 1.6
+    unit: int = 1  # slots per printed cell: 1 is the grid, 2 merges slot pairs
+    pitch_change_share: float | None = None  # share of consecutive onsets whose chroma changes; None before 1.6
+    rings: bool = True  # the strokes ring on rather than being muted
+    ring_decay_db: float | None = None  # median decay in dB over the ring window; None before 1.6
 
 
 class PlannedSection(_Artifact):
@@ -191,6 +198,25 @@ class PlannedSection(_Artifact):
     end_bar: int  # exclusive
     label: str
     members: list[int] = []  # grid section indices merged into this section, in order
+
+
+class Stroke(_Artifact):
+    slot: int  # slot index within the bar
+    kind: Literal["D", "U", "x"]  # down, up or muted stroke
+    rings: bool = True  # the stroke rings on rather than being damped
+    decay_db: float | None = None  # decay in dB over the ring window; None when not measured
+
+
+class BarStrums(_Artifact):
+    index: int  # bar index in the grid
+    member: int  # index into the planned section's members list
+    strokes: list[Stroke]  # strokes detected in the bar
+    pattern: list[Slot]  # the slot vector this bar prints
+    unit: int = 1  # slots per printed cell
+    confidence: float = 0.0  # how well the bar matches its section's pattern
+    chance_p: float | None = None  # share of shuffled copies scoring at least this well; None when not tested
+    uncertain: bool = True  # the bar's strokes are a guess
+    riff: bool = False  # the bar belongs to a riff section
 
 
 class Strums(_Artifact):
@@ -202,6 +228,7 @@ class Strums(_Artifact):
     patterns: list[SectionPattern]
     bar_onsets: list[list[Slot]]
     plan: list[PlannedSection] = []  # the section plan the patterns follow; empty before 1.5
+    bars: list[BarStrums] = []  # one record per bar; empty before 1.6
 
     @model_validator(mode="after")
     def _check_slot_lengths(self) -> Strums:
@@ -210,7 +237,44 @@ class Strums(_Artifact):
             raise ValueError(f"patterns: every slot list must have {n} slots")
         if any(len(bar) != n for bar in self.bar_onsets):
             raise ValueError(f"bar_onsets: every slot list must have {n} slots")
+        if any(len(b.pattern) != n for b in self.bars):
+            raise ValueError(f"bars: every pattern must have {n} slots")
+        if any(not 0 <= st.slot < n for b in self.bars for st in b.strokes):
+            raise ValueError(f"bars: every stroke slot must be in range 0..{n - 1}")
         return self
+
+
+class RiffNote(_Artifact):
+    slot: int  # slot index within the bar
+    midi: int | None  # MIDI pitch; None when the onset has no named pitch
+
+
+class TabNote(_Artifact):
+    slot: int  # slot index within the bar
+    midi: int  # MIDI pitch
+    string: int = Field(ge=0, lt=4)  # index into the instrument's tuning in diagram order, 0 = G
+    fret: int = Field(ge=0)  # fret number, 0 is open
+    rings: bool = True  # the note rings on rather than being damped
+
+
+class RiffSection(_Artifact):
+    section: int  # planned section index
+    start_bar: int
+    end_bar: int  # exclusive
+    unit: int  # slots per printed cell
+    onsets: list[list[RiffNote]]  # the notes heard, one list per onset
+    riff: list[TabNote]  # the riff as one bar of tab
+    agreement: float  # how closely the section's bars agree with the riff
+    support: float  # share of the section's bars that support the riff
+    named_share: float  # share of onsets with a named pitch
+    candidate: Literal["majority", "medoid"]  # which candidate the riff came from
+    octave_shift: int  # octaves the riff moved to fit the instrument
+    printable: bool  # the riff is good enough to print as tab
+    reason: str | None = None  # why the riff is not printable, when it is not
+
+
+class Riffs(_Artifact):
+    sections: list[RiffSection] = []
 
 
 class Shape(_Artifact):
@@ -275,6 +339,9 @@ class ScoreBar(_Artifact):
     chords: list[ScoreChord]
     pickup: bool = False
     struck: bool = False  # at least one strike was detected in the bar; the worked example prefers these
+    strokes: list[Stroke] = []  # the bar's own strokes; empty before 1.6
+    tab: list[TabNote] | None = None  # the bar's riff tab; None when the bar is not a printed riff
+    grey: bool = False  # the bar is shown greyed out
 
 
 class ScoreSection(_Artifact):
@@ -289,6 +356,8 @@ class ScoreSection(_Artifact):
     shifted: int = 0  # bars the start moved from grid.json to sit in phase with the chords
     riff: bool = False  # copied from the pattern: the section's guitar plays single notes rather than chords (a riff, not a strum)
     members: list[int] = []  # copied from the plan: grid section indices merged into this section
+    state: str = ""  # one of the spec 3.2 phrases, or empty
+    octave_shift: int = 0  # octaves the section's riff moved to fit the instrument
 
 
 class Score(_Artifact):
