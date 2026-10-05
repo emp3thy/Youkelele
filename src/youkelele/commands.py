@@ -13,7 +13,7 @@ from youkelele.models.ytdl import MetadataError, fetch_metadata
 from youkelele.options import RunOptions
 from youkelele.preflight import check_environment, metadata_problem
 from youkelele.profiles import get_profile
-from youkelele.runner import StageFailed, build_chain, resolve_stage, run_chain, status
+from youkelele.runner import StageFailed, build_chain, earliest_start, resolve_stage, run_chain, status
 from youkelele.stage import MissingArtifact, Stage
 
 
@@ -68,6 +68,8 @@ def run_command(args: argparse.Namespace) -> int:
     except ValueError as exc:
         print(str(exc))
         return 1
+    if run_dir is not None and start > 0:
+        start = earliest_start(chain, run_dir, start, end, log=print)
     # before any folder is named: a failed check spends no network fetch and leaves no folder
     names = [s.name for s in chain[start : end + 1]]
     problems = check_environment(options, names)

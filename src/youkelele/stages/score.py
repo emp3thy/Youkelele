@@ -17,6 +17,7 @@ class ScoreStage(Stage):
         "harmony/chords.json",
         "strums/strums.json",
         "arrange/arrangement.json",
+        "riff/riff.json",
         "ingest/source.json",
     )
     produces = ("score/score.json", "score/score.alphatex")

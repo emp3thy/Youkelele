@@ -42,8 +42,8 @@ echo ""
 echo "Making the sheet. The first song takes longer while the models download."
 echo ""
 if uv run youkelele run "$input" --runs-dir "$runs"; then
-    # the newest runs/*/07_render/sheet.pdf is the one this run wrote
-    pdf=$(ls -t "$runs"/*/07_render/sheet.pdf 2>/dev/null | head -n 1)
+    # the newest runs/*/08_render/sheet.pdf is the one this run wrote
+    pdf=$(ls -t "$runs"/*/08_render/sheet.pdf 2>/dev/null | head -n 1)
     if [ -z "$pdf" ]; then
         echo ""
         echo "The run finished but no sheet.pdf was found in: $runs"

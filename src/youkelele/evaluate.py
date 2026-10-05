@@ -15,7 +15,7 @@ from youkelele.music.relabel import default_plan, longest_member
 from youkelele.music.sections import runs_text, vocal_flags, vocal_runs
 from youkelele.music.trailing import trailing_silent_bars
 from youkelele.render.html import display_names
-from youkelele.schemas import ChordEvent, Chords, Grid, Key, Strums
+from youkelele.schemas import ChordEvent, Chords, Grid, Key, Riffs, Strums
 
 BAR_START_TOLERANCE = 0.06  # a chord change this close to a bar start counts as on the bar
 MOSTLY_RESTS = 0.75  # a printed-as-certain pattern with at least this share of rests
@@ -292,6 +292,11 @@ def _boxes_mostly_rests(strums: Strums, diags: list[SectionDiag]) -> int:
 def _load_strums(run_dir: Path) -> Strums | None:
     path = run_dir / "04_strums" / "strums.json"
     return load_model(path, Strums) if path.is_file() else None
+
+
+def _load_riffs(run_dir: Path) -> Riffs | None:
+    path = run_dir / "05_riff" / "riff.json"
+    return load_model(path, Riffs) if path.is_file() else None
 
 
 def _diagnose(run_dir: Path) -> tuple[Report, Strums | None]:

@@ -15,8 +15,8 @@ def test_end_to_end_on_synthetic_clip(tmp_path: Path):
     rc = main(["run", str(tmp_path / "clip.wav"), "--runs-dir", str(tmp_path / "runs")])
     assert rc == 0
     run = tmp_path / "runs" / "clip"
-    assert (run / "07_render" / "sheet.pdf").stat().st_size > 10_000
-    pdf_bytes = (run / "07_render" / "sheet.pdf").read_bytes()
+    assert (run / "08_render" / "sheet.pdf").stat().st_size > 10_000
+    pdf_bytes = (run / "08_render" / "sheet.pdf").read_bytes()
     assert count_pages(pdf_bytes) <= 2
     grid = load_model(run / "02_grid" / "grid.json", Grid)
     assert 118 <= grid.bpm <= 122 and grid.octave_decision == "none"

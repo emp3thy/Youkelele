@@ -101,12 +101,12 @@ def test_setup_command_runs_ensure_and_ffmpeg(monkeypatch, capsys):
     assert "ff" in capsys.readouterr().out
 
 
-def test_stages_command_lists_eight_ukulele_stages(capsys):
+def test_stages_command_lists_nine_ukulele_stages(capsys):
     assert main(["stages"]) == 0
     out = capsys.readouterr().out
     numbers = [line[:2] for line in out.splitlines() if line[:2].isdecimal()]
-    assert numbers == ["00", "01", "02", "03", "04", "05", "06", "07"]
-    assert "07 render" in out
+    assert numbers == ["00", "01", "02", "03", "04", "05", "06", "07", "08"]
+    assert "08 render" in out
 
 
 def recording_chain(monkeypatch):

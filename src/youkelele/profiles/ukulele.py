@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from youkelele.profiles.base import InstrumentProfile, Tuning
 from youkelele.stages.arrange import ArrangeStage
+from youkelele.stages.riff import RiffStage
 from youkelele.stages.score import ScoreStage
 from youkelele.stages.strums import StrumsStage
 
@@ -14,5 +15,5 @@ def ukulele_profile() -> InstrumentProfile:
     return InstrumentProfile(
         "ukulele",
         UKULELE_TUNING,
-        (StrumsStage(), ArrangeStage(), ScoreStage(UKULELE_TUNING, "Ukulele")),
+        (StrumsStage(), RiffStage(UKULELE_TUNING), ArrangeStage(), ScoreStage(UKULELE_TUNING, "Ukulele")),
     )

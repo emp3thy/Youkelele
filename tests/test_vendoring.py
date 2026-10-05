@@ -310,7 +310,7 @@ def test_install_scripts_exist_and_reference_each_other():
         assert needle in install_ps1, needle
     run_cmd = (repo / "run-youkelele.cmd").read_text(encoding="ascii")
     assert "youkelele run" in run_cmd and "%~dp0runs" in run_cmd
-    assert "07_render" in run_cmd and "sheet.pdf" in run_cmd and 'start ""' in run_cmd
+    assert "08_render" in run_cmd and "sheet.pdf" in run_cmd and 'start ""' in run_cmd
     # the progress output is read as UTF-8, and uv draws no progress bars
     assert install_cmd.index("chcp 65001") < install_cmd.index("powershell")
     assert '$env:UV_NO_PROGRESS = "1"' in install_ps1

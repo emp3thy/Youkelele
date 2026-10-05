@@ -26,7 +26,7 @@ You need Windows 10 or 11 with an internet connection, and nothing else installe
 4. Wait until the window says **Ready**, then press any key to close it. You only need to do steps 1 to 4 once.
 5. Double-click `run-youkelele.cmd`. It may show the same security box the first time; choose **Run** again. When it asks, paste the YouTube link (press Ctrl+V, or right-click in the window) and press Enter.
    - Then wait: a song takes several minutes while the window shows the eight steps going by, and the first song takes longer, because it downloads another 140 MB or so of song-analysis models. Later songs skip this.
-6. When it is done, the sheet opens as a PDF and the black window closes by itself; that is normal. The sheet is also saved inside the `Youkelele-main` folder, under `runs`, then the song's name, then `07_render`, as `sheet.pdf`.
+6. When it is done, the sheet opens as a PDF and the black window closes by itself; that is normal. The sheet is also saved inside the `Youkelele-main` folder, under `runs`, then the song's name, then `08_render`, as `sheet.pdf`.
 
 You can also drag an audio file (an MP3 or WAV, say) onto `run-youkelele.cmd` instead of pasting a link. Giving it the same link again makes that song's sheet again from the start. Each song's folder in `runs` keeps the separated audio, about 200 to 350 MB, so delete old song folders when space runs short.
 
@@ -47,7 +47,7 @@ uv run playwright install chromium
 uv run youkelele run "https://www.youtube.com/watch?v=VIDEO_ID"
 ```
 
-`setup` downloads the chord model and ffmpeg (no git needed). Playwright's Chromium prints the PDF. The sheet lands in `runs/<song-name>/07_render/sheet.pdf`, where the folder is named after the song's title (or after the file, for a local audio file).
+`setup` downloads the chord model and ffmpeg (no git needed). Playwright's Chromium prints the PDF. The sheet lands in `runs/<song-name>/08_render/sheet.pdf`, where the folder is named after the song's title (or after the file, for a local audio file).
 
 ## How it works
 
@@ -60,9 +60,10 @@ The tool runs a chain of eight stages. Each stage reads earlier stages' files fr
 | `02_grid` | `audio.wav`, drums and vocals stems | `grid.json` (beats, bars, tempo, sections), `beats_raw.json` | [Beat This!](https://github.com/CPJKU/beat_this) beats and downbeats; a drum backbeat test for the tempo octave; sections by Laplacian segmentation of bar features, named with the help of the vocal stem |
 | `03_harmony` | `audio.wav`, `grid.json`, guitar, bass, piano and other stems | `chords.json`, `spans.lab` | [Chord-CNN-LSTM](https://github.com/music-x-lab/ISMIR2019-Large-Vocabulary-Chord-Recognition) (ISMIR 2019) decoded on the beats and downbeats; no-chord bars filled from the harmonic stems' chroma; the key from the chord stream by three rules that vote (the header hedges a rule that lost), its mode from the stems; tonic power chords marked |
 | `04_strums` | guitar and other stems, `audio.wav`, `grid.json`, `chords.json` | `strums.json` | onset detection on the best strum source, quantised to an eighth or sixteenth slot grid; a strike vote per section; a recall gate for sustained strums the detector misses; a section plan that merges short same-chord fragments into their neighbours; a shuffle test a pattern must beat to print as certain; a riff marker for sections played as single notes |
-| `05_arrange` | `chords.json`, `grid.json` | `arrangement.json` | capo and transposition scored over the [chords-db](https://github.com/tombatossals/chords-db) ukulele shapes; one shape per chord chosen to keep hand movement low; the easy tier reduces chords to triads |
-| `06_score` | `grid.json`, `chords.json`, `strums.json`, `arrangement.json`, `source.json` | `score.json`, `score.alphatex` | merges everything into one score: section starts aligned to the chord phrase, the bridge chosen by chord novelty, repeating rows collapsed; the sections are the strums stage's plan |
-| `07_render` | `score.json` | `sheet.html`, `sheet.pdf` | an HTML page with SVG chord diagrams, printed to A4 by headless Chromium through Playwright; the worked example is one bar beside the rows unless a chord changes inside a bar |
+| `05_riff` | guitar and other stems, `audio.wav`, `grid.json`, `strums.json` | `riff.json` | for each riff section, monophonic pitch tracking (librosa `pyin`) names one note at each onset; the notes are reduced to a one- or two-bar riff, gated on agreement, support and how many onsets were named, and mapped to ukulele strings and frets; written on every run, empty when no section is a riff |
+| `06_arrange` | `chords.json`, `grid.json` | `arrangement.json` | capo and transposition scored over the [chords-db](https://github.com/tombatossals/chords-db) ukulele shapes; one shape per chord chosen to keep hand movement low; the easy tier reduces chords to triads |
+| `07_score` | `grid.json`, `chords.json`, `strums.json`, `arrangement.json`, `source.json` | `score.json`, `score.alphatex` | merges everything into one score: section starts aligned to the chord phrase, the bridge chosen by chord novelty, repeating rows collapsed; the sections are the strums stage's plan |
+| `08_render` | `score.json` | `sheet.html`, `sheet.pdf` | an HTML page with SVG chord diagrams, printed to A4 by headless Chromium through Playwright; the worked example is one bar beside the rows unless a chord changes inside a bar |
 
 Every run also writes two diagnostic files: `02_grid/beats_raw.json` (the beats and downbeats before gap filling and octave correction) and `03_harmony/spans.lab` (the chord model's raw output). The options of each run are saved in `runs/<song-name>/manifest.json`.
 
@@ -75,7 +76,7 @@ uv run youkelele run "https://www.youtube.com/watch?v=VIDEO_ID" --from harmony
 ```
 
 - The strums stage plans the sheet's sections from `02_grid/grid.json` and the chords: short fragments with the same chords merge into their neighbours (see the limitations below), so the sheet can have fewer sections than `grid.json`. The score stage checks that this plan is still the one `grid.json` and the chords give, a renamed section included. If you edit `grid.json` after the strums stage has run, run again from `--from strums` at the latest (strums or any earlier stage); the `--from harmony` above is enough because it re-runs the strums stage too.
-- The score stage may move a section start one bar later so that it lines up with the chord phrase; `shifted` in `06_score/score.json` records each move.
+- The score stage may move a section start one bar later so that it lines up with the chord phrase; `shifted` in `07_score/score.json` records each move.
 - In `03_harmony/chords.json`, an event with `filled: true` was inferred and prints in italics; clear the flag when you correct its label.
 - The score stage chooses at most one bridge from the chords, so it may rename sections labelled `verse`, `chorus` or `bridge`. Any other label (`intro`, `instrumental`, `outro`, or one of your own such as `solo` or `pre-chorus`) prints as written.
 
