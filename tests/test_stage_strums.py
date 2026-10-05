@@ -242,8 +242,8 @@ def test_strums_stage_short_sections_use_their_own_vector_and_the_chance_test(tm
     for p in strums.patterns:
         assert "".join(p.slots) == "D-DU-UDU"
         assert p.inherited_from is None
-        assert p.chance_p is not None
-        assert p.uncertain == (p.chance_p > CHANCE_ALPHA)
+        assert p.chance_p is not None and p.chance_p <= CHANCE_ALPHA
+        assert not p.uncertain
 
 
 def test_strums_stage_passes_grid_bpm_to_slot_choice(tmp_path):
@@ -506,7 +506,8 @@ def test_trimmed_last_section_under_four_bars_votes_on_its_analysed_bars(tmp_pat
     assert not outro.no_instrument
     assert outro.slots == verse.slots  # the trailing dense bars are not in its vote
     assert outro.strike_density == 0.75
-    assert outro.uncertain == (outro.chance_p > CHANCE_ALPHA)
+    # two identical island bars pass the chance test (p near 0.036), so the outro is certain
+    assert outro.chance_p <= CHANCE_ALPHA and not outro.uncertain
 
 
 def test_strums_stage_logs_nothing_about_trailing_bars_when_none_dropped(tmp_path):
@@ -687,7 +688,8 @@ def test_riff_features_rest_on_the_detectors_own_onsets_not_the_recall_gates(tmp
     assert (pattern.riff_entropy, pattern.riff_single_share) == pytest.approx(expected)
     assert is_riff(*expected)
     assert pattern.riff_onsets == len(own)
-    # spec 5.1 (1.6): the features pass, but one repeated short note names no pitch change
+    # spec 5.1 (1.6): the features pass, but no note is named: each 0.2 s note covers less than
+    # half of the window to the next pre-gate onset (one second away), so the share is None
     assert not pattern.riff and pattern.pitch_change_share is None
 
 

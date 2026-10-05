@@ -187,7 +187,7 @@ class SectionPattern(_Artifact):
     candidate: Literal["majority", "medoid"] = "majority"  # which candidate pattern was kept: the per-slot majority or the medoid bar
     score_majority: float | None = None  # the majority candidate's score; None before 1.6
     score_medoid: float | None = None  # the medoid candidate's score; None before 1.6
-    unit: int = 1  # slots per printed cell: 1 is the grid, 2 merges slot pairs
+    unit: int = 1  # the vote's unit in bars: 1 is a one-bar pattern, 2 a two-bar pattern (spec 4.2)
     pitch_change_share: float | None = None  # share of consecutive onsets whose chroma changes; None before 1.6
     rings: bool = True  # the strokes ring on rather than being muted
     ring_decay_db: float | None = None  # median decay in dB over the ring window; None before 1.6
@@ -212,7 +212,7 @@ class BarStrums(_Artifact):
     member: int  # index into the planned section's members list
     strokes: list[Stroke]  # strokes detected in the bar
     pattern: list[Slot]  # the slot vector this bar prints
-    unit: int = 1  # slots per printed cell
+    unit: int = 1  # the printed vote's unit in bars: 1 or 2 (spec 4.2)
     confidence: float = 0.0  # how well the bar matches its section's pattern
     chance_p: float | None = None  # share of shuffled copies scoring at least this well; None when not tested
     uncertain: bool = True  # the bar's strokes are a guess
