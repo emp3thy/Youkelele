@@ -171,7 +171,8 @@ def test_render_stage_writes_html_and_pdf_without_assets(tmp_path):
     assert calls == [(html_path, out / "sheet.pdf")]
     assert (out / "sheet.pdf").read_bytes() == b"%PDF-fake"
     html = html_path.read_text(encoding="utf-8")
-    assert ">C / G<" in html and ">N.C.<" in html
+    assert ">C<" in html and ">G<" in html and ">N.C.<" in html
+    assert html.count('class="bar"') == 4  # one box per bar
     assert "<script" not in html
     assert not (out / "assets").exists()
     assert sorted(p.name for p in out.iterdir()) == ["sheet.html", "sheet.pdf"]
@@ -186,31 +187,39 @@ def test_render_stage_needs_no_alphatex(tmp_path):
     assert (out / "sheet.html").is_file()
 
 
-def test_render_stage_sheet_has_blocks_passing_line_filled_note_and_pickup(tmp_path):
+def test_render_stage_sheet_has_repeats_passing_line_filled_note_and_pickup(tmp_path):
     layout, out = _prepare(tmp_path, _realistic_120_bar_score())
     stage = RenderStage(pdf_writer=lambda h, p: p.write_bytes(b"%PDF-fake"))
     stage.run(StageContext(layout, RunOptions(source="x.mp3"), out, lambda m: None, stage))
     html = (out / "sheet.html").read_text(encoding="utf-8")
     assert "Passing: B 4322" in html
     assert "Italic chords were inferred where the recording had no clear chord" in html
-    assert html.count('class="cell filled"') == 1
-    assert html.count('class="grid has-pickup"') == 1
-    assert html.count('class="cell nc pickup"') == 1
-    assert html.count("×4") == 3  # each 16-bar C G Am F verse is one row played four times
+    assert html.count('font-style="italic" fill="#111" class="chord"') == 1
+    assert html.count('class="pickup-label"') == 1
+    assert html.count("play twice") == 3  # each 16-bar C G Am F verse is one eight-bar line played twice
+    assert "×" not in html
 
 
-
-def test_render_stage_sheet_has_a_worked_example_per_strum_box(tmp_path):
+def test_render_stage_sheet_draws_every_bar_in_order(tmp_path):
     layout, out = _prepare(tmp_path, _realistic_120_bar_score())
     stage = RenderStage(pdf_writer=lambda h, p: p.write_bytes(b"%PDF-fake"))
     stage.run(StageContext(layout, RunOptions(source="x.mp3"), out, lambda m: None, stage))
     html = (out / "sheet.html").read_text(encoding="utf-8")
-    assert html.count('class="strum-box"') == 9  # ten sections, the pre-chorus uncertain
-    assert html.count('class="worked-example"') == 9
-    # the bridge example shows its G / F bar, F on its own stroke
+    # 120 bars less the three verses' folded second lines (8 bars each)
+    assert html.count('class="bar"') == 120 - 3 * 8
+    assert "worked-example" not in html and "strum-box" not in html
+    # the bridge is two four-bar lines (bars change chord inside them): Am, G, F, G / F, then
+    # Am, F / B, F, N.C.; the 1.5 score has no strokes, so its chords' slots are drawn
     bridge = html[html.index("<h2>Bridge</h2>"):]
-    example = bridge[bridge.index('class="worked-example"'):bridge.index('class="grid')]
-    assert re.findall(r'class="chord">([^<]*)<', example) == ["Am", "G", "F"]
+    bridge = bridge[:bridge.index("</section>")]
+    assert bridge.count('class="line"') == 2
+    names = re.findall(r'class="chord[^"]*">([^<]*)<', bridge)
+    assert names == ["Am", "G", "F", "G", "F", "Am", "F", "B", "F", "N.C."]
+    assert 'class="arrow down"' in bridge
+    # the uncertain pre-chorus prints greyed
+    pre = html[html.index("<h2>Pre-chorus</h2>"):]
+    pre = pre[:pre.index("</section>")]
+    assert 'stroke="#999"' in pre and 'class="arrow down"' in pre
 
 
 def test_render_stage_declares_contract():
@@ -251,15 +260,15 @@ def test_real_chromium_prints_120_bar_score_in_at_most_three_pages(tmp_path):
     assert errors == []
 
 
-def _long_beside_score(rows: int) -> Score:
-    """One certain section of `rows` distinct rows and no mid-bar change, so its one-bar strip
-    sits beside the rows."""
+def _long_score(rows: int) -> Score:
+    """One certain section of `rows` distinct four-bar rows (one chord a bar), so no line folds
+    into a repeat and the section is as long as its bar count."""
     names = ["C", "G", "Am", "F"]
     diagrams = [ChordDiagram(name=n, shape=s) for n, s in zip(names, (C, G, AM, F), strict=True)]
     bars: list[ScoreBar] = []
     for r in range(rows):
-        # the row's first three chords spell r in base 4, so no two rows match and none folds
-        # into a repeat block
+        # the row's first three chords spell r in base 4, so no two rows (and no two eight-bar
+        # lines) match
         for k in range(4):
             name = names[(r // 4**k) % 4] if k < 3 else "C"
             chord = ScoreChord(name=name, diagram=names.index(name), start_slot=0, slots=ISLAND)
@@ -271,21 +280,22 @@ def _long_beside_score(rows: int) -> Score:
     return _two_section_score().model_copy(update={"chord_diagrams": diagrams, "sections": [section]})
 
 
-# one page holds 14 such rows and two hold 36 (probed with this renderer): 25 sits mid-way
-ROWS_OVER_A_PAGE = 25
+# one page holds 20 such rows (80 bars on ten eight-bar lines) and two hold 50, probed with the
+# bar-box renderer: 35 sits mid-way
+ROWS_OVER_A_PAGE = 35
 
 
 @pytest.mark.slow
-def test_real_chromium_breaks_a_long_beside_section_across_pages(tmp_path):
+def test_real_chromium_breaks_a_long_section_across_pages(tmp_path):
     from youkelele.render import pdf as pdf_module
 
-    layout, out = _prepare(tmp_path, _long_beside_score(ROWS_OVER_A_PAGE))
+    layout, out = _prepare(tmp_path, _long_score(ROWS_OVER_A_PAGE))
     errors: list[str] = []
     stage = RenderStage(pdf_writer=lambda h, p: pdf_module.html_to_pdf(h, p, console=errors))
     ctx = StageContext(layout, RunOptions(source="x.mp3"), out, lambda m: None, stage)
     stage.run(ctx)
 
     html = (out / "sheet.html").read_text(encoding="utf-8")
-    assert html.count('class="section-body beside"') == 1
+    assert html.count("<h2>") == 1 and html.count('class="line"') == 18  # 140 bars, eight a line
     assert count_pages((out / "sheet.pdf").read_bytes()) == 2
     assert errors == []

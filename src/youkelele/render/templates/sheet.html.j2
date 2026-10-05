@@ -19,36 +19,18 @@
   .legend { display: flex; flex-wrap: wrap; gap: 6px 10px; margin: 2mm 0 5mm 0; break-inside: avoid; }
   .legend svg { display: block; }
   .passing, .power-note { font-size: 10pt; margin: -3mm 0 5mm 0; }
-  .cell sup { font-size: 0.6em; line-height: 0; }
+  .tab-legend { font-size: 10pt; margin: -3mm 0 5mm 0; }
   .section { margin-bottom: 5mm; }
   .section-head { margin: 0 0 1.5mm 0; break-inside: avoid; }
   .section-head { break-after: avoid }
   .section-title { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; break-inside: avoid; }
   .section-title h2 { font-size: 13pt; margin: 0; }
   .strum-label { font-size: 9pt; color: var(--muted); }
-  .no-instrument { font-size: 9pt; color: var(--muted); font-style: italic; }
-  .strum-box { margin: 2px 0 0 0; break-inside: avoid; }
-  .strum-box svg { display: block; }
-  .row { display: grid; grid-template-columns: repeat(4, 1fr) auto; break-inside: avoid; }
-  .row { gap: 1.5mm; margin-bottom: 1.5mm; }
-  .cell { border: 1px solid; padding: 2mm; font-size: 12pt; }
-  .cell { font-weight: 600; border-radius: 2px; white-space: normal; overflow-wrap: anywhere; }
-  .cell.crowded { font-size: 10pt; }
-  .cell.nc { color: var(--muted); }
-  .cell.filled { font-style: italic }
-  .cell.pickup { grid-column: span 1; font-size: 9pt; }
-  .cell.pickup { padding: 1mm; }
-  .pickup-label { display: block; font-size: 7pt; font-weight: 400; font-style: italic; color: var(--muted); }
-  .grid.has-pickup .row { grid-template-columns: 0.25fr repeat(4, 1fr) auto; }
-  .repeat { font-size: 10pt; align-self: center; }
-  .repeat { grid-column: -2; min-width: 12mm; box-sizing: border-box; text-align: right; font-weight: 600; }
-  .block { position: relative; break-inside: avoid; }
-  .block.span .repeat { padding-right: 3mm; }
-  .block.span::after { content: ""; position: absolute; right: 0; top: 0; bottom: 1.5mm; width: 1.5mm; border: 1.5px solid var(--ink); border-left: none; }
+  .line { display: flex; gap: 1.5mm; break-inside: avoid; margin-bottom: 1.5mm }
+  .line { align-items: flex-start; }
+  .line svg { display: block; flex: 0 1 auto; min-width: 0; height: auto; }
+  .repeat { margin-left: auto; padding-left: 2mm; align-self: center; flex: none; white-space: nowrap; font-size: 10pt; font-weight: 600; }
   .no-print { background: #fef3c7; padding: 6px 10px; margin-bottom: 8px; font-size: 10pt; }
-  .section-body.beside { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 4mm; align-items: start; }
-  .section-body.beside > .strum-box { grid-column: 2; grid-row: 1; margin: 0; }
-  .section-body.beside .grid.has-pickup .row { grid-template-columns: minmax(13mm, 0.25fr) repeat(4, minmax(0, 1fr)) auto; }
   @page { size: A4; margin: 14mm }
   @media print {
     html, body { width: 182mm }
@@ -58,10 +40,6 @@
 </style>
 </head>
 <body>
-{% macro cell_class(cell) %}cell{% if cell.nc %} nc{% endif %}{% if cell.crowded %} crowded{% endif %}{% if cell.filled %} filled{% endif %}{% endmacro %}
-{# the full tier raises a small 5 after the name of a power chord on the record; the easy tier prints the plain name #}
-{% macro cell_text(cell) %}{% if cell.power and power_badge %}{% for name in cell.text.split(" / ") %}{{ name }}{% if cell.badges[loop.index0] %}<sup>5</sup>{% endif %}{% if not loop.last %} / {% endif %}{% endfor %}{% else %}{{ cell.text }}{% endif %}{% endmacro %}
-{% macro pickup_cell(cell) %}<div class="{{ cell_class(cell) }} pickup"><span class="pickup-label">pickup</span>{{ cell_text(cell) }}</div>{% endmacro %}
 <div class="sheet">
   <div class="no-print">Screen preview. Print this page, or open sheet.pdf, for the A4 layout.</div>
   <header class="sheet-head">
@@ -95,6 +73,9 @@
   {% for line in power_lines %}
   <p class="power-note">{{ line }}</p>
   {% endfor %}
+  {% if tab_legend is not none %}
+  <p class="tab-legend">{{ tab_legend }}</p>
+  {% endif %}
 
   <div class="sections">
   {% for section in sections %}
@@ -102,57 +83,20 @@
       <div class="section-head">
         <div class="section-title">
           <h2>{{ section.label }}</h2>
-          {% if section.no_instrument %}
-          <span class="no-instrument">No strummed instrument detected</span>
-          {% elif section.inherited_from is not none %}
-          {# an inherited pattern's covers figure is the donor's, so it is not printed #}
-          <span class="strum-label">Strum as in {{ section.inherited_from }}{% if section.uncertain %} (uncertain){% endif %}</span>
-          {% elif section.riff %}
-          {# single notes over the chords: the pattern is the riff's rhythm, to strum on the chord #}
-          <span class="strum-label">Riff heard in this section: strum the chord to this rhythm{% if section.show_covers %}; covers {{ section.explained_pct }}% of detected strokes{% endif %}{% if section.uncertain %} (uncertain){% endif %}</span>
-          {% else %}
-          <span class="strum-label">Strum heard in this section{% if section.show_covers %}; covers {{ section.explained_pct }}% of detected strokes{% endif %}. Up and down follow the beat{% if section.uncertain %} (uncertain){% endif %}</span>
+          {% if section.state is not none %}
+          <span class="strum-label">{{ section.state }}</span>
+          {% endif %}
+          {% if section.octave is not none %}
+          <span class="strum-label octave">{{ section.octave }}</span>
           {% endif %}
         </div>
-        {% if section.example is not none and not section.beside %}
-        <div class="strum-box"><div class="worked-example">{{ section.example }}</div></div>
-        {% endif %}
       </div>
-      {# a one-bar strip sits beside the rows, in the body's second column #}
-      <div class="section-body{% if section.beside %} beside{% endif %}">
-      {% set grid = section.grid %}
-      <div class="grid{% if grid.pickup is not none %} has-pickup{% endif %}">
-      {% if grid.pickup is not none and not grid.blocks %}
-        <div class="row">
-          {{ pickup_cell(grid.pickup) }}
-          <div class="repeat"></div>
-        </div>
-      {% endif %}
-      {% for block in grid.blocks %}
-        {% set first_block = loop.first %}
-        <div class="block{% if block.repeat > 1 and block.rows|length > 1 %} span{% endif %}">
-        {% for row in block.rows %}
-          <div class="row">
-            {% if grid.pickup is not none %}
-            {% if first_block and loop.first %}
-            {{ pickup_cell(grid.pickup) }}
-            {% else %}
-            <div class="lead"></div>
-            {% endif %}
-            {% endif %}
-            {% for cell in row %}
-            <div class="{{ cell_class(cell) }}">{{ cell_text(cell) }}</div>
-            {% endfor %}
-            <div class="repeat">{% if loop.last and block.repeat > 1 %}×{{ block.repeat }}{% endif %}</div>
-          </div>
-        {% endfor %}
-        </div>
+      {% for line in section.lines %}
+      <div class="line">
+        {% for svg in line.svgs %}{{ svg }}{% endfor %}
+        {% if line.repeat is not none %}<span class="repeat">{{ line.repeat }}</span>{% endif %}
+      </div>
       {% endfor %}
-      </div>
-      {% if section.beside %}
-      <div class="strum-box"><div class="worked-example">{{ section.example }}</div></div>
-      {% endif %}
-      </div>
     </section>
   {% endfor %}
   </div>
