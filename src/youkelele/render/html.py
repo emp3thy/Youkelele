@@ -10,6 +10,7 @@ from jinja2 import Environment, FileSystemLoader, StrictUndefined
 from markupsafe import Markup
 
 from youkelele.music.arrange import _SHARPS
+from youkelele.music.score_builder import STATE_NO_INSTRUMENT, STATE_UNCERTAIN
 from youkelele.render.bar_svg import bar_svg, slot_px
 from youkelele.render.diagrams import NC, chord_diagram_svg, fret_notation
 from youkelele.render.lines import fold_repeats, line_width, pack_lines, repeat_text
@@ -27,7 +28,7 @@ CAPO_NOTE = "Shapes are relative to the capo"
 POWER_LEGEND = "{name} is a power chord on the record"
 POWER_LEGEND_EASY = "{name} is a power chord (root and fifth) on the record; this sheet prints the triad."
 FILLED_NOTE = "Italic chords were inferred where the recording had no clear chord"
-TAB_LEGEND = "Tab: A E C G top to bottom; numbers are frets."
+TAB_LEGEND = "Tab: A E C G top to bottom; numbers are frets. Re-entrant tuning: G is the high string."
 _OCTAVES = {1: "an octave", 2: "two octaves", 3: "three octaves"}
 
 
@@ -89,17 +90,28 @@ def _derived_strokes(bar: ScoreBar) -> list[Stroke]:
     ]
 
 
+def _state_from_flags(section: ScoreSection) -> str:
+    """A 1.5 section's header phrase: no instrument first, then an uncertain pattern."""
+    if section.no_instrument:
+        return STATE_NO_INSTRUMENT
+    if section.uncertain:
+        return STATE_UNCERTAIN
+    return ""
+
+
 def _with_strokes(score: Score) -> list[ScoreSection]:
     """The score's sections, a 1.5 file's bars given strokes from their chords' slots.
 
     A 1.5 score.json has no bar strokes at all; its uncertain sections then print their guess
-    greyed, as a 1.6 score's do (spec 4.5). A 1.6 score is returned as it is.
+    greyed, as a 1.6 score's do (spec 4.5), and a section without a state phrase gets the one
+    its flags imply. A 1.6 score is returned as it is.
     """
     if any(bar.strokes for section in score.sections for bar in section.bars):
         return list(score.sections)
     return [
         section.model_copy(
             update={
+                "state": section.state or _state_from_flags(section),
                 "bars": [
                     bar.model_copy(
                         update={"strokes": _derived_strokes(bar), "grey": bar.grey or section.uncertain}

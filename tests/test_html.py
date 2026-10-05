@@ -105,6 +105,7 @@ def test_render_html_folds_identical_lines_and_prints_the_tab_legend_once():
     assert outro.count('class="line"') == 1 and outro.count('class="bar"') == 8
     html_tab = render_html(_score([_section("verse", 8, 0, tab=True, state="riff")]))
     assert html_tab.count("Tab: A E C G top to bottom; numbers are frets.") == 1 and "written an octave" not in html_tab
+    assert html_tab.count("Tab: A E C G top to bottom; numbers are frets. Re-entrant tuning: G is the high string.") == 1
     assert html_tab.index("Tab: A E C G") < html_tab.index('class="sections"')
     assert "Tab: A E C G" not in html
 
@@ -113,6 +114,12 @@ def test_v15_score_fixture_renders():
     html = render_html(load_model(FIXTURES / "v15_score.json", Score))
     assert "<svg" in html  # bars with empty strokes draw their chords' slots as strokes, all ringing
     assert 'class="arrow down"' in html and 'class="sustain"' in html
+    # a 1.5 file has no state phrases: its section flags give them (intro, chorus 2, verse 3,
+    # chorus 3 are uncertain in the fixture)
+    assert html.count('<span class="strum-label">pattern uncertain</span>') == 4
+    assert '<span class="strum-label">pattern uncertain</span>' in _section_html(html, "Intro")
+    quiet = render_html(_score([_section("Intro", 2, 0, no_instrument=True), _section("Verse", 2, 2, no_instrument=True)]))
+    assert _section_html(quiet, "Intro").count('<span class="strum-label">no strummed instrument detected</span>') == 1
 
 
 # the page around the bars

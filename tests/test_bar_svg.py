@@ -67,6 +67,35 @@ def test_sustain_runs_to_the_next_stroke_or_the_bar_end():
     assert spans[0][0] > 10 and 70 <= spans[0][1] <= 80  # from the first arrow to the end of slot 3
     assert spans[1][0] > 110 and 150 <= spans[1][1] <= 160  # from the up arrow to the bar end
     assert svg.count('class="arrow muted"') == 1
+    # a muted strike never rings on, even when its flag says it rings
+    chuck = ScoreBar(index=0, chords=[_chord("C", 0, 8)], strokes=[Stroke(slot=0, kind="x", rings=True)])
+    assert 'class="sustain"' not in bar_svg(chuck, M44, 8, 20, first_in_line=False, grey=False, tab_rows=False)
+
+
+def _xs(svg: str) -> list[float]:
+    return [float(v) for v in re.findall(r'[ML](-?[\d.]+),', svg)] + [
+        float(v) for v in re.findall(r'x[12]="(-?[\d.]+)"', svg)
+    ]
+
+
+def _arrow_ys(svg: str, kind: str) -> tuple[float, float]:
+    group = re.search(rf'<g class="arrow {kind}">(.*?)</g>', svg).group(1)
+    ys = [float(v) for v in re.findall(r'y[12]="([\d.]+)"', group)]
+    ys += [float(v) for v in re.findall(r'[ML][\d.]+,([\d.]+)', group)]
+    return min(ys), max(ys)
+
+
+def test_narrow_slots_keep_arrows_off_the_frame_and_crosses_apart():
+    strokes = [Stroke(slot=j, kind=k) for j, k in enumerate("DxxUDUDU")]
+    bar = ScoreBar(index=0, chords=[_chord("C", 0, 8)], strokes=strokes)
+    svg = bar_svg(bar, M44, 8, 10, first_in_line=False, grey=False, tab_rows=False)
+    arrows = "".join(re.findall(r'<g class="arrow.*?</g>', svg))
+    assert min(_xs(arrows)) >= 3 and max(_xs(arrows)) <= 77  # the frame stands at 0.5 and 79.5
+    crosses = re.findall(r'<line x1="([\d.]+)"[^>]*x2="([\d.]+)"[^>]*/>(?=<line x1="[\d.]+"[^>]*/></g>)', svg)
+    widths = [abs(float(b) - float(a)) / 2 for a, b in crosses]
+    assert widths and all(2 <= w <= 2.5 for w in widths)  # each cross 4 to 5 px wide
+    # up and down arrows span the same height
+    assert _arrow_ys(svg, "up") == _arrow_ys(svg, "down")
 
 
 def test_tab_block_puts_frets_on_the_right_string_lines():

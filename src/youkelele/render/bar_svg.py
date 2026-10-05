@@ -9,6 +9,7 @@ a faint dot on an empty slot), and, under the line's first bar only, the count r
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import dataclass
 from html import escape
 
 from youkelele.render.diagrams import NC
@@ -31,6 +32,7 @@ _LABEL_W = 10  # the string-letter column left of a line's first tab bar
 _STROKE_H = 30
 _ARROW_TOP = 3  # the arrows' top inside the stroke row
 _ARROW_LEN = 18
+_PAD = 2.5  # the slot columns' inset from each side of the frame
 _COUNT_H = 12
 _SUBDIVISIONS = {1: ("",), 2: ("", "&"), 3: ("", "&", "a"), 4: ("", "e", "&", "a")}
 
@@ -49,8 +51,29 @@ def _n(value: float) -> str:
     return f"{value:g}"
 
 
-# the arrows of the 1.5 strum box, moved here: drawn from ``top`` in ``ink``, ``hw`` either side
-def _down(x: float, top: float, ink: str, hw: float) -> str:
+@dataclass(frozen=True)
+class _Cols:
+    """The bar's slot columns: ``n`` slots spread over the box less a ``_PAD`` inset each side,
+    so the first and last arrows stand clear of the frame. Every row uses the same columns."""
+
+    ox: float
+    n: int
+    box_w: float
+
+    @property
+    def pitch(self) -> float:
+        return (self.box_w - 2 * _PAD) / self.n
+
+    def left(self, slot: int) -> float:
+        return self.ox + _PAD + slot * self.pitch
+
+    def centre(self, slot: int) -> float:
+        return self.left(slot) + self.pitch / 2
+
+
+# the arrows of the 1.5 strum box, moved here: drawn from ``top`` in ``ink``, ``hw`` either side;
+# down and up span the same height, top to top + _ARROW_LEN + 4
+def _down(x: float, top: float, ink: str, hw: float, cw: float) -> str:
     end = top + _ARROW_LEN
     return (
         f'<g class="arrow down"><line x1="{_n(x)}" y1="{_n(top)}" x2="{_n(x)}" y2="{_n(end)}" stroke="{ink}" stroke-width="2"/>'
@@ -58,21 +81,23 @@ def _down(x: float, top: float, ink: str, hw: float) -> str:
     )
 
 
-def _up(x: float, top: float, ink: str, hw: float) -> str:
+def _up(x: float, top: float, ink: str, hw: float, cw: float) -> str:
     end = top + _ARROW_LEN
     return (
-        f'<g class="arrow up"><line x1="{_n(x)}" y1="{_n(end + 6)}" x2="{_n(x)}" y2="{_n(top + 6)}" stroke="{ink}" stroke-width="2"/>'
-        f'<path d="M{_n(x - hw)},{_n(top + 10)} L{_n(x)},{_n(top + 2)} L{_n(x + hw)},{_n(top + 10)}" fill="none" stroke="{ink}" stroke-width="2"/></g>'
+        f'<g class="arrow up"><line x1="{_n(x)}" y1="{_n(end + 4)}" x2="{_n(x)}" y2="{_n(top + 4)}" stroke="{ink}" stroke-width="2"/>'
+        f'<path d="M{_n(x - hw)},{_n(top + 8)} L{_n(x)},{_n(top)} L{_n(x + hw)},{_n(top + 8)}" fill="none" stroke="{ink}" stroke-width="2"/></g>'
     )
 
 
-def _muted(x: float, top: float, ink: str, hw: float) -> str:
+def _muted(x: float, top: float, ink: str, hw: float, cw: float) -> str:
+    """A down arrow crossed; the cross is ``cw`` either side, narrower than the head on narrow
+    slots so neighbouring crosses stay apart."""
     end = top + _ARROW_LEN
     return (
         f'<g class="arrow muted"><line x1="{_n(x)}" y1="{_n(top)}" x2="{_n(x)}" y2="{_n(end)}" stroke="{ink}" stroke-width="2"/>'
         f'<path d="M{_n(x - hw)},{_n(end - 4)} L{_n(x)},{_n(end + 4)} L{_n(x + hw)},{_n(end - 4)}" fill="none" stroke="{ink}" stroke-width="2"/>'
-        f'<line x1="{_n(x - hw)}" y1="{_n(top + 5)}" x2="{_n(x + hw)}" y2="{_n(top + 13)}" stroke="{ink}" stroke-width="2"/>'
-        f'<line x1="{_n(x + hw)}" y1="{_n(top + 5)}" x2="{_n(x - hw)}" y2="{_n(top + 13)}" stroke="{ink}" stroke-width="2"/></g>'
+        f'<line x1="{_n(x - cw)}" y1="{_n(top + 5)}" x2="{_n(x + cw)}" y2="{_n(top + 13)}" stroke="{ink}" stroke-width="2"/>'
+        f'<line x1="{_n(x + cw)}" y1="{_n(top + 5)}" x2="{_n(x - cw)}" y2="{_n(top + 13)}" stroke="{ink}" stroke-width="2"/></g>'
     )
 
 
@@ -94,23 +119,22 @@ def _held_until(start: int, starts: set[int], n: int) -> int:
     return end
 
 
-def _chord_row(
-    chords: Sequence[ScoreChord], n: int, per_slot: int, ox: float, power_badge: bool, pickup: bool
-) -> list[str]:
+def _chord_row(chords: Sequence[ScoreChord], cols: _Cols, power_badge: bool, pickup: bool) -> list[str]:
     ordered = sorted(chords, key=lambda c: c.start_slot)
-    width = n * per_slot
+    n = cols.n
     parts: list[str] = []
     if not ordered or all(c.name == NC for c in ordered):
         parts.append(
-            f'<text x="{_n(ox + _CHORD_INSET)}" y="13" font-size="{_CHORD_FONT}" font-weight="bold" '
+            f'<text x="{_n(cols.ox + _CHORD_INSET)}" y="13" font-size="{_CHORD_FONT}" font-weight="bold" '
             f'fill="{_GREY}" class="chord nc">{NC}</text>'
         )
     else:
         for k, chord in enumerate(ordered):
             start = min(max(chord.start_slot, 0), n - 1)
             nxt = ordered[k + 1].start_slot if k + 1 < len(ordered) else n
-            x = ox + start * per_slot + _CHORD_INSET
-            room = ox + min(max(nxt, start + 1), n) * per_slot - x - 2
+            # the first name keeps the frame inset; a later one starts over its slot
+            x = (cols.ox if start == 0 else cols.left(start)) + _CHORD_INSET
+            room = cols.left(min(max(nxt, start + 1), n)) - x - 2
             nc = chord.name == NC
             badge = power_badge and chord.power and not nc
             style = ' font-style="italic"' if chord.filled and not nc else ""
@@ -129,20 +153,20 @@ def _chord_row(
             )
     if pickup:
         parts.append(
-            f'<text x="{_n(ox + width - 2)}" y="8" text-anchor="end" font-size="7" font-style="italic" '
+            f'<text x="{_n(cols.ox + cols.box_w - 2)}" y="8" text-anchor="end" font-size="7" font-style="italic" '
             f'fill="#666" class="pickup-label">pickup</text>'
         )
     return parts
 
 
-def _tab_block(bar: ScoreBar, n: int, per_slot: int, ox: float, top: float, labels: bool) -> list[str]:
+def _tab_block(bar: ScoreBar, cols: _Cols, top: float, labels: bool) -> list[str]:
     letters = string_label_rows()
-    width = n * per_slot
+    n, ox = cols.n, cols.ox
     ys = [top + 5 + i * _STRING_GAP for i in range(4)]
     parts = ['<g class="tab">']
     for letter, y in zip(letters, ys):
         parts.append(
-            f'<line x1="{_n(ox)}" y1="{_n(y)}" x2="{_n(ox + width)}" y2="{_n(y)}" stroke="{_GREY}" '
+            f'<line x1="{_n(ox)}" y1="{_n(y)}" x2="{_n(ox + cols.box_w)}" y2="{_n(y)}" stroke="{_GREY}" '
             'stroke-width="0.8" class="string"/>'
         )
         if labels:
@@ -155,14 +179,14 @@ def _tab_block(bar: ScoreBar, n: int, per_slot: int, ox: float, top: float, labe
     for note in notes:
         row = 3 - note.string
         y = ys[row]
-        x = ox + note.slot * per_slot + per_slot / 2
+        x = cols.centre(note.slot)
         label = str(note.fret)
         half = 2.5 * len(label) + 1
         if note.rings:
             end = _held_until(note.slot, starts, n)
             if end > note.slot + 1:
                 parts.append(
-                    f'<line x1="{_n(x + half)}" y1="{_n(y)}" x2="{_n(ox + end * per_slot - 2)}" '
+                    f'<line x1="{_n(x + half)}" y1="{_n(y)}" x2="{_n(cols.left(end) - 2)}" '
                     f'y2="{_n(y)}" stroke="{_INK}" stroke-width="2" class="sustain"/>'
                 )
         parts.append(
@@ -176,35 +200,40 @@ def _tab_block(bar: ScoreBar, n: int, per_slot: int, ox: float, top: float, labe
     return parts
 
 
-def _stroke_row(bar: ScoreBar, n: int, per_slot: int, ox: float, top: float, ink: str) -> list[str]:
+def _stroke_row(bar: ScoreBar, cols: _Cols, top: float, ink: str) -> list[str]:
+    n = cols.n
     strokes = {s.slot: s for s in bar.strokes if 0 <= s.slot < n}
-    hw = min(5, (per_slot - 4) / 2)  # narrow slots keep a gap between neighbouring arrows
+    hw = min(5, (cols.pitch - 4) / 2)  # narrow slots keep a gap between neighbouring arrows
+    cw = min(hw, max(2, (cols.pitch - 5) / 2))  # the muted cross: 2 to 2.5 px on narrow slots
     mid = top + _ARROW_TOP + 12
     held: set[int] = set()
     parts: list[str] = []
     for slot in sorted(strokes):
         stroke = strokes[slot]
-        x = ox + slot * per_slot + per_slot / 2
-        parts.append(_ARROWS[stroke.kind](x, top + _ARROW_TOP, ink, hw))
+        x = cols.centre(slot)
+        parts.append(_ARROWS[stroke.kind](x, top + _ARROW_TOP, ink, hw, cw))
         end = _held_until(slot, set(strokes), n)
-        if stroke.rings and end > slot + 1:
+        # a muted strike is damped by definition: it never rings on, whatever its flag says
+        if stroke.rings and stroke.kind != "x" and end > slot + 1:
             held.update(range(slot + 1, end))
             parts.append(
-                f'<line x1="{_n(x + hw + 2)}" y1="{_n(mid)}" x2="{_n(ox + end * per_slot - 2)}" '
+                f'<line x1="{_n(x + hw + 2)}" y1="{_n(mid)}" x2="{_n(cols.left(end) - 2)}" '
                 f'y2="{_n(mid)}" stroke="{ink}" stroke-width="1.5" class="sustain"/>'
             )
     for slot in range(n):  # a faint dot on each slot nothing is played or held on
         if slot not in strokes and slot not in held:
-            x = ox + slot * per_slot + per_slot / 2
-            parts.append(f'<circle cx="{_n(x)}" cy="{_n(mid)}" r="1.3" fill="{_FAINT}" class="rest"/>')
+            parts.append(
+                f'<circle cx="{_n(cols.centre(slot))}" cy="{_n(mid)}" r="1.3" fill="{_FAINT}" class="rest"/>'
+            )
     return parts
 
 
-def _count_row(n: int, meter: Meter, per_slot: int, ox: float, top: float) -> list[str]:
+def _count_row(meter: Meter, cols: _Cols, top: float) -> list[str]:
+    n = cols.n
     per_beat = max(1, n // meter.numerator)
     parts = []
     for i in range(n):
-        x = ox + i * per_slot + per_slot / 2
+        x = cols.centre(i)
         beat = i % per_beat == 0
         style = f'font-size="9" font-weight="bold" fill="{_INK}"' if beat else 'font-size="8" fill="#777"'
         parts.append(
@@ -244,15 +273,16 @@ def bar_svg(
         f'<svg xmlns="http://www.w3.org/2000/svg" class="bar" width="{width}" height="{height}" '
         f'viewBox="0 0 {width} {height}" font-family="Arial, Helvetica, sans-serif">'
     ]
-    parts.extend(_chord_row(bar.chords, n, per_slot, ox, power_badge, bar.pickup))
+    cols = _Cols(ox=ox, n=n, box_w=box_w)
+    parts.extend(_chord_row(bar.chords, cols, power_badge, bar.pickup))
     if tab_rows:
-        parts.extend(_tab_block(bar, n, per_slot, ox, _CHORD_H, labels=first_in_line))
-    parts.extend(_stroke_row(bar, n, per_slot, ox, stroke_top, ink))
+        parts.extend(_tab_block(bar, cols, _CHORD_H, labels=first_in_line))
+    parts.extend(_stroke_row(bar, cols, stroke_top, ink))
     parts.append(
         f'<rect x="{_n(ox + 0.5)}" y="0.5" width="{box_w - 1}" height="{box_h - 1}" fill="none" '
         f'stroke="{_FRAME}" stroke-width="1" rx="2" class="frame"/>'
     )
     if first_in_line:
-        parts.extend(_count_row(n, meter, per_slot, ox, box_h))
+        parts.extend(_count_row(meter, cols, box_h))
     parts.append("</svg>")
     return "".join(parts)
