@@ -7,6 +7,7 @@ from html import escape
 
 from youkelele.schemas import Shape
 
+NC = "N.C."
 _W, _H = 80, 100
 _X0, _DX = 20, 14  # first string x, string spacing
 _Y_NUT, _DY = 30, 15  # top of the grid, fret spacing
@@ -92,3 +93,10 @@ def chord_diagram_svg(
         )
     parts.append("</svg>")
     return "".join(parts)
+
+
+def fret_notation(shape: Shape) -> str:
+    """Absolute frets in diagram order, ``x`` for muted: "4322", or "9-9-10-12" past fret 9."""
+    frets = [f if f <= 0 else f + shape.base_fret - 1 for f in shape.frets]
+    marks = ["x" if f < 0 else str(f) for f in frets]
+    return ("-" if any(f >= 10 for f in frets) else "").join(marks)

@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from youkelele.schemas import ScoreBar, ScoreSection, Shape
+from youkelele.render.diagrams import NC, fret_notation  # noqa: F401  (re-exported until Task 10)
+from youkelele.schemas import ScoreBar, ScoreSection
 
 _RowKey = tuple[tuple[str, tuple[bool, ...]], ...]
-NC = "N.C."
 MAX_UNIT = 4  # the longest run of rows a repeated block may span
 
 
@@ -91,10 +91,3 @@ def section_grid(section: ScoreSection, per_row: int = 4) -> SectionGrid:
         blocks.append(Block(rows=rows[i : i + best_unit], repeat=best_count))
         i += best_unit * best_count
     return SectionGrid(pickup=pickup, blocks=blocks)
-
-
-def fret_notation(shape: Shape) -> str:
-    """Absolute frets in diagram order, ``x`` for muted: "4322", or "9-9-10-12" past fret 9."""
-    frets = [f if f <= 0 else f + shape.base_fret - 1 for f in shape.frets]
-    marks = ["x" if f < 0 else str(f) for f in frets]
-    return ("-" if any(f >= 10 for f in frets) else "").join(marks)
