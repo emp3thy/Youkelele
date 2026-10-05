@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
@@ -11,15 +12,13 @@ import soundfile as sf
 from youkelele.jsonio import load_model, save_model
 from youkelele.music.as_played import (
     EXPLAINED_BELOW,
-    MIN_SECTION_BARS,
     STAGE_UNCERTAIN_GRID_FIT,
     UNCERTAIN_BELOW,
     UNCERTAIN_BELOW_SIXTEENTH,
-    _topped_vote,
     eighth_grid,
-    section_summary,
     structure_test,
 )
+from youkelele.music.members import first_bar_agreement, member_figures, vector_bar
 from youkelele.music.onsets import (
     Onsets,
     StrikeClass,
@@ -32,11 +31,14 @@ from youkelele.music.onsets import (
     render_directions,
     section_has_instrument,
 )
+from youkelele.music.pitch import PITCH_CHANGE_MIN, PitchTrack, name_notes, pitch_change_share, track_pitch
 from youkelele.music.recall import HIGH_BAND_FMIN, gate_section
 from youkelele.music.relabel import ONE_LOOP_SHARE, longest_member, one_loop_share, section_plan
 from youkelele.music.riff import is_riff, onset_chroma, riff_features
+from youkelele.music.ring import section_rings, stroke_decay_db
 from youkelele.music.trailing import NO_CHORD, trailing_silent_bars
-from youkelele.schemas import Bar, Chords, Grid, SectionPattern, Strums
+from youkelele.music.vote import VoteResult, choose_pattern
+from youkelele.schemas import Bar, BarStrums, Chords, Grid, Meter, PlannedSection, SectionPattern, Stroke, Strums
 from youkelele.stage import Stage, StageContext
 
 
@@ -44,6 +46,36 @@ _NO_ONSETS = Onsets(times=np.zeros(0), centroid=np.zeros(0), zcr=np.zeros(0))
 _EPS = 1e-6
 # the riff thresholds were measured on the source signal at this rate (riff-thresholds.md)
 _RIFF_SR = 22050
+# A member of a merged section prints the section's pattern when the first bars of the two
+# votes agree at least this much, else its own (spec 4.3). Measured on the one merged section
+# with disagreeing members: 0.31 must print its own, 0.375 the section's (A4).
+MEMBER_AGREE = 0.35
+STRUMS_SCHEMA = 2  # 1.6: every bar carries its strokes (`bars`)
+
+
+@dataclass
+class _Member:
+    """One member grid section of a planned section and what the stage measures on it."""
+
+    position: int  # index into the planned section's members list
+    start: int  # first bar
+    end: int  # one past the last bar, trailing bars included
+    analysed_end: int  # one past the last bar the vote, ring and riff test read
+    silent: bool  # no instrument, the empty outro or nothing analysed: printed all rest (rule 7)
+    vote: VoteResult | None = None
+    confidence: float = 0.0
+    repeat: float = 0.0
+    explained: float = 0.0
+    chance_p: float | None = None
+    density: float | None = None
+    uncertain: bool = True
+    entropy: float | None = None
+    single_share: float | None = None
+    riff_onsets: int | None = None
+    pitch_change: float | None = None
+    riff: bool = False
+    rings: bool = True
+    ring_decay_db: float | None = None
 
 
 def _onset_chroma_at_riff_rate(y: np.ndarray, sr: int, times: np.ndarray) -> np.ndarray:
@@ -98,6 +130,180 @@ def _splice(base: Onsets, pieces: list[Onsets]) -> tuple[Onsets, np.ndarray]:
 def _read_mono(path: Path) -> tuple[np.ndarray, int]:
     data, sr = sf.read(str(path), dtype="float32", always_2d=True)
     return data.mean(axis=1), int(sr)
+
+
+def _member_spans(section: PlannedSection, grid: Grid) -> list[tuple[int, int]]:
+    """Each member grid section's bar range; a section with no members list is its own single member."""
+    spans = [(grid.sections[m].start_bar, grid.sections[m].end_bar) for m in section.members]
+    return spans or [(section.start_bar, section.end_bar)]
+
+
+def _quantise_window(bar: Bar, slots: int) -> tuple[float, float]:
+    """The time window `quantise_bar` reads for a bar: shifted back by half a slot."""
+    width = (bar.end - bar.start) / slots
+    return bar.start - width / 2, bar.end - width / 2
+
+
+def _onset_bars(times: np.ndarray, bars: Sequence[Bar], slots: int) -> np.ndarray:
+    """The bar whose quantise window holds each onset (the later bar where two windows meet), else -1."""
+    out = np.full(len(times), -1)
+    for b, bar in enumerate(bars):
+        lo, hi = _quantise_window(bar, slots)
+        out[(times >= lo) & (times < hi)] = b
+    return out
+
+
+def _stroke_decays(
+    y: np.ndarray, sr: int, times: np.ndarray, onset_bar: np.ndarray, bars: Sequence[Bar], slots: int
+) -> list[float | None]:
+    """Each onset's decay in its first slot (spec 4.4), the next onset of the song bounding it."""
+    decays: list[float | None] = []
+    for i, t in enumerate(times):
+        b = int(onset_bar[i])
+        if b < 0:
+            decays.append(None)
+            continue
+        following = float(times[i + 1]) if i + 1 < len(times) else None
+        slot_seconds = (bars[b].end - bars[b].start) / slots
+        decays.append(stroke_decay_db(y, sr, float(t), following, slot_seconds))
+    return decays
+
+
+def _slot_onsets(times: np.ndarray, muted: np.ndarray, bar: Bar, slots: int) -> list[int | None]:
+    """The onset each cell of `quantise_bar(...)` took its class from; None for a rest.
+
+    The same window, rounding and precedence as `quantise_bar` (a strike beats a mute,
+    else the first onset wins), so the cells and their onsets always match.
+    """
+    lo, hi = _quantise_window(bar, slots)
+    width = (bar.end - bar.start) / slots
+    classes = ["-"] * slots
+    owners: list[int | None] = [None] * slots
+    for i in range(int(np.searchsorted(times, lo, side="left")), len(times)):
+        t, m = float(times[i]), bool(muted[i])
+        if t >= hi:
+            break
+        j = min(max(int(np.floor((t - bar.start) / width + 0.5)), 0), slots - 1)
+        if classes[j] == "-" or (classes[j] == "x" and not m):
+            classes[j] = "x" if m else "S"
+            owners[j] = i
+    return owners
+
+
+def _note_ends(times: np.ndarray, idx: np.ndarray, bars: Sequence[Bar]) -> list[float]:
+    """For each chosen onset: the next onset of the song or its bar's end, whichever is first."""
+    starts = np.array([b.start for b in bars])
+    ends = []
+    for i in idx:
+        t = float(times[i])
+        bar_end = bars[max(int(np.searchsorted(starts, t, side="right")) - 1, 0)].end
+        ends.append(min(float(times[i + 1]), bar_end) if i + 1 < len(times) else bar_end)
+    return ends
+
+
+def _vote_member(member: _Member, classes: Sequence[Sequence[StrikeClass]], slots: int, floor: float) -> None:
+    """Rule 1: the member's own vote, figures, chance test and certainty."""
+    bars = classes[member.start : member.analysed_end]
+    vote = choose_pattern(bars)
+    # a unit-2 vote is tested by its first bar, the vote's representative
+    structured, p, density = structure_test(bars, vote.vector[:slots], seed=member.start)
+    confidence, repeat, explained = member_figures(bars, vote.vector, vote.unit, slots)
+    member.vote, member.chance_p, member.density = vote, p, density
+    member.confidence, member.repeat, member.explained = confidence, repeat, explained
+    # no length term: a short member prints its own vote, greyed when the test fails (spec 4.5)
+    member.uncertain = confidence < floor or explained < EXPLAINED_BELOW or not structured
+
+
+def _ring_member(member: _Member, onset_bar: np.ndarray, decays: Sequence[float | None], mix_source: bool) -> None:
+    """Rule 4: the member rings when its strokes' median decay is low; on the full mix always."""
+    inside = np.flatnonzero((onset_bar >= member.start) & (onset_bar < member.analysed_end))
+    rings, member.ring_decay_db = section_rings([decays[i] for i in inside])
+    # drums make the mix's decay meaningless, so the sheet draws no short strokes from it
+    member.rings = True if mix_source else rings
+
+
+def _riff_inside(member: _Member, riff_times: np.ndarray, bars: Sequence[Bar]) -> np.ndarray:
+    """Mask of the detector's own onsets inside the member's analysed bars."""
+    return (riff_times >= bars[member.start].start) & (riff_times < bars[member.analysed_end - 1].end)
+
+
+def _riff_features_member(member: _Member, riff_times: np.ndarray, chroma: np.ndarray, bars: Sequence[Bar]) -> None:
+    """Rule 3, first half: 1.5's two chroma features on the member's own onsets."""
+    inside = _riff_inside(member, riff_times, bars)
+    member.entropy, member.single_share = riff_features(chroma[inside])
+    member.riff_onsets = int(np.count_nonzero(inside))
+
+
+def _riff_test(member: _Member, track: PitchTrack, riff_times: np.ndarray, bars: Sequence[Bar]) -> None:
+    """Rule 3, second half, for a member whose chroma features pass: the pitch must also change.
+
+    Only such members are named, so a section's share never depends on whether another
+    section happened to start the pitch tracker.
+    """
+    idx = np.flatnonzero(_riff_inside(member, riff_times, bars))
+    notes = name_notes(track, riff_times[idx], _note_ends(riff_times, idx, bars))
+    member.pitch_change = pitch_change_share(notes)
+    member.riff = member.pitch_change is not None and member.pitch_change >= PITCH_CHANGE_MIN
+
+
+def _prints_section(member: _Member, longest: _Member, slots: int) -> bool:
+    """Rule 5: the member prints its section's (the longest member's) pattern rather than its own."""
+    if member is longest:
+        return True
+    if longest.silent:
+        return False
+    return first_bar_agreement(member.vote.vector, longest.vote.vector, slots) >= MEMBER_AGREE
+
+
+def _section_pattern(k: int, longest: _Member, slots: int, meter: Meter, boosted: bool) -> SectionPattern:
+    """Rule 2: the planned section's pattern is its longest member's, or 1.5's all-rest record."""
+    if longest.silent:
+        return SectionPattern(
+            section=k, slots=["-"] * slots, confidence=0.0, bar_repeat=0.0,
+            uncertain=True, no_instrument=True, inherited_from=None,
+        )
+    vote = longest.vote
+    return SectionPattern(
+        section=k, slots=render_directions(vote.vector[:slots], slots, meter),
+        confidence=longest.confidence, bar_repeat=longest.repeat, uncertain=longest.uncertain,
+        no_instrument=False, inherited_from=None, explained=longest.explained, recall_boost=boosted,
+        chance_p=longest.chance_p, strike_density=longest.density,
+        riff=longest.riff, riff_entropy=longest.entropy, riff_single_share=longest.single_share,
+        riff_onsets=longest.riff_onsets,
+        candidate=vote.candidate, score_majority=vote.score_majority, score_medoid=vote.score_medoid,
+        unit=vote.unit, pitch_change_share=longest.pitch_change,
+        rings=longest.rings, ring_decay_db=longest.ring_decay_db,
+    )
+
+
+def _bar_records(
+    member: _Member, longest: _Member, slots: int, meter: Meter, rendered: Sequence[Sequence[str]],
+    owners: Callable[[int], list[int | None]], decays: Sequence[float | None],
+) -> list[BarStrums]:
+    """Rules 5 to 7: one record per bar of the member, trailing bars included."""
+    if member.silent:
+        return [
+            BarStrums(index=b, member=member.position, strokes=[], pattern=["-"] * slots, uncertain=True)
+            for b in range(member.start, member.end)
+        ]
+    shown = longest if _prints_section(member, longest, slots) else member
+    records = []
+    for b in range(member.start, member.end):
+        cell = vector_bar(shown.vote.vector, shown.vote.unit, slots, b - member.start)
+        strokes = [
+            Stroke(slot=j, kind=rendered[b][j], rings=member.rings, decay_db=decays[i])
+            for j, i in enumerate(owners(b))
+            if i is not None
+        ]
+        records.append(
+            BarStrums(
+                index=b, member=member.position, strokes=strokes,
+                pattern=render_directions(cell, slots, meter), unit=shown.vote.unit,
+                confidence=shown.confidence, chance_p=shown.chance_p, uncertain=shown.uncertain,
+                riff=member.riff,
+            )
+        )
+    return records
 
 
 class StrumsStage(Stage):
@@ -193,70 +399,64 @@ class StrumsStage(Stage):
 
         # the confidence floor depends on the grid (spec 4.2; the evidence is beside the constants)
         confidence_floor = UNCERTAIN_BELOW if eighths else UNCERTAIN_BELOW_SIXTEENTH
-        patterns: list[SectionPattern | None] = [None] * len(plan)
-        short: list[int] = []
+        rendered = [render_directions(c, slots, meter) for c in classes]
         # a trimmed last section with no chord and no strike has nothing to strum (spec 3.5): it is
-        # marked, not inherited from its neighbour
+        # marked all rest, not given a pattern
         last_bars = range(last_sec.start_bar, last_sec.end_bar - drop)
         empty_outro = (
             not any(_bar_has_chord(chords, bars[b]) for b in last_bars)
-            and not any(d != "-" for b in last_bars for d in render_directions(classes[b], slots, meter))
+            and not any(d != "-" for b in last_bars for d in rendered[b])
         )
-        # the riff marker (spec 4.3): one constant-Q pass over the whole source, read per section.
+
+        def new_member(position: int, start: int, end: int) -> _Member:
+            trimmed = end - (drop if end == last_sec.end_bar else 0)
+            if trimmed <= start or (end == last_sec.end_bar and empty_outro):
+                return _Member(position, start, end, trimmed, silent=True)
+            a, b = int(round(bars[start].start * sr)), int(round(bars[trimmed - 1].end * sr))
+            return _Member(position, start, end, trimmed, silent=not section_has_instrument(y[a:b], mix[a:b]))
+
+        # every planned section votes per member (spec 4.3); its own figures are its longest member's
+        sections: list[list[_Member]] = []
+        longest: list[_Member] = []
+        for k, sec in enumerate(plan):
+            spans = _member_spans(sec, grid)
+            sections.append([new_member(p, s, e) for p, (s, e) in enumerate(spans)])
+            longest.append(sections[k][spans.index(members[k])])
+        voiced = [m for sec in sections for m in sec if not m.silent]
+
+        # the riff marker (spec 4.3): one constant-Q pass over the whole source, read per member.
         # It reads the detector's own onsets, before the recall gate: the thresholds were measured
         # on those, and the gate's percussive additions would move the features.
         riff_times = today.times
-        chroma = (
-            _onset_chroma_at_riff_rate(y, sr, riff_times) if any(has_instrument) else np.zeros((0, 12))
+        chroma = _onset_chroma_at_riff_rate(y, sr, riff_times) if voiced else np.zeros((0, 12))
+        # the ring flag (spec 4.4) reads every stroke the sheet prints: the onsets after the gate
+        onset_bar = _onset_bars(onsets.times, bars, slots)
+        decays = _stroke_decays(y, sr, onsets.times, onset_bar, bars, slots)
+        for m in voiced:
+            _vote_member(m, classes, slots, confidence_floor)
+            _ring_member(m, onset_bar, decays, mix_source=source == "mix")
+            _riff_features_member(m, riff_times, chroma, bars)
+        # the pitch tracker runs over the whole stem, so at most once, and only when needed (spec 5.1)
+        candidates = [m for m in voiced if is_riff(m.entropy, m.single_share)]
+        if candidates:
+            track = track_pitch(y, sr)
+            for m in candidates:
+                _riff_test(m, track, riff_times, bars)
+
+        patterns = [_section_pattern(k, longest[k], slots, meter, boosted[k]) for k in range(len(plan))]
+
+        def owners(b: int) -> list[int | None]:
+            return _slot_onsets(onsets.times, muted, bars[b], slots)
+
+        bar_records = sorted(
+            (
+                record
+                for k, sec in enumerate(sections)
+                for m in sec
+                for record in _bar_records(m, longest[k], slots, meter, rendered, owners, decays)
+            ),
+            key=lambda r: r.index,
         )
-        for i in range(len(plan)):
-            if not has_instrument[i] or (ends_song(i) and empty_outro):
-                patterns[i] = SectionPattern(
-                    section=i, slots=["-"] * slots, confidence=0.0, bar_repeat=0.0,
-                    uncertain=True, no_instrument=True, inherited_from=None,
-                )
-                continue
-            start, end = first_bar(i), analysed_end(i)
-            section_classes = classes[start:end]
-            rendered, confidence, repeat, explained = section_summary(section_classes, slots, meter)
-            # the vote the section prints, as strike classes; the seed makes a re-run identical
-            structured, p, density = structure_test(section_classes, _topped_vote(section_classes), seed=start)
-            inside = (riff_times >= bars[start].start) & (riff_times < bars[end - 1].end)
-            entropy, single_share = riff_features(chroma[inside])
-            long_enough = end - start >= MIN_SECTION_BARS
-            patterns[i] = SectionPattern(
-                section=i, slots=rendered, confidence=confidence, bar_repeat=repeat,
-                uncertain=(
-                    confidence < confidence_floor or explained < EXPLAINED_BELOW
-                    or not long_enough or not structured
-                ),
-                no_instrument=False, inherited_from=None, explained=explained, recall_boost=boosted[i],
-                chance_p=p, strike_density=density,
-                riff=is_riff(entropy, single_share), riff_entropy=entropy, riff_single_share=single_share,
-                riff_onsets=int(np.count_nonzero(inside)),
-            )
-            if not long_enough:
-                short.append(i)
-
-        def donor(j: int) -> bool:
-            if not 0 <= j < len(plan) or j in short:
-                return False
-            return not patterns[j].no_instrument
-
-        for i in short:
-            neighbours = [j for j in (i - 1, i + 1) if donor(j)]
-            if not neighbours:
-                continue  # keeps its own majority vector, already uncertain
-            j = max(neighbours, key=lambda k: plan[k].end_bar - plan[k].start_bar)
-            src = patterns[j]
-            # only the donor's slots and figures are copied: the donor's chance test and riff
-            # features describe the donor's bars, and this section's own measured ones are
-            # discarded with them, since a section this short gives too few bars to judge
-            patterns[i] = SectionPattern(
-                section=i, slots=list(src.slots), confidence=src.confidence, bar_repeat=src.bar_repeat,
-                uncertain=True, no_instrument=False, inherited_from=j, explained=src.explained,
-                recall_boost=boosted[i],  # this section's own onsets, though the slots are the donor's
-            )
 
         uncertain = fit < STAGE_UNCERTAIN_GRID_FIT
         ctx.log(f"  source {source} (ratio {source_ratio:.2f}), {slots} slots per bar, grid fit {fit:.2f}")
@@ -271,10 +471,12 @@ class StrumsStage(Stage):
         save_model(
             ctx.output("strums/strums.json"),
             Strums(
+                schema_version=STRUMS_SCHEMA,
                 slots_per_bar=slots, source=source, source_ratio=source_ratio, grid_fit=fit,
                 uncertain=uncertain, patterns=patterns,
-                bar_onsets=[render_directions(c, slots, meter) for c in classes],
+                bar_onsets=rendered,
                 plan=plan,
+                bars=bar_records,
             ),
         )
         ctx.note("source", source)

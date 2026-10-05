@@ -21,7 +21,9 @@ UNCERTAIN_BELOW = 0.45  # on the eighth-note grid, a section pattern with lower 
 # and Fame 47 to 61 at 0.552, and 0.53 is centred between them and flips nothing. The earlier reason
 # for 0.55, rejecting random sprays, is now the chance test's job (spec 1.5, section 4.1).
 UNCERTAIN_BELOW_SIXTEENTH = 0.53
-MIN_SECTION_BARS = 4  # shorter sections inherit a neighbour's pattern
+# Shorter sections inherited a neighbour's pattern up to 1.5; 1.6 votes them on their own bars
+# (spec 4.5). Kept for the evaluate text of 1.5 files.
+MIN_SECTION_BARS = 4
 STAGE_UNCERTAIN_GRID_FIT = 0.6  # the whole stage is uncertain below this grid fit
 STRIKE_SHARE = 1 / 3  # a slot struck in more than this share of a section's bars is kept
 DENSITY_FLOOR = 0.6  # the pattern keeps at least this share of the median strikes per bar

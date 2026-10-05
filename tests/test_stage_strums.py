@@ -9,9 +9,13 @@ import soundfile as sf
 
 from youkelele.jsonio import load_model, save_model
 from youkelele.layout import RunLayout
+from youkelele.music.as_played import CHANCE_ALPHA
 from youkelele.music.onsets import Onsets
+import youkelele.music.pitch as pitch_module
+from youkelele.music.pitch import PITCH_CHANGE_MIN, PitchTrack
 from youkelele.music.recall import HIGH_BAND_FMIN
 from youkelele.music.riff import is_riff, riff_features
+from youkelele.music.ring import RING_SECTION_DB
 from youkelele.options import RunOptions
 from youkelele.schemas import Bar, ChordEvent, Chords, Grid, Key, Meter, Section, Strums
 from youkelele.stage import StageContext
@@ -21,6 +25,25 @@ from youkelele.stages.strums import StrumsStage
 SR = 8000
 BAR_SECONDS = 2.0  # 4/4 at 120 bpm
 ISLAND = (0, 2, 3, 5, 6, 7)
+
+
+@pytest.fixture(autouse=True)
+def _quick_pitch(request, monkeypatch):
+    """Skip pyin (seconds per run) unless the test asks for `real_pitch`.
+
+    The test tones are single sines, so nearly every run passes the chroma features and
+    would start the pitch tracker; the stub names no note, so no section is a riff.
+    """
+    if "real_pitch" not in request.fixturenames:
+        monkeypatch.setattr(
+            strums_module, "track_pitch", lambda y, sr: PitchTrack(times=np.zeros(0), midi=np.zeros(0))
+        )
+
+
+@pytest.fixture
+def real_pitch():
+    """The real pitch tracker (librosa pyin) for the tests about the riff flag."""
+    return pitch_module.track_pitch
 
 
 def _grid(section_bars: Sequence[int], numerator: int = 4) -> Grid:
@@ -191,8 +214,10 @@ def test_strums_stage_flags_no_instrument_section(tmp_path):
     assert second.uncertain
 
 
-def test_strums_stage_short_section_inherits_and_is_uncertain(tmp_path):
-    # sections: 4 bars island, 2 bars of downbeats only, 6 bars of straight eighths
+def test_strums_stage_short_section_keeps_its_own_vote_and_is_uncertain(tmp_path):
+    # sections: 4 bars island, 2 bars of downbeats only, 6 bars of straight eighths.
+    # Spec 4.5 (1.6): a short section no longer inherits a neighbour's pattern; it prints its
+    # own vote, greyed when the chance test cannot pass (two one-strike bars: p near 0.13)
     times = (
         [t for b in range(4) for t in _bar_times(b, ISLAND)]
         + [t for b in range(4, 6) for t in _bar_times(b, (0,))]
@@ -203,19 +228,22 @@ def test_strums_stage_short_section_inherits_and_is_uncertain(tmp_path):
     assert "".join(first.slots) == "D-DU-UDU"
     assert first.inherited_from is None
     assert "".join(last.slots) == "DUDUDUDU"
-    assert short.slots == last.slots
-    assert short.inherited_from == 2
+    assert "".join(short.slots) == "D-------"
+    assert short.inherited_from is None
     assert short.uncertain
     assert not short.no_instrument
     assert "".join(strums.bar_onsets[4]) == "D-------"
 
 
-def test_strums_stage_short_section_without_long_neighbour_uses_its_own_vector(tmp_path):
+def test_strums_stage_short_sections_use_their_own_vector_and_the_chance_test(tmp_path):
+    # spec 4.5 (1.6): no section inherits and length alone does not grey a pattern; the
+    # chance test decides (two identical island bars already pass it at p near 0.036)
     strums, _, _ = _run(tmp_path, _grid([2, 3]), _detector(_island(5)))
     for p in strums.patterns:
         assert "".join(p.slots) == "D-DU-UDU"
         assert p.inherited_from is None
-        assert p.uncertain
+        assert p.chance_p is not None
+        assert p.uncertain == (p.chance_p > CHANCE_ALPHA)
 
 
 def test_strums_stage_passes_grid_bpm_to_slot_choice(tmp_path):
@@ -267,14 +295,14 @@ def test_strums_stage_marks_stage_uncertain_on_poor_grid_fit(tmp_path):
 
 
 def _with_explained(monkeypatch, explained_for_bars):
-    """Run the real section summary but replace its explained figure by section length."""
-    real = strums_module.section_summary
+    """Run the real member figures but replace the explained figure by member length."""
+    real = strums_module.member_figures
 
-    def fake(bars, slots_per_bar, meter):
-        rendered, confidence, repeat, _ = real(bars, slots_per_bar, meter)
-        return rendered, confidence, repeat, explained_for_bars(len(bars))
+    def fake(bars, vector, unit, slots_per_bar):
+        confidence, repeat, _ = real(bars, vector, unit, slots_per_bar)
+        return confidence, repeat, explained_for_bars(len(bars))
 
-    monkeypatch.setattr(strums_module, "section_summary", fake)
+    monkeypatch.setattr(strums_module, "member_figures", fake)
 
 
 def test_strums_stage_records_explained_on_each_pattern(tmp_path):
@@ -303,8 +331,9 @@ def test_stage_explained_at_the_threshold_is_not_uncertain(tmp_path, monkeypatch
     assert not strums.patterns[0].uncertain
 
 
-def test_inherited_pattern_copies_explained(tmp_path, monkeypatch):
-    _with_explained(monkeypatch, lambda n: 0.7 if n == 6 else 0.2)
+def test_short_section_keeps_its_own_explained(tmp_path, monkeypatch):
+    # spec 4.5 (1.6): nothing is copied from a neighbour, the short section's figures are its own
+    _with_explained(monkeypatch, lambda n: {4: 0.2, 2: 0.4, 6: 0.7}[n])
     times = (
         [t for b in range(4) for t in _bar_times(b, ISLAND)]
         + [t for b in range(4, 6) for t in _bar_times(b, (0,))]
@@ -313,8 +342,8 @@ def test_inherited_pattern_copies_explained(tmp_path, monkeypatch):
     strums, _, _ = _run(tmp_path, _grid([4, 2, 6]), _detector(times))
     first, short, last = strums.patterns
     assert (first.explained, last.explained) == (0.2, 0.7)
-    assert short.inherited_from == 2
-    assert short.explained == 0.7
+    assert short.inherited_from is None
+    assert short.explained == 0.4
 
 
 def test_strums_stage_keeps_a_strike_played_in_half_the_bars(tmp_path):
@@ -412,14 +441,14 @@ def test_strums_stage_recall_gate_sees_only_the_music_bars(tmp_path, monkeypatch
 
 
 def _with_confidence(monkeypatch, confidence):
-    """Run the real section summary but replace its confidence; explained stays the real 1.0."""
-    real = strums_module.section_summary
+    """Run the real member figures but replace the confidence; explained stays the real 1.0."""
+    real = strums_module.member_figures
 
-    def fake(bars, slots_per_bar, meter):
-        rendered, _, repeat, explained = real(bars, slots_per_bar, meter)
-        return rendered, confidence, repeat, explained
+    def fake(bars, vector, unit, slots_per_bar):
+        _, repeat, explained = real(bars, vector, unit, slots_per_bar)
+        return confidence, repeat, explained
 
-    monkeypatch.setattr(strums_module, "section_summary", fake)
+    monkeypatch.setattr(strums_module, "member_figures", fake)
 
 
 def _sixteenths(n_bars: int) -> list[float]:
@@ -462,9 +491,10 @@ def test_no_instrument_section_is_never_gated(tmp_path, monkeypatch):
     assert seen == [0]  # only the first section, which has an instrument, reaches the gate
 
 
-def test_trimmed_last_section_under_four_bars_is_short_uncertain_and_inherited(tmp_path):
-    # the outro is 5 bars, but its last 3 come after the last chord: 2 bars are analysed, so it
-    # is short and takes the verse's pattern, as Wet Leg's one-bar outro does
+def test_trimmed_last_section_under_four_bars_votes_on_its_analysed_bars(tmp_path):
+    # the outro is 5 bars, but its last 3 come after the last chord: 2 bars are analysed.
+    # Spec 4.5 (1.6): it no longer takes the verse's pattern; it votes on its own two bars
+    # (the island, so the same slots) and the chance test decides its certainty
     grid = _grid([8, 5])
     times = _island(10) + [t for b in range(10, 13) for t in _bar_times(b, range(8))]
     strums, _, _ = _run(
@@ -472,10 +502,11 @@ def test_trimmed_last_section_under_four_bars_is_short_uncertain_and_inherited(t
     )
     verse, outro = strums.patterns
     assert not verse.uncertain and verse.inherited_from is None
-    assert outro.inherited_from == 0
-    assert outro.uncertain
+    assert outro.inherited_from is None
     assert not outro.no_instrument
-    assert outro.slots == verse.slots
+    assert outro.slots == verse.slots  # the trailing dense bars are not in its vote
+    assert outro.strike_density == 0.75
+    assert outro.uncertain == (outro.chance_p > CHANCE_ALPHA)
 
 
 def test_strums_stage_logs_nothing_about_trailing_bars_when_none_dropped(tmp_path):
@@ -505,12 +536,15 @@ def test_trimmed_all_n_outro_is_no_instrument(tmp_path):
     assert not verse.no_instrument
 
 
-def test_trimmed_n_outro_with_a_strike_is_still_inherited(tmp_path):
+def test_trimmed_n_outro_with_a_strike_prints_its_own_vote_greyed(tmp_path):
+    # spec 4.5 (1.6): the one analysed bar votes its own pattern; one bar cannot pass the
+    # chance test, so it prints greyed rather than taking the verse's pattern
     grid, times, chords = _wet_leg_outro(strike_in_outro=True)
     strums, _, _ = _run(tmp_path / "struck", grid, _detector(times), chords=chords)
     outro = strums.patterns[1]
     assert not outro.no_instrument
-    assert outro.inherited_from == 0
+    assert outro.inherited_from is None
+    assert "".join(outro.slots) == "D---D---"
     assert outro.uncertain
 
 
@@ -605,14 +639,16 @@ def test_full_vote_below_the_density_floor_is_uncertain(tmp_path):
     assert pattern.uncertain
 
 
-def test_riff_flag_and_features_are_recorded_per_section(tmp_path):
+def test_riff_flag_and_features_are_recorded_per_section(tmp_path, real_pitch):
     times = _island(16)
     seconds = 16 * BAR_SECONDS
     half = len(times) // 2
     g7 = [196.0, 246.9, 293.7, 349.2]  # four pitch classes, no doubled root
+    # a line moving G, A, B flat (1.6 also needs the pitch to change, spec 5.1)
+    line = [[(196.0, 220.0, 233.1)[i % 3]] for i in range(half)]
     # each half is scaled on its own, so the single notes are as loud as the chords
     single_notes_then_chords = (
-        _notes([[196.0]] * half, times[:half], seconds) + _notes([g7] * half, times[half:], seconds)
+        _notes(line, times[:half], seconds) + _notes([g7] * half, times[half:], seconds)
     )
     strums, _, _ = _run_notes(
         tmp_path, _grid([8, 8]), _detector(times), other=single_notes_then_chords, mix_amp=0.1
@@ -620,11 +656,12 @@ def test_riff_flag_and_features_are_recorded_per_section(tmp_path):
     assert not any(p.no_instrument for p in strums.patterns)
     riff, strum = strums.patterns
     assert riff.riff and not strum.riff
+    assert riff.pitch_change_share >= PITCH_CHANGE_MIN and strum.pitch_change_share is None
     assert riff.riff_entropy is not None and riff.riff_single_share is not None
     assert strum.riff_entropy is not None and strum.riff_entropy > riff.riff_entropy
 
 
-def test_riff_features_rest_on_the_detectors_own_onsets_not_the_recall_gates(tmp_path):
+def test_riff_features_rest_on_the_detectors_own_onsets_not_the_recall_gates(tmp_path, real_pitch):
     # the detector hears single notes on slots 0 and 4; the high band adds chords on 2, 5 and 6,
     # which the gate accepts (2 -> 5 strikes per bar). Read over the spliced list the chords
     # would be the majority and the section would lose its riff flag (spec 4.3).
@@ -648,8 +685,10 @@ def test_riff_features_rest_on_the_detectors_own_onsets_not_the_recall_gates(tmp
     spliced = riff_features(strums_module._onset_chroma_at_riff_rate(y, sr, np.asarray(sorted(own + gate))))
     assert not is_riff(*spliced)  # the post-gate list would hide the riff
     assert (pattern.riff_entropy, pattern.riff_single_share) == pytest.approx(expected)
-    assert pattern.riff and is_riff(*expected)
+    assert is_riff(*expected)
     assert pattern.riff_onsets == len(own)
+    # spec 5.1 (1.6): the features pass, but one repeated short note names no pitch change
+    assert not pattern.riff and pattern.pitch_change_share is None
 
 
 def test_riff_onsets_count_only_the_longest_members_bars(tmp_path):
@@ -666,7 +705,9 @@ def test_no_instrument_section_has_no_riff_features_and_no_p(tmp_path):
     assert (silent.riff_single_share, silent.strike_density, silent.riff_onsets) == (None, None, None)
 
 
-def test_inherited_section_has_no_riff_features_and_no_p(tmp_path):
+def test_short_section_records_its_own_riff_features_and_p(tmp_path):
+    # spec 4.5 (1.6): nothing is inherited, so a short section's chance test and riff
+    # features describe its own bars
     times = (
         [t for b in range(4) for t in _bar_times(b, ISLAND)]
         + [t for b in range(4, 6) for t in _bar_times(b, (0,))]
@@ -674,9 +715,9 @@ def test_inherited_section_has_no_riff_features_and_no_p(tmp_path):
     )
     strums, _, _ = _run_notes(tmp_path, _grid([4, 2, 6]), _detector(times))
     short = strums.patterns[1]
-    assert short.inherited_from == 2
-    assert (short.riff, short.riff_entropy, short.riff_single_share) == (False, None, None)
-    assert (short.chance_p, short.strike_density, short.riff_onsets) == (None, None, None)
+    assert short.inherited_from is None
+    assert short.riff_entropy is not None and short.riff_single_share is not None
+    assert short.chance_p is not None and short.strike_density == 0.125 and short.riff_onsets == 2
     assert strums.patterns[2].strike_density == 1.0
 
 
@@ -693,4 +734,192 @@ def test_manifest_notes_no_merge_and_no_one_loop_line(tmp_path):
     assert [p.members for p in strums.plan] == [[0], [1]]
     assert notes["merged"] == "none" and notes["one_loop"] == "0.50"
     assert not any("share their chords" in line for line in lines)
+
+
+# version 1.6: per-member votes, a record for every bar, the ring flag and the riff test
+# (spec 4.1 to 4.5 and 5.1)
+
+RINGING_TAU = 1.0  # seconds: about 2 dB lost per slot, well under RING_SECTION_DB
+MUTED_TAU = 0.02  # seconds: the burst is gone within a slot
+
+
+def _bar_patterns_times(bar_patterns: Sequence[str], first_bar: int = 0) -> list[float]:
+    """Onset times, one per `S` cell of each bar's pattern string, from `first_bar` on."""
+    return [
+        t
+        for b, pattern in enumerate(bar_patterns, start=first_bar)
+        for t in _bar_times(b, [j for j, c in enumerate(pattern) if c == "S"], n_slots=len(pattern))
+    ]
+
+
+def _bursts_bars(
+    bar_patterns: Sequence[str], bar_seconds: float = BAR_SECONDS, tau: float = RINGING_TAU,
+    freqs: Sequence[float] = (220.0,),
+) -> np.ndarray:
+    """One decaying sine burst per `S` cell, each cut where the next begins (a new stroke damps the last).
+
+    `tau` is the decay time constant in seconds; the bursts take `freqs` in turn, one per burst.
+    """
+    y = np.zeros(int(round(len(bar_patterns) * bar_seconds * SR)))
+    starts = [
+        int(round((b + j / len(pattern)) * bar_seconds * SR))
+        for b, pattern in enumerate(bar_patterns)
+        for j, c in enumerate(pattern)
+        if c == "S"
+    ]
+    for i, start in enumerate(starts):
+        stop = starts[i + 1] if i + 1 < len(starts) else len(y)
+        t = np.arange(stop - start) / SR
+        y[start:stop] = 0.5 * np.exp(-t / tau) * np.sin(2 * np.pi * freqs[i % len(freqs)] * t)
+    return y
+
+
+def _bursts(pattern: str, bars: int, bar_seconds: float = BAR_SECONDS, tau: float = RINGING_TAU) -> np.ndarray:
+    """`bars` bars of the same pattern of 220 Hz bursts decaying with time constant `tau`."""
+    return _bursts_bars([pattern] * bars, bar_seconds, tau)
+
+
+def _midi_hz(midi: int) -> float:
+    return 440.0 * 2 ** ((midi - 69) / 12)
+
+
+def _run_bursts(tmp_path, grid, bar_patterns: Sequence[str], stem: np.ndarray, chords=None) -> Strums:
+    strums, _, _ = _run(
+        tmp_path, grid, _detector(_bar_patterns_times(bar_patterns)), other=stem, mix_amp=0.1, chords=chords
+    )
+    return strums
+
+
+def test_bars_record_every_bar_with_its_pattern_and_strokes(tmp_path):
+    s = _run_bursts(tmp_path, _grid([8]), ["S-S-S-SS"] * 8, _bursts("S-S-S-SS", 8, tau=RINGING_TAU))
+    assert s.source == "other_stem"
+    assert s.schema_version == 2 and len(s.bars) == 8
+    assert [b.index for b in s.bars] == list(range(8))
+    assert all(b.pattern == list("D-D-D-DU") for b in s.bars) and all(b.member == 0 for b in s.bars)
+    assert [k.slot for k in s.bars[0].strokes] == [0, 2, 4, 6, 7] and all(k.rings for k in s.bars[0].strokes)
+    assert [k.kind for k in s.bars[0].strokes] == ["D", "D", "D", "D", "U"]
+    # strokes two slots apart are measured; the next stroke one slot later cuts the last two short
+    assert all(k.decay_db is not None and k.decay_db < RING_SECTION_DB for k in s.bars[0].strokes[:3])
+    assert all(k.decay_db is None for k in s.bars[0].strokes[3:])
+    assert s.patterns[0].candidate == "majority" and s.patterns[0].unit == 1 and s.patterns[0].rings is True
+    assert s.patterns[0].ring_decay_db < RING_SECTION_DB and s.patterns[0].inherited_from is None
+    assert not any(b.uncertain for b in s.bars) and not s.patterns[0].uncertain
+
+
+def test_muted_playing_marks_the_section_short(tmp_path):
+    s = _run_bursts(tmp_path, _grid([8]), ["S-S-S-SS"] * 8, _bursts("S-S-S-SS", 8, tau=MUTED_TAU))
+    assert s.source == "other_stem"
+    assert s.patterns[0].rings is False and all(not k.rings for k in s.bars[0].strokes)
+    assert s.patterns[0].ring_decay_db > RING_SECTION_DB
+    assert all(b.pattern == list("D-D-D-DU") for b in s.bars)
+
+
+# a four-bar fragment whose vote is the downbeat alone (S-------) but whose bars each add a
+# stray strike: four identical one-strike bars would pass the chance test (p near 0.004)
+STRAY_FRAGMENT = ["S--S----", "S----S--", "SS------", "S-----S-"]
+
+
+def test_member_prints_its_own_pattern_when_it_disagrees(tmp_path):
+    # grid sections: verse 8 bars S-S-S-SS, verse 4 bars voting S------- (a fragment, same
+    # chords, merges); the fragment's own vote agrees 0.2 with the section's, under MEMBER_AGREE
+    grid = _labelled_grid([("verse", 8), ("verse", 4)])
+    bar_patterns = ["S-S-S-SS"] * 8 + STRAY_FRAGMENT
+    s = _run_bursts(tmp_path, grid, bar_patterns, _bursts_bars(bar_patterns))
+    merged = s.plan[0]
+    assert merged.members == [0, 1] and len(s.patterns) == 1 and len(s.bars) == 12
+    assert s.patterns[0].slots == list("D-D-D-DU") and not s.patterns[0].uncertain
+    assert all(b.pattern == list("D-D-D-DU") for b in s.bars[:8]) and not any(b.uncertain for b in s.bars[:8])
+    assert all(b.pattern == list("D-------") for b in s.bars[8:12]) and all(b.uncertain for b in s.bars[8:12])
+    assert [b.member for b in s.bars] == [0] * 8 + [1] * 4
+    # the strokes are still every detected strike of the bar, the stray ones included
+    assert [k.slot for k in s.bars[8].strokes] == [0, 3]
+
+
+def test_member_prints_the_sections_pattern_when_it_agrees(tmp_path):
+    # the fragment plays S-S-S-S- (agreement with S-S-S-SS is 0.8)
+    grid = _labelled_grid([("verse", 8), ("verse", 4)])
+    bar_patterns = ["S-S-S-SS"] * 8 + ["S-S-S-S-"] * 4
+    s = _run_bursts(tmp_path, grid, bar_patterns, _bursts_bars(bar_patterns))
+    assert s.plan[0].members == [0, 1]
+    assert all(b.pattern == list("D-D-D-DU") for b in s.bars[8:12])
+    assert all(b.member == 1 and b.uncertain == s.patterns[0].uncertain for b in s.bars[8:12])
+    assert [k.slot for k in s.bars[8].strokes] == [0, 2, 4, 6]  # what was played, not the pattern
+
+
+def test_short_section_keeps_its_own_vote_greyed_not_a_neighbours(tmp_path):
+    # sections of 8, 2 and 8 bars with different chords (no merge): the 2-bar one is uncertain
+    # and keeps its own slots (spec 4.5)
+    grid = _grid([8, 2, 8])
+    bar_patterns = ["S-S-S-SS"] * 8 + ["S-------"] * 2 + ["SSSSSSSS"] * 8
+    chords = _chords(grid, (0, 8, "C"), (8, 10, "G"), (10, 18, "F"))
+    s = _run_bursts(tmp_path, grid, bar_patterns, _bursts_bars(bar_patterns), chords=chords)
+    assert len(s.plan) == 3
+    assert s.patterns[1].inherited_from is None and s.patterns[1].uncertain and s.patterns[1].slots != s.patterns[0].slots
+    assert s.patterns[1].slots == list("D-------")
+    assert all(b.pattern == list("D-------") and b.uncertain for b in s.bars[8:10])
+
+
+def test_riff_flag_needs_the_pitch_change_share(tmp_path, monkeypatch, real_pitch):
+    # guitar stem: bursts of ONE pitch per section (a power-chord root) versus a line moving
+    # through MIDI 60, 62 and 63; both pass the 1.5 chroma features
+    calls: list[int] = []
+
+    def counting(y, sr):
+        calls.append(sr)
+        return real_pitch(y, sr)
+
+    monkeypatch.setattr(strums_module, "track_pitch", counting)
+    grid = _grid([8, 8])
+    chords = _chords(grid, (0, 8, "C"), (8, 16, "G"))
+    root = _bursts_bars(["S-S-S-SS"] * 8, freqs=(_midi_hz(45),))
+    line = _bursts_bars(["S-S-S-SS"] * 8, freqs=tuple(_midi_hz(m) for m in (60, 62, 63)))
+    s = _run_bursts(tmp_path, grid, ["S-S-S-SS"] * 16, np.concatenate([root, line]), chords=chords)
+    assert is_riff(s.patterns[0].riff_entropy, s.patterns[0].riff_single_share)
+    assert s.patterns[0].riff is False and s.patterns[0].pitch_change_share == 0.0
+    assert s.patterns[1].riff is True and s.patterns[1].pitch_change_share >= PITCH_CHANGE_MIN
+    assert not any(b.riff for b in s.bars[:8]) and all(b.riff for b in s.bars[8:])
+    assert len(calls) == 1  # one pitch track for the whole song
+
+
+def test_pitch_is_not_tracked_when_no_member_passes_the_chroma_features(tmp_path, monkeypatch):
+    monkeypatch.setattr(strums_module, "track_pitch", lambda y, sr: pytest.fail("pitch tracked"))
+    times = _island(8)
+    g7 = [196.0, 246.9, 293.7, 349.2]
+    s, _, _ = _run_notes(tmp_path, _grid([8]), _detector(times), other=_notes([g7] * len(times), times, 16.0), mix_amp=0.1)
+    assert not s.patterns[0].riff and s.patterns[0].pitch_change_share is None
+
+
+def test_single_bar_and_all_rest_members_do_not_raise(tmp_path):
+    # a 1-bar section and a silent section both produce bars records, with an own or an
+    # all-rest pattern and uncertain True
+    grid = _grid([8, 1, 8])
+    bar_patterns = ["S-S-S-SS"] * 8 + ["S---S---"] + ["--------"] * 8
+    chords = _chords(grid, (0, 8, "C"), (8, 9, "G"), (9, 17, "F"))
+    stem = _bursts_bars(bar_patterns, tau=0.2)
+    s = _run_bursts(tmp_path, grid, bar_patterns, stem, chords=chords)
+    assert len(s.bars) == 17 and [b.index for b in s.bars] == list(range(17))
+    one = s.bars[8]
+    assert one.pattern == list("D---D---") and one.uncertain and [k.slot for k in one.strokes] == [0, 4]
+    assert s.patterns[1].uncertain and s.patterns[1].inherited_from is None
+    assert s.patterns[2].no_instrument
+    assert all(b.pattern == ["-"] * 8 and b.uncertain and b.strokes == [] and not b.riff for b in s.bars[9:])
+
+
+def test_mix_source_marks_every_section_ringing(tmp_path):
+    # spec 4.4: on the full mix the decay is meaningless, so every section rings
+    times = _bar_patterns_times(["S-S-S-SS"] * 8)
+    s, _, _ = _run(tmp_path, _grid([8]), _detector(times), guitar_amp=0.0, other_amp=0.0)
+    assert s.source == "mix"
+    assert s.patterns[0].rings is True and all(k.rings for b in s.bars for k in b.strokes)
+
+
+def test_unit_two_member_prints_alternating_bars(tmp_path):
+    # bars alternate between two distinct figures: the vote's unit is two bars and each bar
+    # prints the matching half
+    bar_patterns = ["S-S-S-S-", "SS-SS-SS"] * 4
+    s = _run_bursts(tmp_path, _grid([8]), bar_patterns, _bursts_bars(bar_patterns))
+    assert s.patterns[0].unit == 2 and s.patterns[0].slots == list("D-D-D-D-")
+    assert [b.pattern for b in s.bars[:2]] == [list("D-D-D-D-"), list("DU-UD-DU")]
+    assert all(b.unit == 2 for b in s.bars)
+    assert s.patterns[0].confidence == 1.0
 
