@@ -12,6 +12,7 @@ from youkelele.schemas import (
     ScoreChord,
     ScoreSection,
     Shape,
+    TabNote,
 )
 
 ISLAND = list("D-DU-UDU")
@@ -148,6 +149,31 @@ def test_alphatex_capo_artist_and_quote_escaping():
     assert '\\title "Say \\"Hi\\""' in text
     assert "\\artist" not in text
     assert "\\capo 2" in text
+
+
+def test_alphatex_riff_bar_emits_fret_string_notes():
+    # C string (diagram string 1) frets 0 and 2, E string (diagram 2) fret 1, under a C chord
+    tab = [
+        TabNote(slot=0, midi=60, string=1, fret=0),
+        TabNote(slot=2, midi=62, string=1, fret=2),
+        TabNote(slot=3, midi=65, string=2, fret=1),
+    ]
+    bar = _one_bar("C", 0, "D-DU-D--").model_copy(update={"tab": tab})
+    score_with_tab = _score([_section([bar])], [ChordDiagram(name="C", shape=C)])
+    text = score_to_alphatex(score_with_tab)
+    assert "0.3" in text and "2.3" in text  # the C string is alphaTex string 3 in reversed order
+    (beat_line,) = [line for line in text.splitlines() if line.startswith(":8")]
+    expected = (
+        ':8 (0.3){ch "C" lyrics "D"} r{lyrics "-"} (2.3){lyrics "D"} (1.2){lyrics "U"} '
+        'r{lyrics "-"} r{lyrics "D"} r{lyrics "-"} r{lyrics "-"} |'
+    )
+    assert beat_line == expected
+
+
+def test_alphatex_bar_without_tab_keeps_its_chord_brushes():
+    bar = _one_bar("C", 0, ISLAND)
+    text = score_to_alphatex(_score([_section([bar])], [ChordDiagram(name="C", shape=C)]))
+    assert '(3.1 0.2 0.3 0.4){bd ch "C" lyrics "D"}' in text
 
 
 def test_alphatex_nc_bar_emits_rests_with_chord_name_on_first_beat():

@@ -1,4 +1,4 @@
-"""Score stage: merge grid, chords, strums and arrangement into score.json and alphaTex."""
+"""Score stage: merge grid, chords, strums, riffs and arrangement into score.json and alphaTex."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from youkelele.jsonio import load_model, save_model
 from youkelele.music.alphatex import score_to_alphatex
 from youkelele.music.score_builder import build_score
 from youkelele.profiles.base import Tuning
-from youkelele.schemas import Arrangement, Chords, Grid, SourceInfo, Strums
+from youkelele.schemas import Arrangement, Chords, Grid, Riffs, SourceInfo, Strums
 from youkelele.stage import Stage, StageContext
 
 
@@ -33,6 +33,7 @@ class ScoreStage(Stage):
             load_model(ctx.input("harmony/chords.json"), Chords),
             load_model(ctx.input("strums/strums.json"), Strums),
             load_model(ctx.input("arrange/arrangement.json"), Arrangement),
+            load_model(ctx.input("riff/riff.json"), Riffs),
             self.tuning,
             self.instrument_name,
         )

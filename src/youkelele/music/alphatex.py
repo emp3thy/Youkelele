@@ -1,8 +1,8 @@
-"""Render a Score as alphaTex (slash staff, per-beat direction tokens)."""
+"""Render a Score as alphaTex (slash staff, per-beat direction tokens; a riff bar's tab as notes)."""
 
 from __future__ import annotations
 
-from youkelele.schemas import ChordDiagram, Score, ScoreChord, Shape
+from youkelele.schemas import ChordDiagram, Score, ScoreBar, ScoreChord, Shape
 
 
 def _q(text: str) -> str:
@@ -47,6 +47,29 @@ def _beats(chord: ScoreChord, score: Score) -> list[str]:
     return beats
 
 
+def _tab_beats(bar: ScoreBar, score: Score) -> list[str]:
+    """A riff bar: per slot, its tab notes as `fret.string` (alphaTex strings run in reversed
+    diagram order, so diagram string 0, G, is the highest number), a rest where none starts.
+
+    The chord names and the stroke letters stay on their slots, as a chord bar has them.
+    """
+    strings = score.instrument.strings
+    names = {chord.start_slot: chord.name for chord in bar.chords}
+    letters = [slot for chord in bar.chords for slot in chord.slots]
+    tab = bar.tab or []
+    beats = []
+    for i in range(score.slots_per_bar):
+        props = []
+        if i in names:
+            props.append(f"ch {_q(names[i])}")
+        if i < len(letters):
+            props.append(f'lyrics "{letters[i]}"')
+        body = " ".join(props)
+        notes = " ".join(f"{n.fret}.{strings - n.string}" for n in tab if n.slot == i)
+        beats.append(f"({notes}){{{body}}}" if notes else f"r{{{body}}}")
+    return beats
+
+
 def score_to_alphatex(score: Score) -> str:
     lines = [f"\\title {_q(score.title)}"]
     if score.artist:
@@ -69,6 +92,9 @@ def score_to_alphatex(score: Score) -> str:
     for section in score.sections:
         lines.append(f"\\section {_q(section.label)}")
         for bar in section.bars:
-            beats = [b for chord in bar.chords for b in _beats(chord, score)]
+            if bar.tab:
+                beats = _tab_beats(bar, score)
+            else:
+                beats = [b for chord in bar.chords for b in _beats(chord, score)]
             lines.append(f"{prefix}{' '.join(beats)} |")
     return "\n".join(lines) + "\n"

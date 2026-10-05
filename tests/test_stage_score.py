@@ -15,6 +15,7 @@ from youkelele.schemas import (
     Grid,
     Key,
     Meter,
+    Riffs,
     Score,
     Section,
     SectionPattern,
@@ -28,7 +29,7 @@ from youkelele.stages.score import ScoreStage
 
 def test_score_stage_writes_both_files_and_score_validates(tmp_path):
     layout = RunLayout(
-        tmp_path / "run", ["ingest", "grid", "harmony", "strums", "arrange", "score"]
+        tmp_path / "run", ["ingest", "grid", "harmony", "strums", "riff", "arrange", "score"]
     )
     grid = Grid(
         bpm=120.0, meter=Meter(numerator=4, denominator=4),
@@ -61,6 +62,7 @@ def test_score_stage_writes_both_files_and_score_validates(tmp_path):
     for key, model in [
         ("ingest/source.json", source), ("grid/grid.json", grid), ("harmony/chords.json", chords),
         ("strums/strums.json", strums), ("arrange/arrangement.json", arrangement),
+        ("riff/riff.json", Riffs()),
     ]:
         path = layout.path(key)
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -75,6 +77,9 @@ def test_score_stage_writes_both_files_and_score_validates(tmp_path):
     score = load_model(out / "score.json", Score)
     assert score.instrument.name == "Ukulele"
     assert len(score.sections[0].bars) == 2
+    assert score.schema_version == 2
+    # a strums.json without bar records is backfilled: each bar prints its section's pattern
+    assert [k.slot for k in score.sections[0].bars[0].strokes] == [0, 2, 3, 5, 6, 7]
     text = (out / "score.alphatex").read_text(encoding="utf-8")
     assert text.startswith('\\title "Song"')
     assert "\\tuning (A4 E4 C4 G4) { hide }" in text
