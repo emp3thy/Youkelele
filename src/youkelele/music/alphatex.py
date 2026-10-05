@@ -92,7 +92,7 @@ def score_to_alphatex(score: Score) -> str:
     for section in score.sections:
         lines.append(f"\\section {_q(section.label)}")
         for bar in section.bars:
-            if bar.tab:
+            if bar.tab is not None:  # an empty tab is a riff bar of rests, not a strummed bar
                 beats = _tab_beats(bar, score)
             else:
                 beats = [b for chord in bar.chords for b in _beats(chord, score)]

@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 from youkelele.jsonio import ArtifactError
 from youkelele.music.compat import with_bars
 from youkelele.music.key import hedge_text
+from youkelele.music.members import member_spans
 from youkelele.music.phrase import NO_CHORD, aligned_starts, bar_change_bars
 from youkelele.music.relabel import default_plan, longest_member, section_plan
 from youkelele.music.trailing import trailing_silent_bars
@@ -68,16 +69,10 @@ def _plan_difference(stored: list[PlannedSection], current: list[PlannedSection]
     return "; ".join(parts) or None
 
 
-def _member_spans(section: PlannedSection, grid: Grid) -> list[tuple[int, int]]:
-    """Each member grid section's bar range; a section with no members list is its own single member."""
-    spans = [(grid.sections[m].start_bar, grid.sections[m].end_bar) for m in section.members]
-    return spans or [(section.start_bar, section.end_bar)]
-
-
 def _check_riffs_match_plan(grid: Grid, plan: list[PlannedSection], riffs: Riffs) -> None:
     """Each riff.json section must name a planned section and one of its members' spans."""
     for r in riffs.sections:
-        if not 0 <= r.section < len(plan) or (r.start_bar, r.end_bar) not in _member_spans(plan[r.section], grid):
+        if not 0 <= r.section < len(plan) or (r.start_bar, r.end_bar) not in member_spans(plan[r.section], grid):
             raise ArtifactError(
                 _RIFF_FILE, "riff.json describes sections the plan does not have; re-run from strums"
             )
@@ -207,7 +202,7 @@ def _state(pattern: SectionPattern, bars: list[ScoreBar]) -> str:
     """The section header's state phrase (spec 3.2)."""
     if pattern.no_instrument:
         return STATE_NO_INSTRUMENT
-    if any(b.tab for b in bars):
+    if any(b.tab is not None for b in bars):  # an empty list is a tab bar with no note starting in it
         return STATE_RIFF
     if pattern.riff:
         return STATE_RIFF_NOT_TRANSCRIBED
@@ -217,16 +212,12 @@ def _state(pattern: SectionPattern, bars: list[ScoreBar]) -> str:
 
 
 def _octave_shift(k: int, planned: PlannedSection, grid: Grid, riffs: Riffs) -> int:
-    """The octave shift of the printable riff on the planned section's longest member, else 0."""
+    """The octave shift the header names (spec 3.2): the longest member's when it prints tab, else
+    the first member's (by start bar) that does, so a "riff" header never lacks its shift; 0 with no tab."""
+    printed = sorted((r for r in riffs.sections if r.section == k and r.printable), key=lambda r: r.start_bar)
     span = longest_member(planned, grid)
-    return next(
-        (
-            r.octave_shift
-            for r in riffs.sections
-            if r.section == k and r.printable and (r.start_bar, r.end_bar) == span
-        ),
-        0,
-    )
+    chosen = next((r for r in printed if (r.start_bar, r.end_bar) == span), printed[0] if printed else None)
+    return chosen.octave_shift if chosen else 0
 
 
 def build_score(
@@ -313,12 +304,14 @@ def build_score(
                 chord_list.append(
                     ScoreChord(name="N.C.", diagram=-1, start_slot=0, slots=list(bar_pattern))
                 )
+            tab = tabs.get(bar_idx)
             bars.append(
                 ScoreBar(
                     index=bar_idx, chords=chord_list, pickup=grid.bars[bar_idx].pickup,
                     struck=bar_idx < len(strums.bar_onsets)
                     and any(slot != "-" for slot in strums.bar_onsets[bar_idx]),
-                    strokes=_bar_strokes(record), tab=tabs.get(bar_idx), grey=record.uncertain,
+                    # a tab bar's stroke row prints in full black (spec 3.4)
+                    strokes=_bar_strokes(record), tab=tab, grey=record.uncertain and tab is None,
                 )
             )
         sections.append(

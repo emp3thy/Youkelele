@@ -18,7 +18,7 @@ from youkelele.music.as_played import (
     eighth_grid,
     structure_test,
 )
-from youkelele.music.members import first_bar_agreement, member_figures, vector_bar
+from youkelele.music.members import first_bar_agreement, member_figures, member_spans, vector_bar
 from youkelele.music.onsets import (
     Onsets,
     StrikeClass,
@@ -38,7 +38,7 @@ from youkelele.music.riff import is_riff, onset_chroma, riff_features
 from youkelele.music.ring import section_rings, stroke_decay_db
 from youkelele.music.trailing import NO_CHORD, trailing_silent_bars
 from youkelele.music.vote import VoteResult, choose_pattern
-from youkelele.schemas import Bar, BarStrums, Chords, Grid, Meter, PlannedSection, SectionPattern, Stroke, Strums
+from youkelele.schemas import Bar, BarStrums, Chords, Grid, Meter, SectionPattern, Stroke, Strums
 from youkelele.stage import Stage, StageContext
 
 
@@ -130,12 +130,6 @@ def _splice(base: Onsets, pieces: list[Onsets]) -> tuple[Onsets, np.ndarray]:
 def _read_mono(path: Path) -> tuple[np.ndarray, int]:
     data, sr = sf.read(str(path), dtype="float32", always_2d=True)
     return data.mean(axis=1), int(sr)
-
-
-def _member_spans(section: PlannedSection, grid: Grid) -> list[tuple[int, int]]:
-    """Each member grid section's bar range; a section with no members list is its own single member."""
-    spans = [(grid.sections[m].start_bar, grid.sections[m].end_bar) for m in section.members]
-    return spans or [(section.start_bar, section.end_bar)]
 
 
 def _quantise_window(bar: Bar, slots: int) -> tuple[float, float]:
@@ -419,7 +413,7 @@ class StrumsStage(Stage):
         sections: list[list[_Member]] = []
         longest: list[_Member] = []
         for k, sec in enumerate(plan):
-            spans = _member_spans(sec, grid)
+            spans = member_spans(sec, grid)
             sections.append([new_member(p, s, e) for p, (s, e) in enumerate(spans)])
             longest.append(sections[k][spans.index(members[k])])
         voiced = [m for sec in sections for m in sec if not m.silent]

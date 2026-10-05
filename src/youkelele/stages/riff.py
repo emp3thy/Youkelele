@@ -9,11 +9,13 @@ import numpy as np
 import soundfile as sf
 
 from youkelele.jsonio import load_model, save_model
+from youkelele.music.compat import with_bars
+from youkelele.music.members import member_spans
 from youkelele.music.pitch import PitchTrack, name_notes, track_pitch
 from youkelele.music.riff_line import RIFF_NAMED_MIN, NoteBar, choose_riff, gate
 from youkelele.music.tab import to_tab, tuning_midis
 from youkelele.profiles.base import Tuning
-from youkelele.schemas import BarStrums, Grid, PlannedSection, RiffNote, Riffs, RiffSection, Strums
+from youkelele.schemas import BarStrums, Grid, RiffNote, Riffs, RiffSection, Strums
 from youkelele.stage import Stage, StageContext
 
 _STEMS = {
@@ -26,12 +28,6 @@ _STEMS = {
 def _read_mono(path: Path) -> tuple[np.ndarray, int]:
     data, sr = sf.read(str(path), dtype="float32", always_2d=True)
     return data.mean(axis=1), int(sr)
-
-
-def _member_spans(section: PlannedSection, grid: Grid) -> list[tuple[int, int]]:
-    """Each member grid section's bar range; a section with no members list is its own single member."""
-    spans = [(grid.sections[m].start_bar, grid.sections[m].end_bar) for m in section.members]
-    return spans or [(section.start_bar, section.end_bar)]
 
 
 class RiffStage(Stage):
@@ -53,13 +49,14 @@ class RiffStage(Stage):
 
     def run(self, ctx: StageContext) -> None:
         grid = load_model(ctx.input("grid/grid.json"), Grid)
-        strums = load_model(ctx.input("strums/strums.json"), Strums)
+        # a strums.json before 1.6 has no bar records: rebuilt from its patterns, so its riffs are read
+        strums = with_bars(load_model(ctx.input("strums/strums.json"), Strums), grid)
         by_index = {b.index: b for b in strums.bars}
 
         # (planned section, start, end, the member's riff-flagged bars)
         members: list[tuple[int, int, int, list[BarStrums]]] = []
         for k, section in enumerate(strums.plan):
-            for start, end in _member_spans(section, grid):
+            for start, end in member_spans(section, grid):
                 bars = [by_index[i] for i in range(start, end) if i in by_index]
                 if any(b.riff for b in bars):
                     members.append((k, start, end, bars))

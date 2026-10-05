@@ -13,6 +13,13 @@ import numpy as np
 
 from youkelele.music.as_played import bar_repeat, explained_onsets, jaccard
 from youkelele.music.onsets import StrikeClass
+from youkelele.schemas import Grid, PlannedSection
+
+
+def member_spans(section: PlannedSection, grid: Grid) -> list[tuple[int, int]]:
+    """Each member grid section's bar range, in order; a section with no members list is its own single member."""
+    spans = [(grid.sections[m].start_bar, grid.sections[m].end_bar) for m in section.members]
+    return spans or [(section.start_bar, section.end_bar)]
 
 
 def vector_bar(

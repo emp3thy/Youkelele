@@ -8,6 +8,7 @@ flags are the section's.
 
 from __future__ import annotations
 
+from youkelele.music.members import member_spans
 from youkelele.schemas import BarStrums, Grid, Stroke, Strums
 
 
@@ -19,10 +20,7 @@ def _member_spans(strums: Strums, grid: Grid) -> list[list[tuple[int, int]]]:
     """
     if not strums.plan:
         return [[(s.start_bar, s.end_bar)] for s in grid.sections]
-    return [
-        [(grid.sections[m].start_bar, grid.sections[m].end_bar) for m in p.members] or [(p.start_bar, p.end_bar)]
-        for p in strums.plan
-    ]
+    return [member_spans(p, grid) for p in strums.plan]
 
 
 def backfill_bars(strums: Strums, grid: Grid) -> list[BarStrums]:

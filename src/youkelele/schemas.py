@@ -261,7 +261,7 @@ class RiffSection(_Artifact):
     section: int  # planned section index
     start_bar: int
     end_bar: int  # exclusive
-    unit: int  # slots per printed cell
+    unit: int  # the riff's unit in bars, 1 or 2
     onsets: list[list[RiffNote]]  # the notes heard, one list per onset
     riff: list[TabNote]  # the riff as one bar of tab
     agreement: float  # how closely the section's bars agree with the riff

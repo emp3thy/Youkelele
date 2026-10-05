@@ -7,6 +7,7 @@ import pytest
 
 from youkelele.jsonio import ArtifactError
 from youkelele.music import score_builder
+from youkelele.music.alphatex import score_to_alphatex
 from youkelele.music.score_builder import build_score, check_strums_match_grid
 from youkelele.profiles.ukulele import UKULELE_TUNING
 from youkelele.schemas import (
@@ -1009,6 +1010,58 @@ def test_a_two_bar_riff_alternates_its_halves_with_slots_inside_the_bar():
     score = _riff_score(4, _riff_strums(4, riff=True, unit=2), riffs)
     tabs = [[(n.slot, n.fret) for n in b.tab] for b in score.sections[0].bars]
     assert tabs == [[(1, 0)], [(3, 3)], [(1, 0)], [(3, 3)]]
+
+
+def test_a_tab_bar_is_never_grey_even_when_its_member_is_uncertain():
+    strums = _riff_strums(4, riff=True)
+    strums = strums.model_copy(update={"bars": [b.model_copy(update={"uncertain": True}) for b in strums.bars]})
+    score = _riff_score(4, strums, Riffs(sections=[_riff_section()]))
+    assert all(b.tab is not None and not b.grey for b in score.sections[0].bars)
+
+
+def test_a_two_bar_riff_with_an_empty_half_keeps_an_empty_tab_of_rests():
+    # every note starts in the first bar of the unit: the second bar is tab with nothing starting
+    riffs = Riffs(sections=[_riff_section(unit=2, notes=((1, 0),))])
+    score = build_score(
+        _source(), _grid(4), _C_CHORDS, _riff_strums(4, riff=True, unit=2), _C_ARRANGEMENT, riffs,
+        UKULELE_TUNING, "Ukulele",
+    )
+    tabs = [b.tab for b in score.sections[0].bars]
+    assert [len(t) for t in tabs] == [1, 0, 1, 0] and tabs[1] == []
+    assert score.sections[0].state == "riff"
+    beat_lines = [line for line in score_to_alphatex(score).splitlines() if line.startswith(":8")]
+    # rests on every slot under the C chord, not the C brushes of a strummed bar
+    assert beat_lines[1] == (
+        ':8 r{ch "C" lyrics "D"} r{lyrics "-"} r{lyrics "D"} r{lyrics "-"} '
+        'r{lyrics "D"} r{lyrics "-"} r{lyrics "D"} r{lyrics "-"} |'
+    )
+
+
+def _merged_riff_strums() -> Strums:
+    bars = _bars((4, "D-D-D-D-", 0, True, False, True), (2, "D-D-D-D-", 1, True, False, True))
+    return _merged_strums(bars, _pattern(riff=True))
+
+
+def _merged_riff_score(riffs: Riffs):
+    return build_score(
+        _source(), _sectioned(6, _FOUR_TWO), _CHORDS, _merged_riff_strums(), _ARRANGEMENT, riffs,
+        UKULELE_TUNING, "Ukulele",
+    )
+
+
+def test_octave_shift_comes_from_a_shorter_member_when_only_it_prints_tab():
+    riffs = Riffs(sections=[
+        _riff_section(start=0, end=4, printable=False),
+        _riff_section(start=4, end=6, shift=-1),
+    ])
+    section = _merged_riff_score(riffs).sections[0]
+    assert section.state == "riff" and section.octave_shift == -1
+    assert [b.tab is not None for b in section.bars] == [False] * 4 + [True] * 2
+
+
+def test_octave_shift_prefers_the_longest_member_when_it_prints_tab():
+    riffs = Riffs(sections=[_riff_section(start=0, end=4, shift=1), _riff_section(start=4, end=6, shift=-1)])
+    assert _merged_riff_score(riffs).sections[0].octave_shift == 1
 
 
 def test_unprintable_riff_sets_the_not_transcribed_state_and_no_tab():

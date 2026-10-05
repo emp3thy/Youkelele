@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import librosa
 import numpy as np
 import soundfile as sf
 
 from youkelele.jsonio import load_model, save_model
 from youkelele.layout import RunLayout
+from youkelele.music.pitch import PitchTrack
 from youkelele.options import RunOptions
 from youkelele.profiles.base import Tuning
 from youkelele.schemas import Bar, BarStrums, Grid, Meter, PlannedSection, Riffs, Section, Stroke, Strums
@@ -117,3 +120,39 @@ def test_riff_stage_marks_unsteady_or_unvoiced_sections_not_transcribed(tmp_path
 def test_riff_stage_writes_an_empty_file_when_no_section_is_a_riff(tmp_path):
     r = _run(tmp_path, _strums(False), _stem([RIFF_MIDIS] * N_BARS, [RIFF_SLOTS] * N_BARS))
     assert r.sections == []
+
+
+def test_riff_stage_reads_a_v15_strums_file_through_its_backfilled_bars(tmp_path):
+    # a 1.5 folder resumed from the riff stage: strums.json has no bar records, only patterns
+    fixtures = Path(__file__).parent / "fixtures"
+    strums = load_model(fixtures / "v15_strums.json", Strums)
+    grid = load_model(fixtures / "v15_grid.json", Grid)
+    assert strums.bars == []
+    layout = RunLayout(tmp_path / "run", ["ingest", "separate", "grid", "harmony", "strums", "riff"])
+    for key in ("separate/stems/guitar.wav", "separate/stems/other.wav", "ingest/audio.wav"):
+        path = layout.path(key)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        sf.write(str(path), np.zeros(SR, dtype=np.float32), SR)
+    for key, model in (("grid/grid.json", grid), ("strums/strums.json", strums)):
+        path = layout.path(key)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        save_model(path, model)
+    out = tmp_path / "out"
+    out.mkdir()
+
+    def steady_c(y: np.ndarray, sr: int) -> PitchTrack:
+        times = np.arange(0.0, grid.bars[-1].end, 0.01)
+        return PitchTrack(times=times, midi=np.full(times.shape, 60.0))
+
+    stage = RiffStage(TUNING, pitch_tracker=steady_c)
+    stage.run(StageContext(layout, RunOptions(source="x.mp3"), out, lambda m: None, stage))
+    r = load_model(out / "riff.json", Riffs)
+
+    riff_sections = {k for k, p in enumerate(strums.patterns) if p.riff}
+    assert riff_sections  # the fixture flags riffs on its patterns
+    expected = [
+        (k, grid.sections[m].start_bar, grid.sections[m].end_bar)
+        for k in sorted(riff_sections)
+        for m in strums.plan[k].members
+    ]
+    assert [(s.section, s.start_bar, s.end_bar) for s in r.sections] == expected
