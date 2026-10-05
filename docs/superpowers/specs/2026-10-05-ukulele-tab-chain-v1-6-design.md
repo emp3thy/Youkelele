@@ -76,17 +76,17 @@ Page counts are not promised. They are measured in validation (section 8) for th
 
 ### 4.1 Choosing a section's pattern: the hybrid vote
 
-For a section (or member, 4.3) with bars `B`, the stage computes two candidates from the per-bar slot vectors: the **majority** vector `M` (as 1.5) and the **medoid** `D`, the real bar with the highest mean Jaccard agreement to the other bars of the section (ties to the earliest bar). It scores them like for like: `score(D)` is `D`'s mean agreement with the other bars; `score(M)` is the mean, over bars, of each bar's agreement with the majority recomputed without that bar (leave-one-out). The printed pattern is `D` when `score(D) - score(M) >= HYBRID_DELTA`, else `M`. **Tie-break:** when `|score(D) - score(M)| < MUTE_TIE_MARGIN` and the two differ only by mute slots, the candidate with fewer mute slots prints.
+For a section (or member, 4.3) with bars `B`, the stage computes two candidates from the per-bar slot vectors: the **majority** vector `M` (as 1.5) and the **medoid** `D`, the real bar with the highest mean Jaccard agreement to the other bars of the section (ties to the earliest bar). It scores them like for like: `score(D)` is `D`'s mean agreement with the other bars; `score(M)` is the mean, over bars, of each bar's agreement with the majority recomputed without that bar (leave-one-out). The printed pattern is `D` when `score(D) - score(M) >= HYBRID_DELTA` **and** `D` has at least `MEDOID_MIN_STRIKES` strikes, else `M`. **Tie-break:** when `|score(D) - score(M)| < MUTE_TIE_MARGIN` and the two differ only by mute slots, the candidate with fewer mute slots prints.
 
-`HYBRID_DELTA = 0.04`, inside the measured band 0.03 to 0.05: at 0.00 the medoid regresses three ear-right sections, at 0.08 it no longer catches the syncopated verse (pattern-vote spike). `MUTE_TIE_MARGIN = 0.01`, from one section (The Cars 52-60, where `xxDUDUDU` and `DUDUDUDU` score 0.63 and 0.62 and the ear hears no mutes). On the eight songs this rule changes 14 of 68 sections' patterns; validation lists them.
+`HYBRID_DELTA = 0.04`, inside the measured band 0.03 to 0.05: at 0.00 the medoid regresses three ear-right sections, at 0.08 it no longer catches the syncopated verse (pattern-vote spike). `MEDOID_MIN_STRIKES = 2`: the assumption pass found that 4 of the 14 sections that would switch at delta 0.04 have an all-rest medoid (a sparse section whose most typical bar is silence), which is no pattern to print; with the floor, 10 of 68 sections switch. `MUTE_TIE_MARGIN = 0.01`, from one section (The Cars 52-60, where `xxDUDUDU` and `DUDUDUDU` score 0.63 and 0.62 and the ear hears no mutes). Validation lists the ten.
 
-The confidence and the chance test of 1.5 run on the printed candidate: confidence is the mean agreement of the section's bars with it; the shuffle test's p-value is computed against it. Direction stays a rendering rule (down on eighth positions, up elsewhere), as 1.5.
+Confidence is the mean agreement of the section's bars with the printed candidate. The chance test of 1.5 is unchanged: its statistic is the bars' agreement with their own vote, so it does not depend on which candidate prints, and the assumption pass confirmed that no section's certain or uncertain state changes under the hybrid rule (a medoid-based statistic was also tried and changed no state either). Direction stays a rendering rule (down on eighth positions, up elsewhere), as 1.5.
 
 ### 4.2 Two-bar patterns
 
 Before choosing, the stage measures the section's period: `lag2 - lag1`, the mean agreement of each bar with the bar two later minus with the next bar. When `lag2 - lag1 >= PERIOD2_MARGIN` **and** each bar of the best consecutive pair has at least `PERIOD2_MIN_STRIKES` strikes, the section's unit is two bars: the candidates of 4.1 are built over bar pairs (the medoid is a real pair; the majority is voted per position over pairs), and the pattern prints as two distinct bars alternating. Otherwise the unit is one bar.
 
-`PERIOD2_MARGIN = 0.10` (median 0.034, 90th percentile 0.204; seven sections clear it). `PERIOD2_MIN_STRIKES = 2` excludes the sparse-busy alternations in intros and outros that the spike found among those seven (two of them are near-empty bars alternating with full ones); this second condition is unmeasured beyond that observation (A3).
+`PERIOD2_MARGIN = 0.10` (median 0.034, 90th percentile 0.204; seven sections clear it). `PERIOD2_MIN_STRIKES = 2` excludes the sparse-busy alternations in intros and outros: of the seven, one pair is `--------|-------U` and is dropped by the floor, the other six have 2 to 11 strikes in each bar and survive. Across margins 0.08, 0.10 and 0.15 the floor removes exactly that one case and the count of two-bar sections runs 8, 6, 4 (A3).
 
 ### 4.3 Members of a merged section
 
@@ -106,7 +106,7 @@ A section or member whose pattern fails the chance test (or whose stem is too qu
 
 ### 4.6 Expected effect
 
-On the eight songs: 14 sections change pattern by 4.1 (listed in validation, with the ear-verified ones held fixed); Summer of '69 53-58 prints `DU-U-UDU`; All Fired Up Verse 2 prints three different stroke rows across its 55 bars; The Cars 52-60 loses its two mute slots; Need You Tonight's bars draw no sustain lines while the rock songs' held strokes do; no section prints blank strokes.
+On the eight songs: 10 sections change pattern by 4.1 (listed in validation, with the ear-verified ones held fixed); Summer of '69 53-58 prints `DU-U-UDU`; All Fired Up Verse 2 prints three different stroke rows across its 55 bars; The Cars 52-60 loses its two mute slots; Need You Tonight's bars draw no sustain lines while the rock songs' held strokes do; no section prints blank strokes.
 
 ## 5. Riffs
 
@@ -177,7 +177,7 @@ Seven known songs re-run from the strums stage in place (the stems and grids of 
 Expectations written before the run:
 
 1. `grid.json`, the chord events and `bar_onsets` byte-identical to 1.5 on all eight songs.
-2. The 14 sections the spike says change pattern under the hybrid vote are exactly the sections that change; the five ear-right patterns (All Fired Up 33-49, 61-90, 128-132; The Cars 11-19, 68-72; Need You Tonight 13-24) print as before; Summer of '69 53-58 prints `DU-U-UDU`; The Cars 52-60 prints `DUDUDUDU`.
+2. The 10 sections the spike says change pattern under the hybrid vote with the strike floor are exactly the sections that change; the five ear-right patterns (All Fired Up 33-49, 61-90, 128-132; The Cars 11-19, 68-72; Need You Tonight 13-24) print as before; Summer of '69 53-58 prints `DU-U-UDU`; The Cars 52-60 prints `DUDUDUDU`.
 3. All Fired Up's Verse 2 prints the section pattern on 55-61, 61-90 and 104-110, its own greyed pattern on 90-97, and "riff heard, not transcribed" strokes on 97-104; the header is one "Verse 2".
 4. Need You Tonight's bars show no sustain lines; All Fired Up, Summer of '69 and The Cars show them on held strokes; Pour Some Sugar On Me prints greyed strokes in every section instead of none.
 5. Riff flags: All Fired Up 33-49 and The Cars 11-19 lose theirs; every 1.5 flag that the ear confirmed stays; nothing new is flagged outside All Fired Up 97-104.
@@ -193,12 +193,12 @@ Each with its status now and what it costs if wrong. "Measured" means on the eig
 
 | # | Assumption | Status | If wrong |
 |---|---|---|---|
-| A1 | `HYBRID_DELTA` 0.04 fixes the flattened patterns without regressing ear-right ones | Measured on 68 sections and 10 ear ranges; band 0.03 to 0.05; **rests on one syncopated section** (Summer of '69 53-58) for the lower edge | A wrong delta either leaves syncopation flattened or breaks right patterns; validation lists every changed section and the listening pass judges them |
+| A1 | `HYBRID_DELTA` 0.04 with a two-strike floor fixes the flattened patterns without regressing ear-right ones | Measured on 68 sections and 10 ear ranges; band 0.03 to 0.05; the floor removes four all-rest medoids; **rests on one syncopated section** (Summer of '69 53-58) for the lower edge | A wrong delta either leaves syncopation flattened or breaks right patterns; validation lists every changed section and the listening pass judges them |
 | A2 | Preferring fewer mutes within 0.01 is right | **Rests on one section** (The Cars 52-60) | A real muted pattern loses its mutes when a non-muted bar ties with it |
-| A3 | A two-bar unit needs at least two strikes in each bar of the pair | Observation from the seven period-2 sections, **unmeasured as a rule** | Sparse alternations print as two-bar patterns, or a real two-bar figure with a sparse bar prints as one |
+| A3 | A two-bar unit needs at least two strikes in each bar of the pair | **Measured on all 68 sections**: the floor removes exactly one near-empty case at every margin tried (0.08, 0.10, 0.15 give 8, 6, 4 two-bar sections); the same floor applies to a medoid switch (4.1) | A real two-bar figure with a one-strike bar prints as one bar; cheap |
 | A4 | `MEMBER_AGREE` 0.5 separates members that share the section's playing from those that do not | **Rests on one merged section** (All Fired Up Verse 2: 0.57 prints the section's, 0.24 prints its own) | A member prints the wrong pattern; cost bounded to merged sections, which the plan marks |
 | A5 | Ring flag at 8 dB per slot | Measured on 72 strokes of seven sections, empty band 6 to 10; **no sustained-vs-dense distinction within a song** (both ring) | Sustain lines are drawn on strokes that are cut, or missing where held; a drawing error, not a pattern error |
-| A6 | Confidence and the chance test behave the same on a medoid candidate as on a majority | Unverified | A medoid pattern flips to uncertain more or less often than it should; validation counts flips against 1.5 |
+| A6 | The chance test behaves the same on a medoid candidate as on a majority | **Measured on the 14 switch sections**: the stage's statistic does not read the candidate, so no state changes; a medoid-based statistic was also tried and changed no state | None beyond A1; validation still counts flips against 1.5 |
 | A7 | Short sections print their own greyed candidate better than an inherited neighbour's | Design choice from the owner's A-or-B answer; unverified by ear | A reader tries a worse guess than before; the grey says so |
 | A8 | `PITCH_CHANGE_MIN` 0.4 separates riffs from strums | Measured: riffs 0.65 to 0.85, **strums 0.05 and 0.17 from two sections only**; the 1.5 knife-edge non-riff (Summer of '69 95-111 at 0.8204 against the 0.82 entropy ceiling) is still protected by the entropy test | A dense strum keeps a riff flag, or a riff loses one; the gate then decides whether anything wrong prints |
 | A9 | `RIFF_AGREE_MIN` 0.70 passes real steady riffs and fails blends | **One verified pass (0.72 to 0.76), one verified fail (0.52 to 0.62)**; four unsteady riffs well below | A wrong tab prints, which the owner has said is the worst outcome; or a good riff is withheld, which costs only the tab |
