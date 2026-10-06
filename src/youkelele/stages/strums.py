@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import numpy as np
@@ -34,7 +34,8 @@ from youkelele.music.onsets import (
 from youkelele.music.pitch import PITCH_CHANGE_MIN, PitchTrack, name_notes, pitch_change_share, track_pitch
 from youkelele.music.recall import HIGH_BAND_FMIN, gate_section
 from youkelele.music.relabel import ONE_LOOP_SHARE, longest_member, one_loop_share, section_plan
-from youkelele.music.riff import is_riff, onset_chroma, riff_features
+from youkelele.music.rests import bar_energy_ratio, bar_holds, bar_low_share, resample_for_rests
+from youkelele.music.riff import chord_roots, is_riff, named_share, onset_chroma, riff_features, root_share
 from youkelele.music.ring import section_rings, stroke_decay_db
 from youkelele.music.trailing import NO_CHORD, trailing_silent_bars
 from youkelele.music.vote import VoteResult, choose_pattern
@@ -62,7 +63,10 @@ class _Member:
     start: int  # first bar
     end: int  # one past the last bar, trailing bars included
     analysed_end: int  # one past the last bar the vote, ring and riff test read
-    silent: bool  # no instrument, the empty outro or nothing analysed: printed all rest (rule 7)
+    silent: bool  # no instrument, no bar that holds, the empty outro or nothing analysed: printed all rest (rule 7)
+    # the bars in [start, analysed_end) that hold by the rest rule, in order (1.7 spec 5): the
+    # vote, the chance test, the ring flag and the riff features read these bars only
+    holding: list[int] = field(default_factory=list)
     vote: VoteResult | None = None
     confidence: float = 0.0
     repeat: float = 0.0
@@ -74,12 +78,19 @@ class _Member:
     single_share: float | None = None
     riff_onsets: int | None = None
     pitch_change: float | None = None
+    root_share: float | None = None
+    named_share: float | None = None
     riff: bool = False
     rings: bool = True
     ring_decay_db: float | None = None
     # the alignment (0 or 1 bars) of the section's vote that fits this member's own bars;
     # always 0 for a one-bar section vote and for the longest member itself
     section_offset: int = 0
+
+    @property
+    def first_holding(self) -> int | None:
+        """The first bar that holds: a bar's place in the vote counts from here (1.7 spec 5)."""
+        return self.holding[0] if self.holding else None
 
 
 def _onset_chroma_at_riff_rate(y: np.ndarray, sr: int, times: np.ndarray) -> np.ndarray:
@@ -200,8 +211,8 @@ def _note_ends(times: np.ndarray, idx: np.ndarray, bars: Sequence[Bar]) -> list[
 
 
 def _vote_member(member: _Member, classes: Sequence[Sequence[StrikeClass]], slots: int, floor: float) -> None:
-    """Rule 1: the member's own vote, figures, chance test and certainty."""
-    bars = classes[member.start : member.analysed_end]
+    """Rule 1: the member's own vote, figures, chance test and certainty, over the bars that hold."""
+    bars = [classes[b] for b in member.holding]
     vote = choose_pattern(bars)
     # the whole unit vector is the vote's representative: a two-bar vote is a full vote only
     # when both its bars are, whichever bar the member starts on (spec 4.1)
@@ -214,16 +225,28 @@ def _vote_member(member: _Member, classes: Sequence[Sequence[StrikeClass]], slot
 
 
 def _ring_member(member: _Member, onset_bar: np.ndarray, decays: Sequence[float | None], mix_source: bool) -> None:
-    """Rule 4: the member rings when its strokes' median decay is low; on the full mix always."""
-    inside = np.flatnonzero((onset_bar >= member.start) & (onset_bar < member.analysed_end))
+    """Rule 4: the member rings when its holding bars' strokes' median decay is low; on the full mix always."""
+    inside = np.flatnonzero(np.isin(onset_bar, member.holding))
     rings, member.ring_decay_db = section_rings([decays[i] for i in inside])
     # drums make the mix's decay meaningless, so the sheet draws no short strokes from it
     member.rings = True if mix_source else rings
 
 
 def _riff_inside(member: _Member, riff_times: np.ndarray, bars: Sequence[Bar]) -> np.ndarray:
-    """Mask of the detector's own onsets inside the member's analysed bars."""
-    return (riff_times >= bars[member.start].start) & (riff_times < bars[member.analysed_end - 1].end)
+    """Mask of the detector's own onsets inside the member's holding bars.
+
+    Each run of consecutive holding bars is read from its first bar's start to its last bar's
+    end, so a member whose analysed bars all hold reads exactly the span 1.6 read.
+    """
+    inside = np.zeros(len(riff_times), dtype=bool)
+    run_start = 0
+    for i, b in enumerate(member.holding):
+        if i + 1 < len(member.holding) and member.holding[i + 1] == b + 1:
+            continue
+        first = member.holding[run_start]
+        inside |= (riff_times >= bars[first].start) & (riff_times < bars[b].end)
+        run_start = i + 1
+    return inside
 
 
 def _riff_features_member(member: _Member, riff_times: np.ndarray, chroma: np.ndarray, bars: Sequence[Bar]) -> None:
@@ -233,16 +256,25 @@ def _riff_features_member(member: _Member, riff_times: np.ndarray, chroma: np.nd
     member.riff_onsets = int(np.count_nonzero(inside))
 
 
-def _riff_test(member: _Member, track: PitchTrack, riff_times: np.ndarray, bars: Sequence[Bar]) -> None:
-    """Rule 3, second half, for a member whose chroma features pass: the pitch must also change.
+def _riff_test(
+    member: _Member, track: PitchTrack, riff_times: np.ndarray, bars: Sequence[Bar], chords: Chords
+) -> None:
+    """Rule 3, second half (rule A, 1.7 spec 4.1): the chroma features pass and the pitch changes.
 
-    Only such members are named, so a section's share never depends on whether another
-    section happened to start the pitch tracker.
+    Every voiced member is named, so its pitch-change, root and named shares are written
+    whether or not its chroma features pass (1.7 spec 4.2 and 7); the flag needs both.
     """
     idx = np.flatnonzero(_riff_inside(member, riff_times, bars))
-    notes = name_notes(track, riff_times[idx], _note_ends(riff_times, idx, bars))
+    times = riff_times[idx]
+    notes = name_notes(track, times, _note_ends(riff_times, idx, bars))
     member.pitch_change = pitch_change_share(notes)
-    member.riff = member.pitch_change is not None and member.pitch_change >= PITCH_CHANGE_MIN
+    member.root_share = root_share(notes, chord_roots(chords.events, times))
+    member.named_share = named_share(notes)
+    member.riff = (
+        is_riff(member.entropy, member.single_share)
+        and member.pitch_change is not None
+        and member.pitch_change >= PITCH_CHANGE_MIN
+    )
 
 
 def _prints_section(member: _Member, longest: _Member, slots: int) -> bool:
@@ -268,7 +300,7 @@ def _align_member(member: _Member, longest: _Member, classes: Sequence[Sequence[
     (spec 4.3, amended in the final fix wave), read over the bars the member's vote read."""
     if member is longest or longest.silent:
         return
-    bars = classes[member.start : member.analysed_end]
+    bars = [classes[b] for b in member.holding]
     member.section_offset = section_offset(bars, longest.vote.vector, longest.vote.unit, slots)
 
 
@@ -290,19 +322,30 @@ def _section_pattern(k: int, longest: _Member, slots: int, meter: Meter, boosted
         candidate=vote.candidate, score_majority=vote.score_majority, score_medoid=vote.score_medoid,
         unit=vote.unit, pitch_change_share=longest.pitch_change,
         rings=longest.rings, ring_decay_db=longest.ring_decay_db,
+        root_share=longest.root_share, named_share=longest.named_share,
+        riff_rule="A" if longest.riff else None,
     )
 
 
 def _bar_records(
     member: _Member, longest: _Member, slots: int, meter: Meter, rendered: Sequence[Sequence[str]],
     owners: Callable[[int], list[int | None]], decays: Sequence[float | None],
+    energy: Sequence[float], low: Sequence[float],
 ) -> list[BarStrums]:
-    """Rules 5 to 7: one record per bar of the member, trailing bars included."""
+    """Rules 5 to 7: one record per bar of the member, trailing bars included.
+
+    Every record carries its bar's two rest figures; a bar that fails the rest rule (1.7
+    spec 5) is marked `rests`. A resting bar of a voiced member prints an empty row and
+    is not uncertain: nothing was guessed (1.7 spec 3.3).
+    """
+    def rests(b: int) -> bool:
+        return not bar_holds(energy[b], low[b])
+
     if member.silent:
         return [
             BarStrums(
                 index=b, member=member.position, strokes=[], pattern=["-"] * slots, uncertain=True,
-                rings=member.rings,
+                rings=member.rings, rests=rests(b), energy_ratio=energy[b], low_share=low[b],
             )
             for b in range(member.start, member.end)
         ]
@@ -310,7 +353,17 @@ def _bar_records(
     offset = member.section_offset if shown is longest else 0
     records = []
     for b in range(member.start, member.end):
-        cell = vector_bar(shown.vote.vector, shown.vote.unit, slots, b - member.start + offset)
+        if rests(b):
+            records.append(
+                BarStrums(
+                    index=b, member=member.position, strokes=[], pattern=["-"] * slots, unit=1,
+                    confidence=0.0, chance_p=None, uncertain=False, riff=member.riff, rings=member.rings,
+                    rests=True, energy_ratio=energy[b], low_share=low[b],
+                )
+            )
+            continue
+        # the vote's phase is aligned to its first voted bar, the member's first holding bar
+        cell = vector_bar(shown.vote.vector, shown.vote.unit, slots, b - member.first_holding + offset)
         strokes = [
             Stroke(slot=j, kind=rendered[b][j], rings=member.rings, decay_db=decays[i])
             for j, i in enumerate(owners(b))
@@ -321,7 +374,7 @@ def _bar_records(
                 index=b, member=member.position, strokes=strokes,
                 pattern=render_directions(cell, slots, meter), unit=shown.vote.unit,
                 confidence=shown.confidence, chance_p=shown.chance_p, uncertain=shown.uncertain,
-                riff=member.riff, rings=member.rings,
+                riff=member.riff, rings=member.rings, rests=False, energy_ratio=energy[b], low_share=low[b],
             )
         )
     return records
@@ -429,12 +482,21 @@ class StrumsStage(Stage):
             and not any(d != "-" for b in last_bars for d in rendered[b])
         )
 
+        # the rest rule (1.7 spec 5): every bar measured once on the source stem; a bar holds when
+        # it is loud enough against the mix and has power below 330 Hz, else it rests
+        y_rests = resample_for_rests(y, sr)
+        energy = [bar_energy_ratio(y, mix, sr, bar) for bar in bars]
+        low = [bar_low_share(y_rests, bar) for bar in bars]
+
         def new_member(position: int, start: int, end: int) -> _Member:
             trimmed = end - (drop if end == last_sec.end_bar else 0)
             if trimmed <= start or (end == last_sec.end_bar and empty_outro):
                 return _Member(position, start, end, trimmed, silent=True)
             a, b = int(round(bars[start].start * sr)), int(round(bars[trimmed - 1].end * sr))
-            return _Member(position, start, end, trimmed, silent=not section_has_instrument(y[a:b], mix[a:b]))
+            # the section-level cut first, then the bars that hold inside it
+            holding = [i for i in range(start, trimmed) if bar_holds(energy[i], low[i])]
+            silent = not section_has_instrument(y[a:b], mix[a:b]) or not holding
+            return _Member(position, start, end, trimmed, silent=silent, holding=holding)
 
         # every planned section votes per member (spec 4.3); its own figures are its longest member's
         sections: list[list[_Member]] = []
@@ -457,12 +519,12 @@ class StrumsStage(Stage):
             _vote_member(m, classes, slots, confidence_floor)
             _ring_member(m, onset_bar, decays, mix_source=source == "mix")
             _riff_features_member(m, riff_times, chroma, bars)
-        # the pitch tracker runs over the whole stem, so at most once, and only when needed (spec 5.1)
-        candidates = [m for m in voiced if is_riff(m.entropy, m.single_share)]
-        if candidates:
+        # the pitch tracker runs over the whole stem, so at most once; every voiced member is named,
+        # so the shares the next version measures exist on every section (1.7 spec 4.2 and 7)
+        if voiced:
             track = track_pitch(y, sr)
-            for m in candidates:
-                _riff_test(m, track, riff_times, bars)
+            for m in voiced:
+                _riff_test(m, track, riff_times, bars, chords)
         for k, sec in enumerate(sections):
             for m in sec:
                 if not m.silent:
@@ -475,15 +537,15 @@ class StrumsStage(Stage):
         def owners(b: int) -> list[int | None]:
             return _slot_onsets(onsets.times, muted, bars[b], slots)
 
-        bar_records = sorted(
-            (
-                record
-                for k, sec in enumerate(sections)
-                for m in sec
-                for record in _bar_records(m, longest[k], slots, meter, rendered, owners, decays)
-            ),
-            key=lambda r: r.index,
-        )
+        bar_records: list[BarStrums] = []
+        for k, sec in enumerate(sections):
+            for m in sec:
+                records = _bar_records(m, longest[k], slots, meter, rendered, owners, decays, energy, low)
+                resting = sum(r.rests for r in records)
+                if resting:
+                    ctx.log(f"  member {m.start}-{m.end}: {resting} bars rest")
+                bar_records.extend(records)
+        bar_records.sort(key=lambda r: r.index)
 
         uncertain = fit < STAGE_UNCERTAIN_GRID_FIT
         ctx.log(f"  source {source} (ratio {source_ratio:.2f}), {slots} slots per bar, grid fit {fit:.2f}")
@@ -510,3 +572,4 @@ class StrumsStage(Stage):
         ctx.note("grid_fit", f"{fit:.2f}")
         ctx.note("merged", merged)
         ctx.note("one_loop", f"{share:.2f}")
+        ctx.note("rests", str(sum(r.rests for r in bar_records)))
