@@ -68,7 +68,7 @@ The riff-test spike proposed a second rule for riffs whose chroma entropy fails 
 
 ### 4.3 Expected flag changes on the known songs
 
-Rule A adds four flags: All Fired Up 61-90 and Day Tripper 52-58 (both riffs by ear), Summer of '69 0-4 and The Cars 0-11 (unheard). No 1.6 flag is removed. On AC/DC no section passes the chroma gate (entropy 0.84 to 0.95, single share at most 0.39), so none is flagged; its four riff-over-chords sections print as strums, which the validation records against its ear truth. Every changed flag gets an ear clip (A3).
+Rule A adds four flags: All Fired Up 61-90 and Day Tripper 52-58 (both riffs by ear), Summer of '69 0-4 (a picked riff by ear) and The Cars 0-11 (a hook of palm-muted power chords, which the owner counts as a riff; the chain's test sees two pitch classes). No 1.6 flag is removed. On AC/DC no section passes the chroma gate (entropy 0.84 to 0.95, single share at most 0.39), so none is flagged; its four riff-over-chords sections print as strums, which the validation records against its ear truth. Every changed flag gets an ear clip (A3).
 
 ### 4.4 What does not change
 
@@ -115,7 +115,9 @@ Expectations written before the run:
 7. Pages recorded against 1.6 (no sustain lines and empty rows do not change height).
 8. The blind song runs to a sheet with exit 0; its figures recorded, not judged.
 
-Ear clips: every section whose riff flag changed (clicks on its printed strokes, plus a pluck clip for any tab); every resting stretch of more than two bars (the stem alone, to confirm silence or a bell); Chelsea Dagger bars 12 to 20 (unheard; the record's "no guitar" claim rests on bars 0 to 8); AC/DC's six sections re-cut on the 1.7 output. The listening pass is the acceptance test; a flag the ear rejects is recorded, not tuned.
+**Ground truth from published sources first.** For every section whose flag changes, every resting stretch of more than two bars, and every AC/DC and blind-song section, the validation looks up what published guitar lessons and tab transcriptions say the part is (single-note riff, power-chord hook, strummed chords, no guitar, two guitars), records the source and its description in the validation record, and compares the chain's output to it. The owner's ear is asked only where sources disagree, say nothing, or contradict the chain (owner's instruction, 2026-10-06). No lyrics are copied.
+
+Ear clips, for those cases: clicks on the printed strokes, a pluck clip for any tab, the stem alone for a resting stretch; AC/DC's six sections re-cut on the 1.7 output. The listening pass remains the acceptance test; a flag the sources or the ear reject is recorded, not tuned.
 
 ## 9. Assumptions
 
@@ -123,10 +125,10 @@ Ear clips: every section whose riff flag changed (clicks on its printed strokes,
 |---|---|---|---|
 | A1 | `PITCH_CHANGE_MIN` 0.26 separates riffs from strums | Measured on 68 sections; band 0.24 to 0.29 **rests on one strum below** (All Fired Up 55-61, ear "mostly fits") and two riffs above | A dense strum gains a riff flag, or a one-pitch riff is still missed; the gate still decides what prints |
 | A2 | A chroma-free riff rule can be made general | **Refuted on the tenth song** (AC/DC verse 43-57 false positive; three riffs over chords missed); dropped from this version | Day Tripper's intro and Summer of '69's outro stay unflagged and print as strums |
-| A3 | The two unheard flags Rule A adds are riffs | **Unverified**: Summer of '69 0-4, The Cars 0-11 | A strum prints "riff heard" over its own strokes; the strokes themselves are unchanged, so the cost is a wrong phrase |
+| A3 | The two new flags Rule A adds are riffs | **Verified by the owner** (research `assumption-clips.md`): Summer of '69 0-4 is a picked single-note riff; The Cars 0-11 is a hook of staccato palm-muted power chords, a riff to the owner though chordal to the chain | None on these two; the chordal case shows the test can flag a two-note power-chord hook, which prints only the phrase |
 | A4 | `REST_RATIO_MIN` 0.05 | **Pinned by one song**: Need You Tonight's verified tab bars at 0.069 to 0.09 | Quiet real bars rest, losing their strokes; or near-silent bars print invented strokes |
 | A5 | `REST_LOW_SHARE_MIN` 0.005 marks a bar as outside a guitar's register | Measured on all bars of ten songs; band 0.001 to 0.04; the lowest verified bar is a decaying tail | A loud high-register bar rests (Day Tripper bar 1 at the looser 0.01); depends on the stem holding content below 330 Hz |
-| A6 | Chelsea Dagger bars 13-19 hold a real guitar | Measured (power chords at ratio 0.23 to 0.31); **unheard** by the owner, whose clip covered bars 0-8 | Those bars print strokes the ear would reject; the clip is in the validation pass |
+| A6 | Chelsea Dagger bars 13-19 hold a real guitar | **Verified by the owner** ("those are power chords"); measured at ratio 0.23 to 0.31 | None |
 | A7 | Resting bars do not change the vote on the bars that hold | By construction; the vote reads only holding bars | A member with few holding bars prints a thinner-evidence pattern |
 | A8 | Removing sustain lines loses nothing the ear wanted | Verified: 4 of 6 held clips contradicted the lines | None |
 | A9 | The mixed strokes on a two-part section are the riff's rhythm | Measured (mixed equals the high band's pattern in nearly every section) and heard on AC/DC's intro | A strummer reads the riff's rhythm as a strum; the header phrase says so |
