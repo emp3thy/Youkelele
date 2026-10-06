@@ -19,7 +19,9 @@ PYIN_HOP = 256
 NOTE_SKIP_IN_S = 0.020
 NOTE_SKIP_OUT_S = 0.010
 NOTE_VOICED_MIN = 0.5
-PITCH_CHANGE_MIN = 0.4
+# Riff test, Rule A (docs/superpowers/research/2026-10-06-v1-7/riff-test.md): the separating band is
+# 0.24 to 0.29; a strum sits at 0.238 below it, two riffs at 0.289 and 0.292 above it.
+PITCH_CHANGE_MIN = 0.26
 
 
 @dataclass

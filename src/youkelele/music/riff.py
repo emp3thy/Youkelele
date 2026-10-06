@@ -7,7 +7,12 @@ The constants were fixed by the riff-thresholds measurement
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 import numpy as np
+
+from youkelele.music.key import pitch_class
+from youkelele.schemas import ChordEvent
 
 RIFF_ENTROPY_MAX = 0.82  # median per-onset normalised chroma entropy at or below this
 RIFF_SINGLE_PC_MIN = 0.45  # share of onsets with one dominant pitch class at or above this
@@ -82,3 +87,33 @@ def is_riff(entropy: float | None, single_share: float | None) -> bool:
     if entropy is None or single_share is None:
         return False
     return entropy <= RIFF_ENTROPY_MAX and single_share >= RIFF_SINGLE_PC_MIN
+
+
+def chord_roots(events: Sequence[ChordEvent], times: Sequence[float]) -> list[int | None]:
+    """The pitch class of the chord root under each time; `None` for no chord or no event."""
+    out: list[int | None] = []
+    for t in times:
+        root: int | None = None
+        for event in events:
+            if event.start <= t < event.end:
+                name = event.label.split(":")[0]
+                if name not in ("N", "X"):
+                    root = pitch_class(name)
+                break
+        out.append(root)
+    return out
+
+
+def root_share(notes: Sequence[int | None], roots: Sequence[int | None]) -> float | None:
+    """The share of onsets, among those with a named note and a chord root, on the root."""
+    pairs = [(n, r) for n, r in zip(notes, roots, strict=True) if n is not None and r is not None]
+    if not pairs:
+        return None
+    return sum(1 for n, r in pairs if n % 12 == r) / len(pairs)
+
+
+def named_share(notes: Sequence[int | None]) -> float | None:
+    """The share of onsets that were given a pitch name; `None` for no onsets."""
+    if not notes:
+        return None
+    return sum(1 for n in notes if n is not None) / len(notes)
