@@ -192,9 +192,9 @@ def _tab_by_bar(riffs: Riffs, spb: int) -> dict[int, list[TabNote]]:
 
 
 def _bar_strokes(record: BarStrums) -> list[Stroke]:
-    """The strokes a bar prints: its pattern's non-rest cells, ringing as its member's strokes
-    do (the flag is per member, so any detected stroke carries it); ringing with none detected."""
-    rings = record.strokes[0].rings if record.strokes else True
+    """The strokes a bar prints: its pattern's non-rest cells, ringing when its member rings
+    (the flag is per member and recorded on every bar, detected strokes or not)."""
+    rings = record.rings
     return [Stroke(slot=j, kind=cell, rings=rings) for j, cell in enumerate(record.pattern) if cell != "-"]
 
 

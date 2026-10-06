@@ -18,6 +18,14 @@ def test_choose_riff_on_steady_bars_passes_the_gate():
     assert gate(c, named_share=0.91, riff_flag=True) == (True, None)
 
 
+def test_two_bar_riff_from_an_odd_bar_is_aligned_to_the_first_bar():
+    a = [60, None, 62, None, 64, None, 62, None]
+    b = [67, 67, None, 65, None, 64, None, 62]
+    stray = [60, None, None, None, None, None, None, None]
+    c = choose_riff([stray] + [a, b] * 4)
+    assert c.unit == 2 and c.notes == b + a  # bar 0 and the even bars play the figure's second bar
+
+
 def test_unsteady_bars_fail_on_agreement_with_a_reason():
     rng = random.Random(3)
     bars = [[rng.choice([None, 55, 57, 60, 62, 64]) for _ in range(16)] for _ in range(8)]

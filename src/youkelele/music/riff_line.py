@@ -13,7 +13,7 @@ from typing import Literal
 
 import numpy as np
 
-from youkelele.music.vote import HYBRID_DELTA, MEDOID_MIN_STROKES, choose_unit
+from youkelele.music.vote import HYBRID_DELTA, MEDOID_MIN_STROKES, align_to_first_bar, unit_and_phase
 
 RIFF_AGREE_MIN = 0.70
 RIFF_SUPPORT_MIN = 0.75
@@ -44,9 +44,10 @@ def note_jaccard(a: NoteBar, b: NoteBar) -> float:
     return same / union if union else 1.0
 
 
-def _pairs(bars: Sequence[NoteBar]) -> list[NoteBar]:
-    """Consecutive pairs concatenated; an odd last bar is left out."""
-    return [list(bars[i]) + list(bars[i + 1]) for i in range(0, len(bars) - 1, 2)]
+def _pairs(bars: Sequence[NoteBar], phase: int = 0) -> list[NoteBar]:
+    """Consecutive pairs concatenated, starting at bar `phase`; a bar before the first pair
+    or after the last is left out."""
+    return [list(bars[i]) + list(bars[i + 1]) for i in range(phase, len(bars) - 1, 2)]
 
 
 def _majority(bars: Sequence[NoteBar]) -> NoteBar:
@@ -96,19 +97,25 @@ def _support(notes: NoteBar, bars: Sequence[NoteBar]) -> float:
 
 
 def choose_riff(bars: Sequence[NoteBar]) -> RiffChoice:
-    """The majority riff, or the medoid when it clearly represents the bars better."""
+    """The majority riff, or the medoid when it clearly represents the bars better.
+
+    A two-bar riff is voted over pairs in the phase of the best pair (as the strum vote is)
+    and returned aligned to the section's first bar.
+    """
     shape = [["S" if n is not None else "-" for n in bar] for bar in bars]
-    unit = choose_unit(shape)  # type: ignore[arg-type]
-    voted = _pairs(bars) if unit == 2 else [list(b) for b in bars]
+    unit, phase = unit_and_phase(shape)  # type: ignore[arg-type]
+    voted = _pairs(bars, phase) if unit == 2 else [list(b) for b in bars]
     med, score_medoid = _medoid(voted)
     score_majority = _majority_loo(voted)
     if (
         score_medoid - score_majority >= HYBRID_DELTA
         and sum(1 for n in med if n is not None) >= MEDOID_MIN_STROKES
     ):
-        return RiffChoice(unit, med, "medoid", score_medoid, _support(med, voted))
+        notes = align_to_first_bar(med, unit, phase)
+        return RiffChoice(unit, notes, "medoid", score_medoid, _support(med, voted))
     maj = _majority(voted)
-    return RiffChoice(unit, maj, "majority", score_majority, _support(maj, voted))
+    notes = align_to_first_bar(maj, unit, phase)
+    return RiffChoice(unit, notes, "majority", score_majority, _support(maj, voted))
 
 
 def gate(choice: RiffChoice, named_share: float, riff_flag: bool) -> tuple[bool, str | None]:

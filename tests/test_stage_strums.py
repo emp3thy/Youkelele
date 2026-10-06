@@ -925,3 +925,35 @@ def test_unit_two_member_prints_alternating_bars(tmp_path):
     assert all(b.unit == 2 for b in s.bars)
     assert s.patterns[0].confidence == 1.0
 
+
+
+def _member(position, start, end, vector, riff=False, rings=True, uncertain=False):
+    from youkelele.music.vote import VoteResult
+
+    m = strums_module._Member(position=position, start=start, end=end, analysed_end=end, silent=False)
+    m.vote = VoteResult(list(vector), "majority", 0.5, 0.5, 1)
+    m.riff, m.rings, m.uncertain = riff, rings, uncertain
+    return m
+
+
+def test_a_riff_member_prints_its_own_pattern_even_when_it_agrees_with_the_section():
+    # the member's vote S-S-S-S- agrees 0.8 with the section's S-S-S-SS (above MEMBER_AGREE)
+    longest = _member(0, 0, 8, "S-S-S-SS")
+    plain = _member(1, 8, 12, "S-S-S-S-")
+    riff = _member(1, 8, 12, "S-S-S-S-", riff=True, uncertain=True)
+    assert strums_module._prints_section(plain, longest, 8) is True
+    assert strums_module._prints_section(riff, longest, 8) is False
+    rendered = [["-"] * 8 for _ in range(12)]
+    records = strums_module._bar_records(
+        riff, longest, 8, Meter(numerator=4, denominator=4), rendered, lambda b: [None] * 8, [],
+    )
+    assert all(r.pattern == list("D-D-D-D-") and r.uncertain and r.riff for r in records)
+
+
+def test_bar_records_carry_the_members_ring_flag_without_strokes():
+    longest = _member(0, 0, 4, "S-S-S-SS", rings=False)
+    rendered = [["-"] * 8 for _ in range(4)]
+    records = strums_module._bar_records(
+        longest, longest, 8, Meter(numerator=4, denominator=4), rendered, lambda b: [None] * 8, [],
+    )
+    assert all(r.strokes == [] and r.rings is False for r in records)

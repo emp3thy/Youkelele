@@ -53,6 +53,37 @@ def test_period_margin_and_unit_two_on_alternating_bars():
     assert r.unit == 2 and r.vector == a + b
 
 
+def test_unit_stays_one_when_lag_agreement_fires_but_the_two_bar_medoid_gains_little():
+    # sixteen-slot bars, the second of each pair adding one push: lag-2 beats lag-1 by 0.11,
+    # but one real bar already represents the section nearly as well as the best pair
+    a = list("S-S-S-S-S-S-S-S-")
+    b = list("S-S-S-S-S-S-SSS-")
+    bars = [a, b] * 4
+    lag1 = sum(jaccard(x, y) for x, y in zip(bars, bars[1:])) / (len(bars) - 1)
+    lag2 = sum(jaccard(x, y) for x, y in zip(bars, bars[2:])) / (len(bars) - 2)
+    assert lag2 - lag1 >= PERIOD2_MARGIN  # the statistic spec 4.2 first named would fire
+    assert period_margin(bars) < PERIOD2_MARGIN and choose_unit(bars) == 1
+
+
+def test_period_margin_is_the_two_bar_medoid_over_the_one_bar_medoid():
+    a, b = list("S--S--S-"), list("SSS-SSS-")
+    bars = [a, b] * 4
+    one_bar = (3 + 4 * jaccard(a, b)) / 7  # each bar agrees with 3 copies of itself and 4 of the other
+    assert abs(period_margin(bars) - (1.0 - one_bar)) < 1e-9
+    assert period_margin(bars[:3]) == 0.0  # fewer than four bars
+
+
+def test_unit_two_pairs_from_the_best_pairs_phase_and_prints_aligned_to_the_first_bar():
+    # a stray opening bar, then a figure alternating from bar 1: the vote pairs (1, 2), (3, 4), ...
+    a, b = list("S--S--S-"), list("SSS-SSS-")
+    stray = list("S-------")
+    bars = [stray] + [a, b] * 4
+    r = choose_pattern(bars)
+    assert r.unit == 2
+    # bar 0 (and every even bar) plays the second bar of the figure, odd bars the first
+    assert r.vector == b + a
+
+
 def test_single_bar_and_all_rest_sections_do_not_raise():
     assert choose_pattern([list("S-S-----")]).vector == _topped_vote([list("S-S-----")])
     r = choose_pattern([list("--------")] * 3)

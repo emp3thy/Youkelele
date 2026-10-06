@@ -921,7 +921,7 @@ def _bars(*runs) -> list[BarStrums]:
             records.append(
                 BarStrums(
                     index=len(records), member=member, strokes=strokes, pattern=list(pattern),
-                    uncertain=uncertain, riff=riff,
+                    uncertain=uncertain, riff=riff, rings=rings,
                 )
             )
     return records
@@ -987,14 +987,25 @@ def test_bars_carry_strokes_grey_and_state_from_strums_bars():
     assert score.schema_version == 2
 
 
-def test_a_bar_without_detected_strokes_prints_its_pattern_ringing():
+def test_a_bar_without_detected_strokes_takes_its_members_ring_flag():
+    # a short member (rings False) with a strokeless bar: the bar prints its pattern with no
+    # sustain, as the member's other bars do (spec 4.4: the flag is the member's)
     bars = _bars((4, "D-D-D-DU", 0, False, False, False))
     bars[1] = bars[1].model_copy(update={"strokes": []})
     plan = [PlannedSection(start_bar=0, end_bar=4, label="Verse", members=[0])]
     strums = _strums_with_plan(plan, [_pattern()]).model_copy(update={"bars": bars})
     score = _riff_score(4, strums, Riffs())
-    assert [k.rings for k in score.sections[0].bars[1].strokes] == [True] * 5
-    assert not any(k.rings for k in score.sections[0].bars[0].strokes)
+    assert [k.slot for k in score.sections[0].bars[1].strokes] == [0, 2, 4, 6, 7]
+    assert not any(k.rings for b in score.sections[0].bars for k in b.strokes)
+
+
+def test_a_strokeless_bar_of_a_ringing_member_rings():
+    bars = _bars((4, "D-D-D-DU", 0, True, False, False))
+    bars[2] = bars[2].model_copy(update={"strokes": []})
+    plan = [PlannedSection(start_bar=0, end_bar=4, label="Verse", members=[0])]
+    strums = _strums_with_plan(plan, [_pattern()]).model_copy(update={"bars": bars})
+    score = _riff_score(4, strums, Riffs())
+    assert all(k.rings for k in score.sections[0].bars[2].strokes)
 
 
 def test_printable_riff_puts_tab_on_every_bar_and_sets_state_riff():

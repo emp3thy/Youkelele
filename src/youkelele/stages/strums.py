@@ -241,9 +241,15 @@ def _riff_test(member: _Member, track: PitchTrack, riff_times: np.ndarray, bars:
 
 
 def _prints_section(member: _Member, longest: _Member, slots: int) -> bool:
-    """Rule 5: the member prints its section's (the longest member's) pattern rather than its own."""
+    """Rule 5: the member prints its section's (the longest member's) pattern rather than its own.
+
+    A member that is a riff by the 5.1 test always prints its own pattern (spec 4.3, amended
+    after the first validation); the section header still follows the longest member.
+    """
     if member is longest:
         return True
+    if member.riff:  # a riff member keeps its own rhythm whatever it shares with the section
+        return False
     if longest.silent:
         return False
     return first_bar_agreement(member.vote.vector, longest.vote.vector, slots) >= MEMBER_AGREE
@@ -277,7 +283,10 @@ def _bar_records(
     """Rules 5 to 7: one record per bar of the member, trailing bars included."""
     if member.silent:
         return [
-            BarStrums(index=b, member=member.position, strokes=[], pattern=["-"] * slots, uncertain=True)
+            BarStrums(
+                index=b, member=member.position, strokes=[], pattern=["-"] * slots, uncertain=True,
+                rings=member.rings,
+            )
             for b in range(member.start, member.end)
         ]
     shown = longest if _prints_section(member, longest, slots) else member
@@ -294,7 +303,7 @@ def _bar_records(
                 index=b, member=member.position, strokes=strokes,
                 pattern=render_directions(cell, slots, meter), unit=shown.vote.unit,
                 confidence=shown.confidence, chance_p=shown.chance_p, uncertain=shown.uncertain,
-                riff=member.riff,
+                riff=member.riff, rings=member.rings,
             )
         )
     return records

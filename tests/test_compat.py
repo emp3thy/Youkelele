@@ -33,8 +33,9 @@ def test_backfill_strokes_come_from_the_bar_onsets_and_flags_from_the_pattern():
         onsets = s.bar_onsets[b.index]
         assert [(k.slot, k.kind) for k in b.strokes] == [(j, c) for j, c in enumerate(onsets) if c != "-"]
         pattern = s.patterns[_plan_index(s, b.index)]
-        assert (b.uncertain, b.riff, b.confidence, b.chance_p, b.unit) == (
+        assert (b.uncertain, b.riff, b.confidence, b.chance_p, b.unit, b.rings) == (
             pattern.uncertain, pattern.riff, pattern.confidence, pattern.chance_p, pattern.unit,
+            pattern.rings,
         )
 
 

@@ -217,6 +217,7 @@ class BarStrums(_Artifact):
     chance_p: float | None = None  # share of shuffled copies scoring at least this well; None when not tested
     uncertain: bool = True  # the bar's strokes are a guess
     riff: bool = False  # the bar belongs to a riff section
+    rings: bool = True  # the bar's member rings (spec 4.4); a bar with no detected strokes still carries it
 
 
 class Strums(_Artifact):
