@@ -52,9 +52,9 @@ echo.
 "%YK_UV%" run youkelele run "%YK_SOURCE%" --runs-dir "%YK_RUNS%"
 if errorlevel 1 goto failed
 
-rem the newest runs\*\07_render\sheet.pdf written since the run began is this run's
+rem the newest runs\*\08_render\sheet.pdf written since the run began is this run's
 set "YK_PDF="
-for /f "usebackq delims=" %%p in (`powershell -NoProfile -Command "Get-ChildItem -LiteralPath $env:YK_RUNS -Directory -ErrorAction SilentlyContinue | ForEach-Object { Get-Item -LiteralPath (Join-Path $_.FullName '07_render\sheet.pdf') -ErrorAction SilentlyContinue } | Where-Object { $_.LastWriteTimeUtc.Ticks -ge [long]$env:YK_SINCE } | Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 1 -ExpandProperty FullName"`) do set "YK_PDF=%%p"
+for /f "usebackq delims=" %%p in (`powershell -NoProfile -Command "Get-ChildItem -LiteralPath $env:YK_RUNS -Directory -ErrorAction SilentlyContinue | ForEach-Object { Get-Item -LiteralPath (Join-Path $_.FullName '08_render\sheet.pdf') -ErrorAction SilentlyContinue } | Where-Object { $_.LastWriteTimeUtc.Ticks -ge [long]$env:YK_SINCE } | Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 1 -ExpandProperty FullName"`) do set "YK_PDF=%%p"
 if not defined YK_PDF goto no_pdf
 echo.
 echo The sheet is ready:

@@ -213,6 +213,16 @@ def test_structure_test_exempts_a_full_vote_and_needs_density():
     assert not structured and p is None and density == 0.5
 
 
+def test_a_two_bar_vote_is_full_only_when_both_its_bars_are():
+    # the whole unit vector is the representative (spec 4.1): a first bar SSSSSSSS does not
+    # make the vote full when the second bar rests
+    bars = [list("SSSSSSSS"), list("SSSSSSS-")] * 4
+    _, p, density = structure_test(bars, list("SSSSSSSS") + list("SSSSSSS-"), seed=0)
+    assert p is not None and density == 15 / 16  # tested against the shuffles
+    structured, p, _ = structure_test(bars, list("SSSSSSSS") * 2, seed=0)
+    assert structured and p is None  # both bars full: tested as a claim about density
+
+
 def test_structure_test_all_rest_bars_gives_p_one():
     rests = [["-"] * 8] * 4
     structured, p, _ = structure_test(rests, ["-"] * 8, seed=0)

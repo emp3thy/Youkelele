@@ -204,3 +204,33 @@ Status of spec section 9's assumptions after these runs; the ones this validatio
 | A22 | New defaulted fields keep 1.4 files loading | **Verified in use** | The six songs re-run from strums read 1.4 `chords.json` files without `pair_tonic` or votes and printed the 1.4 headers |
 
 The rest (A1, A6, A7, A11, A12, A17, A19, A20) were not touched by these runs beyond what the table above says, and keep their spec 9 status.
+
+## Listening pass (owner, 2026-10-05)
+
+The owner listened to the fifteen clips above the day after the runs. Verdicts are the owner's words.
+
+| # | Clip | Tests | Owner's verdict |
+|---|---|---|---|
+| 1 | all-fired-up\strum_verse1_longest_33-41 | Verse 1 `DUDUDUDU` on its longest member | YES: "clicks have got it perfectly" |
+| 2 | all-fired-up\strum_verse1_fragment_28-33 | absorbed fragment plays Verse 1's pattern (A2, A4) | YES |
+| 3 | all-fired-up\strum_verse2_longest_61-69 | Verse 2 `D-D-D-DU` on its longest member | YES: "that sounded right" |
+| 4 | all-fired-up\strum_verse2_fragment_55-61 | absorbed 55-61 plays Verse 2's pattern | YES, qualified: "8th notes again with variations" |
+| 5 | all-fired-up\strum_verse2_fragment_90-97 | quietly sung 90-97 plays Verse 2's pattern (A4's named cost) | NO: "completely wrong - the guitar goes dum dum dummmmmm and then there are a series of slow dummmmmms" (sustained, sparse strums; not `D-D-D-DU`) |
+| 6 | all-fired-up\strum_verse2_fragment_97-104 | absorbed 97-104 plays Verse 2's pattern | NO: "there's no strumming pattern here - this is a guitar playing a riff and improvising" |
+| 7 | all-fired-up\strum_verse2_fragment_104-110 | absorbed 104-110 plays Verse 2's pattern | PARTLY: "the first couple of bars are improvisation before it goes into the d D D DUD riff again. So the end is right but that first couple of bars are wrong" (owner calls the Verse 2 figure a riff) |
+| 8 | all-fired-up\strum_flipped_1-4pattern_55-61 | does 1.4's own `D-Dx-U-U` fit 55-61 (the flip to uncertain) | NO: "that's pretty much syncopated 8th notes"; no chuck heard. The flip was right; Verse 2's pattern (clip 4) is the better fit |
+| 9 | all-fired-up\strum_flipped_chorus3_128-132 | does `D---DUD-` fit Chorus 3 128-132 (flipped to uncertain) | YES: "that's it. power chord then dud". The pattern is right; the flip to uncertain was over-cautious on four bars |
+| 10 | summer-of-69\strum_flipped_verse3_53-58 | does `DU-UDUDU` fit Verse 3 53-58 (flipped to uncertain) | NO: "the clicks are too fast. This is syncopated 8th notes again Duu du duu du duuu du du du du du du". The flip was right; the pattern itself is wrong, and the playing varies bar to bar |
+| 11 | the-cars-you-might-think\key_D_major | header D major against the mix | YES: "that sounds like the first and last chord used in the du du du duuu du" (D is home) |
+| 12 | the-cars-you-might-think\key_G_major | score rule's runner-up G against the mix | G is NOT home: "it goes dum dum de dum dum and each time it does that it goes up a tone or so. The penultimate tone is that one, the G, then it goes back down to the D (I think)". D major stands; G is the chord before the return to D |
+| 13 | the-cars-you-might-think\strum_certain_riff_verse1_11-19 | `DUDUDUDU` on a section marked riff | pattern YES: "that's exactly right". Riff-or-strum: STRUM ("for 13, it was a strum"), so the riff flag on Verse 1 is a FALSE POSITIVE |
+| 14 | the-cars-you-might-think\strum_certain_riff_planned5_52-60 | `DUDUDUDU` on a section marked riff | pattern YES, and it IS a riff: "14 is a riff but you've got the clicks right". Riff flag correct here |
+| 15 | the-cars-you-might-think\strum_certain_strum_chorus3_68-72 | `-UDUDUD-` on a section marked strum | YES, strum: "where you're clicking is the signature strum that makes the main part of the melody" |
+
+**What the pass settles.**
+
+- **A2 and A4 (fragment merge, longest member's pattern): refuted in part.** Verse 1's merge is right (clips 1, 2). Verse 2's is not: its longest member's `D-D-D-DU` fits 61-90 and, with variation, 55-61 (clips 3, 4), but 90-97 is sparse sustained strums (clip 5), 97-104 is a riff with improvisation (clip 6) and 104-110 opens with improvisation before the figure returns (clip 7). One printed pattern over the merged 55-110 is wrong for about 17 of its 55 bars. A fragment absorbed for naming must still be able to print its own pattern, or a hedge, when its playing differs from the longest member's.
+- **The chance test (A8 and the flips): two right, one over-cautious.** 55-61's own 1.4 pattern was wrong (clip 8) and Summer of '69's Verse 3 pattern was wrong (clip 10), so those flips to uncertain were correct. All Fired Up's four-bar Chorus 3 pattern `D---DUD-` is right (clip 9), so that flip was the test having too few bars to beat.
+- **A13 (riff marker): a second false positive on dense strumming.** The Cars Verse 1 (11-19) is a strum, not a riff (clip 13); Verse 3 (52-60) is a riff (clip 14); Chorus 3 is the strum the marker said (clip 15). With All Fired Up 33-49, that is two ear-confirmed strums marked riff, both full eighth-note votes at high density. 97-104 on All Fired Up is a riff the marker did not flag because it was absorbed into Verse 2. The owner hears All Fired Up's Verse 2 figure itself as a riff ("d D D DUD"), which the sheet labels a strum.
+- **The blind song's key: D major confirmed** (clips 11, 12). G is the step before the return to D, not home. The 0.0505 margin was closer on paper than in the music.
+- **Patterns the ear accepted outright:** All Fired Up Verse 1 and Verse 2's longest members, Chorus 3; The Cars Verses 1 and 3 and Chorus 3 ("the signature strum that makes the main part of the melody").

@@ -11,11 +11,13 @@ import numpy as np
 
 from youkelele.jsonio import load_model
 from youkelele.music.as_played import explained_onsets
+from youkelele.music.compat import with_bars
+from youkelele.music.members import member_spans
 from youkelele.music.relabel import default_plan, longest_member
 from youkelele.music.sections import runs_text, vocal_flags, vocal_runs
 from youkelele.music.trailing import trailing_silent_bars
 from youkelele.render.html import display_names
-from youkelele.schemas import ChordEvent, Chords, Grid, Key, Strums
+from youkelele.schemas import ChordEvent, Chords, Grid, Key, Riffs, SectionPattern, Strums
 
 BAR_START_TOLERANCE = 0.06  # a chord change this close to a bar start counts as on the bar
 MOSTLY_RESTS = 0.75  # a printed-as-certain pattern with at least this share of rests
@@ -52,6 +54,17 @@ class SectionDiag:
     name: str = ""  # the sheet's name for the section (`Verse 2`); the label when empty
     pattern: list[str] = field(default_factory=list)  # the printed pattern's slots
     confidence: float = 0.0  # the pattern's confidence
+    candidate: str = "majority"  # which candidate the vote kept
+    score_majority: float | None = None
+    score_medoid: float | None = None
+    unit: int = 1
+    pitch_change_share: float | None = None
+    rings: bool = True
+    ring_decay_db: float | None = None
+    # per member that prints its own pattern: (start, end, pattern text, prints own, uncertain)
+    member_patterns: list[tuple[int, int, str, bool, bool]] = field(default_factory=list)
+    # the riff gate: (agreement, support, named share, printable, reason), when the run has one
+    riff_gate: tuple[float, float, float, bool, str | None] | None = None
 
 
 def _label_text(d: SectionDiag) -> str:
@@ -98,6 +111,8 @@ class SectionDelta:
     rest_share: float
     riff_changed: bool = False  # the riff flag differs between the runs
     certainty_changed: bool = False  # the uncertain flag differs between the runs
+    pattern_changes: int = 0  # bars whose printed pattern differs (grids that match only)
+    candidate_changed: bool = False  # the vote kept a different candidate
 
     @property
     def changed(self) -> bool:
@@ -105,6 +120,8 @@ class SectionDelta:
         return bool(
             self.riff_changed
             or self.certainty_changed
+            or self.pattern_changes
+            or self.candidate_changed
             or self.strikes_per_bar
             or self.explained
             or self.rest_share
@@ -226,7 +243,24 @@ def _chord_diagnostics(grid: Grid, chords: Chords) -> dict[str, float | int | No
     }
 
 
-def _section_diags(grid: Grid, strums: Strums, chords: Chords) -> list[SectionDiag]:
+def _member_patterns(
+    section, pattern: SectionPattern, strums: Strums, grid: Grid
+) -> list[tuple[int, int, str, bool, bool]]:
+    """The members whose bars print a pattern other than the section's own (start, end, text, True, uncertain)."""
+    by_index = {b.index: b for b in strums.bars}
+    found = []
+    for start, end in member_spans(section, grid):
+        records = [by_index[i] for i in range(start, end) if i in by_index]
+        if not records or all(r.pattern == list(pattern.slots) for r in records):
+            continue
+        first = next(r for r in records if r.pattern != list(pattern.slots))
+        found.append((start, end, "".join(first.pattern), True, any(r.uncertain for r in records)))
+    return found
+
+
+def _section_diags(
+    grid: Grid, strums: Strums, chords: Chords, riffs: Riffs | None = None
+) -> list[SectionDiag]:
     """Per planned section strum figures over the bars the strums stage analysed.
 
     Pattern `k` belongs to planned section `k` (the strums' own plan, or one section per grid
@@ -243,6 +277,11 @@ def _section_diags(grid: Grid, strums: Strums, chords: Chords) -> list[SectionDi
         tail_end = tail.end_bar
         drop = trailing_silent_bars(chords, grid.bars, cap=tail.end_bar - tail.start_bar)
     names = display_names([section.label for section in plan])
+    try:
+        strums = with_bars(strums, grid)
+    except ValueError:  # patterns that do not match the plan cannot be backfilled: no member lines
+        pass
+    gates = {r.section: r for r in riffs.sections} if riffs is not None else {}
     for k, pattern in enumerate(strums.patterns):
         if not 0 <= k < len(plan):
             continue
@@ -275,6 +314,19 @@ def _section_diags(grid: Grid, strums: Strums, chords: Chords) -> list[SectionDi
                 name=names[k],
                 pattern=list(pattern.slots),
                 confidence=pattern.confidence,
+                candidate=pattern.candidate,
+                score_majority=pattern.score_majority,
+                score_medoid=pattern.score_medoid,
+                unit=pattern.unit,
+                pitch_change_share=pattern.pitch_change_share,
+                rings=pattern.rings,
+                ring_decay_db=pattern.ring_decay_db,
+                member_patterns=_member_patterns(section, pattern, strums, grid),
+                riff_gate=(
+                    (gate.agreement, gate.support, gate.named_share, gate.printable, gate.reason)
+                    if (gate := gates.get(k)) is not None
+                    else None
+                ),
             )
         )
     return diags
@@ -294,6 +346,11 @@ def _load_strums(run_dir: Path) -> Strums | None:
     return load_model(path, Strums) if path.is_file() else None
 
 
+def _load_riffs(run_dir: Path) -> Riffs | None:
+    path = run_dir / "05_riff" / "riff.json"
+    return load_model(path, Riffs) if path.is_file() else None
+
+
 def _diagnose(run_dir: Path) -> tuple[Report, Strums | None]:
     grid = load_model(run_dir / "02_grid" / "grid.json", Grid)
     chords = load_model(run_dir / "03_harmony" / "chords.json", Chords)
@@ -303,7 +360,7 @@ def _diagnose(run_dir: Path) -> tuple[Report, Strums | None]:
         report.vocal_runs = vocal_runs(vocal_flags(grid.bar_vocal_db), keep_trailing=True)
         report.vocal_bars = len(grid.bar_vocal_db)
     if strums is not None:
-        report.sections = _section_diags(grid, strums, chords)
+        report.sections = _section_diags(grid, strums, chords, _load_riffs(run_dir))
         report.boxes_mostly_rests = _boxes_mostly_rests(strums, report.sections)
     return report, strums
 
@@ -397,6 +454,28 @@ def _pair_sections(
     return [(by_start_a.get(s), by_start_b.get(s)) for s in sorted(by_start_a.keys() | by_start_b.keys())]
 
 
+def _printed_patterns(strums: Strums | None, grid: Grid) -> dict[int, list[str]]:
+    """Each bar's printed pattern by bar index; a run before 1.6 is read through its backfilled bars."""
+    if strums is None:
+        return {}
+    try:
+        strums = with_bars(strums, grid)
+    except ValueError:  # patterns that do not match the plan cannot be backfilled
+        return {}
+    return {b.index: list(b.pattern) for b in strums.bars}
+
+
+def _pattern_changes(
+    left: SectionDiag,
+    right: SectionDiag,
+    printed_a: dict[int, list[str]],
+    printed_b: dict[int, list[str]],
+) -> int:
+    """Bars both sections cover that both runs print, with a different pattern."""
+    bars = set(range(left.start_bar, left.end_bar)) & set(range(right.start_bar, right.end_bar))
+    return sum(1 for i in bars if i in printed_a and i in printed_b and printed_a[i] != printed_b[i])
+
+
 def compare_runs(a: Path, b: Path) -> Comparison:
     """Score run `b` against run `a` (the reference); neither needs truth."""
     a, b = Path(a), Path(b)
@@ -424,6 +503,11 @@ def compare_runs(a: Path, b: Path) -> Comparison:
         load_model(a / "02_grid" / "grid.json", Grid), load_model(b / "02_grid" / "grid.json", Grid),
         notes,
     )
+    grid_a = load_model(a / "02_grid" / "grid.json", Grid)
+    grid_b = load_model(b / "02_grid" / "grid.json", Grid)
+    printed_a = _printed_patterns(strums_a, grid_a)
+    printed_b = _printed_patterns(strums_b, grid_b)
+    same_grid = _grid_shape(grid_a) == _grid_shape(grid_b)
     deltas = [
         SectionDelta(
             right.strikes_per_bar - left.strikes_per_bar,
@@ -431,6 +515,8 @@ def compare_runs(a: Path, b: Path) -> Comparison:
             right.rest_share - left.rest_share,
             riff_changed=left.riff != right.riff,
             certainty_changed=left.uncertain != right.uncertain,
+            pattern_changes=_pattern_changes(left, right, printed_a, printed_b) if same_grid else 0,
+            candidate_changed=left.candidate != right.candidate,
         )
         if left is not None and right is not None
         else None
@@ -456,13 +542,51 @@ def _section_line(d: SectionDiag) -> str:
     )
     if d.riff_onsets is not None:  # 0 onsets gives "n/a (0 onsets)"
         features += f" ({d.riff_onsets} onset{'' if d.riff_onsets == 1 else 's'})"
-    return (
+    line = (
         f"  {d.index} {_label_text(d)} bars {d.start_bar}-{d.end_bar}: "
         f"{''.join(d.pattern) or 'n/a'}, conf {d.confidence:.2f}, strikes/bar {d.strikes_per_bar:.1f}, "
         f"explained {_pct(d.explained)}, rests {_pct(d.rest_share)}, "
         f"p {_num(d.chance_p, '.3f')}, density {_num(d.strike_density, '.2f')}, "
         f"riff {features}{' riff' if d.riff else ''}{flags}"
     )
+    return "\n".join([line + _vote_figures(d), *_member_lines(d), *_gate_lines(d)])
+
+
+def _vote_figures(d: SectionDiag) -> str:
+    parts = []
+    if d.score_medoid is not None and d.score_majority is not None:
+        kept, other = (
+            (d.score_medoid, d.score_majority)
+            if d.candidate == "medoid"
+            else (d.score_majority, d.score_medoid)
+        )
+        parts.append(f"vote {d.candidate} ({kept:.2f} vs {other:.2f})")
+    if d.unit == 2:
+        parts.append("unit 2")
+    parts.append(f"pcs {_num(d.pitch_change_share, '.2f')}")
+    if d.ring_decay_db is None:
+        parts.append("rings n/a")
+    else:
+        parts.append(f"{'rings' if d.rings else 'short'} {d.ring_decay_db:.1f}dB")
+    return ", " + ", ".join(parts)
+
+
+def _member_lines(d: SectionDiag) -> list[str]:
+    return [
+        f"    member {start}-{end} prints own {text}{' (uncertain)' if uncertain else ''}"
+        for start, end, text, own, uncertain in d.member_patterns
+        if own
+    ]
+
+
+def _gate_lines(d: SectionDiag) -> list[str]:
+    if d.riff_gate is None:
+        return []
+    agreement, support, named, printable, reason = d.riff_gate
+    verdict = "printable" if printable else "not transcribed" + (f" ({reason})" if reason else "")
+    return [
+        f"    riff gate: agreement {agreement:.2f} support {support:.2f} named {named:.2f} {verdict}"
+    ]
 
 
 def _key_line(key: Key | None) -> str:
@@ -528,8 +652,10 @@ def _cell(d: SectionDiag | None) -> str:
 def _delta(d: SectionDelta | None) -> str:
     if d is None:
         return "n/a"
-    marks = (" riff flag changed" if d.riff_changed else "") + (
-        " certainty changed" if d.certainty_changed else ""
+    marks = (
+        (" riff flag changed" if d.riff_changed else "")
+        + (" certainty changed" if d.certainty_changed else "")
+        + (f" patterns changed in {d.pattern_changes} bars" if d.pattern_changes else "")
     )
     return f"{d.strikes_per_bar:+.1f}/{d.explained * 100:+.1f}pp/{d.rest_share * 100:+.1f}pp{marks}"
 
@@ -547,6 +673,11 @@ def format_comparison(c: Comparison) -> str:
     for i, (left, right) in enumerate(c.sections):
         side = left if left is not None else right
         delta = c.deltas[i] if i < len(c.deltas) else None
-        lines.append(f"  {side.index} {_label_text(side)}: A {_cell(left)}  B {_cell(right)}  B-A {_delta(delta)}")
+        vote = ""
+        if delta is not None and delta.candidate_changed:
+            vote = f"  vote: {left.candidate} -> {right.candidate}"
+        lines.append(
+            f"  {side.index} {_label_text(side)}: A {_cell(left)}  B {_cell(right)}  B-A {_delta(delta)}{vote}"
+        )
     lines.extend(f"note: {note}" for note in c.notes)
     return "\n".join(lines)

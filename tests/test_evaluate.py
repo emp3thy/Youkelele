@@ -17,12 +17,15 @@ from youkelele.evaluate import (
 from youkelele.jsonio import save_model
 from youkelele.schemas import (
     Bar,
+    BarStrums,
     ChordEvent,
     Chords,
     Grid,
     Key,
     Meter,
     PlannedSection,
+    Riffs,
+    RiffSection,
     Section,
     SectionPattern,
     Strums,
@@ -590,12 +593,12 @@ def test_section_line_prints_members_p_density_and_riff():
     )
     assert _section_line(d) == (
         "  2 Verse 2 (grid 4, 5, 6: verse, verse, verse) bars 55-110: D-DU-UDU, conf 0.55, strikes/bar 3.1, "
-        "explained 100.0%, rests 25.0%, p 0.003, density 0.58, riff 0.66/0.58 (8 onsets) riff"
+        "explained 100.0%, rests 25.0%, p 0.003, density 0.58, riff 0.66/0.58 (8 onsets) riff, pcs n/a, rings n/a"
     )
     one = SectionDiag(**{**d.__dict__, "riff_onsets": 1, "riff": False})
-    assert _section_line(one).endswith("riff 0.66/0.58 (1 onset)")
+    assert "riff 0.66/0.58 (1 onset), pcs" in _section_line(one)
     # a 1.5 file written before the count was stored prints the pair alone
-    assert _section_line(SectionDiag(**{**d.__dict__, "riff_onsets": None})).endswith("riff 0.66/0.58 riff")
+    assert "riff 0.66/0.58 riff, pcs" in _section_line(SectionDiag(**{**d.__dict__, "riff_onsets": None}))
 
 
 def test_section_line_prints_na_for_a_1_4_section_and_no_group_for_one_member():
@@ -606,7 +609,7 @@ def test_section_line_prints_na_for_a_1_4_section_and_no_group_for_one_member():
     )
     assert _section_line(d) == (
         "  0 Verse bars 0-2: D-U-, conf 0.40, strikes/bar 2.0, explained 100.0%, rests 50.0%, "
-        "p n/a, density n/a, riff n/a uncertain"
+        "p n/a, density n/a, riff n/a uncertain, pcs n/a, rings n/a"
     )
 
 
@@ -772,7 +775,7 @@ def test_evaluate_prints_the_plan_section_line_and_the_votes(tmp_path):
     assert any(line.endswith("votes score C pair C mix G (agreement))") for line in lines)
     assert (
         "  0 Verse (grid 0, 1: verse, chorus) bars 0-4: D-U-, conf 0.80, strikes/bar 2.0, "
-        "explained 100.0%, rests 50.0%, p 0.020, density 0.50, riff 0.40/0.70 (12 onsets) riff"
+        "explained 100.0%, rests 50.0%, p 0.020, density 0.50, riff 0.40/0.70 (12 onsets) riff, pcs n/a, rings n/a"
     ) in lines
 
 
@@ -795,3 +798,128 @@ def test_section_diags_carry_the_pattern_confidence_and_the_sheets_numbered_name
     assert [d.name for d in diags] == ["Verse 1", "Chorus", "Verse 2"]
     assert [d.label for d in diags] == ["verse", "chorus", "verse"]
     assert all(d.pattern == ["D", "-", "U", "-"] and d.confidence == 0.8 for d in diags)
+
+
+# ---- 1.6: the vote, the ring flag, member patterns, the riff gate, bars in compare ----
+
+SECTION_SLOTS = ["D", "-", "U", "-", "D", "-", "U", "-"]
+OWN_SLOTS = ["D", "-", "-", "-", "-", "-", "-", "-"]
+
+
+def _wide_grid() -> Grid:
+    bars = [
+        Bar(index=i, start=i * 2.0, end=(i + 1) * 2.0, beats=list(range(4 * i, 4 * i + 4)))
+        for i in range(12)
+    ]
+    return Grid(
+        bpm=120.0, meter=Meter(numerator=4, denominator=4), beats=[i * 0.5 for i in range(48)],
+        downbeats=[4 * i for i in range(12)], bars=bars,
+        sections=[
+            Section(label="verse", start_bar=0, end_bar=8, confidence=0.5),
+            Section(label="verse", start_bar=8, end_bar=12, confidence=0.5),
+        ],
+        octave_decision="none", bar_loudness_db=[-20.0] * 12, sections_k=1,
+        largest_cluster_share=1.0, chorus_margin_db=None, labels_low_confidence=False,
+    )
+
+
+def _wide_chords() -> Chords:
+    events = [_event(i, 0, i * 2.0, (i + 1) * 2.0, "C:maj") for i in range(12)]
+    return Chords(key=Key(tonic="C", mode="major", confidence=0.9), events=events)
+
+
+def _bar(index, member, slots, uncertain=False) -> BarStrums:
+    return BarStrums(index=index, member=member, strokes=[], pattern=slots, uncertain=uncertain)
+
+
+def _wide_strums(candidate="medoid", changed=(), with_bars=True, **fields) -> Strums:
+    """One planned section over two members (bars 0-8 and 8-12); `changed` bars print their own."""
+    pattern = _pattern(0, SECTION_SLOTS, candidate=candidate, **fields)
+    bars = [
+        _bar(i, 0 if i < 8 else 1, OWN_SLOTS if i in changed else SECTION_SLOTS,
+             uncertain=i in changed)
+        for i in range(12)
+    ]
+    return Strums(
+        slots_per_bar=8, source="mix", source_ratio=1.0, grid_fit=0.9, uncertain=False,
+        patterns=[pattern], bar_onsets=[SECTION_SLOTS] * 12,
+        plan=[PlannedSection(start_bar=0, end_bar=12, label="verse", members=[0, 1])],
+        bars=bars if with_bars else [],
+    )
+
+
+def _wide_run(path, strums) -> Path:
+    return _run_with(path, grid=_wide_grid(), chords=_wide_chords(), strums=strums)
+
+
+def test_section_line_prints_the_vote_the_ring_and_member_patterns(tmp_path):
+    strums = _wide_strums(
+        changed=(8, 9, 10, 11), score_medoid=0.63, score_majority=0.58,
+        pitch_change_share=0.72, rings=True, ring_decay_db=2.1,
+    )
+    text = format_report(evaluate_run(_wide_run(tmp_path / "run", strums)))
+    assert "vote medoid (0.63 vs 0.58)" in text and "rings 2.1dB" in text
+    assert "pcs 0.72" in text
+    assert "    member 8-12 prints own D------- (uncertain)" in text
+    assert "member 0-8" not in text  # that member prints the section's own pattern
+    assert "unit 2" not in text
+
+
+def test_section_line_prints_short_unit_and_na_figures(tmp_path):
+    strums = _wide_strums(
+        candidate="majority", score_medoid=0.54, score_majority=0.55, unit=2,
+        rings=False, ring_decay_db=13.5,
+    )
+    text = format_report(evaluate_run(_wide_run(tmp_path / "run", strums)))
+    assert "vote majority (0.55 vs 0.54)" in text and "unit 2" in text
+    assert "short 13.5dB" in text and "pcs n/a" in text
+    unknown = format_report(evaluate_run(_wide_run(tmp_path / "other", _wide_strums())))
+    assert "rings n/a" in unknown
+
+
+def test_section_line_prints_the_riff_gate(tmp_path):
+    run = _wide_run(tmp_path / "run", _wide_strums())
+    (run / "05_riff").mkdir()
+    gate = dict(
+        section=0, start_bar=0, end_bar=12, unit=1, onsets=[], riff=[], candidate="medoid",
+        octave_shift=0,
+    )
+    save_model(run / "05_riff" / "riff.json", Riffs(sections=[
+        RiffSection(agreement=0.74, support=0.80, named_share=0.91, printable=True, **gate)
+    ]))
+    text = format_report(evaluate_run(run))
+    assert "    riff gate: agreement 0.74 support 0.80 named 0.91 printable" in text
+    save_model(run / "05_riff" / "riff.json", Riffs(sections=[
+        RiffSection(agreement=0.52, support=0.80, named_share=0.91, printable=False,
+                    reason="agreement 0.52 < 0.70", **gate)
+    ]))
+    text = format_report(evaluate_run(run))
+    assert "riff gate: agreement 0.52 support 0.80 named 0.91 not transcribed (agreement 0.52 < 0.70)" in text
+
+
+def test_compare_counts_bars_whose_pattern_changed_and_the_vote_switch(tmp_path):
+    a = _wide_run(tmp_path / "a", _wide_strums(candidate="majority"))
+    b = _wide_run(tmp_path / "b", _wide_strums(candidate="medoid", changed=(2, 3, 9, 10)))
+    c = compare_runs(a, b)
+    assert c.deltas[0].pattern_changes == 4 and c.deltas[0].candidate_changed
+    text = format_comparison(c)
+    assert "patterns changed in 4 bars" in text and "vote: majority -> medoid" in text
+    same = compare_runs(a, a)
+    assert same.deltas[0].pattern_changes == 0 and not same.deltas[0].candidate_changed
+    assert not same.deltas[0].changed
+    assert "patterns changed" not in format_comparison(same)
+
+
+def test_compare_backfills_a_v15_run(tmp_path):
+    a = _wide_run(tmp_path / "a", _wide_strums(with_bars=False))
+    b = _wide_run(tmp_path / "b", _wide_strums(changed=(1, 5)))
+    c = compare_runs(a, b)
+    assert c.deltas[0].pattern_changes == 2
+    assert "patterns changed in 2 bars" in format_comparison(c)
+
+
+def test_evaluate_tolerates_a_1_5_file_with_more_patterns_than_plan_entries(tmp_path):
+    strums = _wide_strums(with_bars=False)
+    strums = strums.model_copy(update={"patterns": [strums.patterns[0], _pattern(1, SECTION_SLOTS)]})
+    text = format_report(evaluate_run(_wide_run(tmp_path / "run", strums)))
+    assert "  0 Verse" in text and "member" not in text

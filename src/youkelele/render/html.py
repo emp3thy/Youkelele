@@ -1,4 +1,4 @@
-"""Render a Score into a self-contained chord-grid sheet page (HTML, CSS and inline SVG)."""
+"""Render a Score into a self-contained sheet page (HTML, CSS and inline SVG): a box per bar."""
 
 from __future__ import annotations
 
@@ -9,11 +9,12 @@ from pathlib import Path
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 from markupsafe import Markup
 
-from youkelele.render.diagrams import chord_diagram_svg
 from youkelele.music.arrange import _SHARPS
-from youkelele.render.grid import Cell, SectionGrid, fret_notation, section_grid
-from youkelele.render.strum_box import slot_px, strip_bars, worked_example_svg
-from youkelele.schemas import Score
+from youkelele.music.score_builder import STATE_NO_INSTRUMENT, STATE_UNCERTAIN
+from youkelele.render.bar_svg import bar_svg, slot_px
+from youkelele.render.diagrams import NC, chord_diagram_svg, fret_notation
+from youkelele.render.lines import fold_repeats, line_width, pack_lines, repeat_text
+from youkelele.schemas import Score, ScoreBar, ScoreSection, Stroke
 
 _ENV = Environment(
     loader=FileSystemLoader(Path(__file__).parent / "templates"),
@@ -27,6 +28,8 @@ CAPO_NOTE = "Shapes are relative to the capo"
 POWER_LEGEND = "{name} is a power chord on the record"
 POWER_LEGEND_EASY = "{name} is a power chord (root and fifth) on the record; this sheet prints the triad."
 FILLED_NOTE = "Italic chords were inferred where the recording had no clear chord"
+TAB_LEGEND = "Tab: A E C G top to bottom; numbers are frets. Re-entrant tuning: G is the high string."
+_OCTAVES = {1: "an octave", 2: "two octaves", 3: "three octaves"}
 
 
 def display_names(labels: Sequence[str]) -> list[str]:
@@ -69,10 +72,87 @@ def _key_fact(key: str, hedge: str | None, capo: int = 0) -> str:
     return f"{shaped} (or {_shape_key(hedge, capo) if capo > 0 else hedge})"
 
 
-def _shown_cells(grid: SectionGrid) -> list[Cell]:
-    """Every cell the sheet prints for a section: the pickup, then each block's rows once."""
-    lead = [grid.pickup] if grid.pickup is not None else []
-    return lead + [cell for block in grid.blocks for row in block.rows for cell in row]
+def octave_phrase(shift: int) -> str | None:
+    """The header's octave note (spec 3.2): "written an octave up", "written two octaves down"."""
+    if shift == 0:
+        return None
+    size = abs(shift)
+    return f"written {_OCTAVES.get(size, f'{size} octaves')} {'up' if shift > 0 else 'down'}"
+
+
+def _derived_strokes(bar: ScoreBar) -> list[Stroke]:
+    """A 1.5 bar's strokes: each chord's slot letters from its start slot, all ringing."""
+    return [
+        Stroke(slot=chord.start_slot + j, kind=cell, rings=True)
+        for chord in sorted(bar.chords, key=lambda c: c.start_slot)
+        for j, cell in enumerate(chord.slots)
+        if cell != "-"
+    ]
+
+
+def _state_from_flags(section: ScoreSection) -> str:
+    """A 1.5 section's header phrase: no instrument first, then an uncertain pattern."""
+    if section.no_instrument:
+        return STATE_NO_INSTRUMENT
+    if section.uncertain:
+        return STATE_UNCERTAIN
+    return ""
+
+
+def _with_strokes(score: Score) -> list[ScoreSection]:
+    """The score's sections, a 1.5 file's bars given strokes from their chords' slots.
+
+    A 1.5 score.json has no bar strokes at all; its uncertain sections then print their guess
+    greyed, as a 1.6 score's do (spec 4.5), and a section without a state phrase gets the one
+    its flags imply. A 1.6 score is returned as it is.
+    """
+    if any(bar.strokes for section in score.sections for bar in section.bars):
+        return list(score.sections)
+    return [
+        section.model_copy(
+            update={
+                "state": section.state or _state_from_flags(section),
+                "bars": [
+                    bar.model_copy(
+                        update={"strokes": _derived_strokes(bar), "grey": bar.grey or section.uncertain}
+                    )
+                    for bar in section.bars
+                ]
+            }
+        )
+        for section in score.sections
+    ]
+
+
+def _section_lines(section: ScoreSection, score: Score, power_badge: bool) -> list[dict]:
+    """The section's lines, identical neighbours folded, each bar drawn as its box.
+
+    A line's slot width follows how many bars its kind of line holds (four or eight), so a
+    short last line keeps its section's bar size; a line with any tab bar draws the tab block
+    on all its bars, so they stand level.
+    """
+    spb, meter = score.slots_per_bar, score.meter
+    lines = pack_lines(section, spb, meter)
+    widths: dict[int, int] = {}
+    start = 0
+    for line in lines:
+        widths[id(line.bars)] = line_width(section.bars, start, spb, meter)
+        start += len(line.bars)
+    shown = []
+    for line in fold_repeats(lines):
+        per_slot = slot_px(spb, widths[id(line.bars)])
+        tab_rows = any(bar.tab is not None for bar in line.bars)
+        svgs = [
+            Markup(
+                bar_svg(
+                    bar, meter, spb, per_slot, first_in_line=i == 0, grey=bar.grey,
+                    tab_rows=tab_rows, power_badge=power_badge,
+                )
+            )
+            for i, bar in enumerate(line.bars)
+        ]
+        shown.append({"svgs": svgs, "repeat": repeat_text(line.repeat) if line.repeat > 1 else None})
+    return shown
 
 
 def render_html(score: Score) -> str:
@@ -97,39 +177,20 @@ def render_html(score: Score) -> str:
     # one line per name: two shapes of one chord would otherwise print it twice
     power_names = dict.fromkeys(d.name for d in score.chord_diagrams if d.power)
     power_lines = [legend.format(name=name) for name in power_names]
-    sections = []
-    any_filled = False
-    per_slot = slot_px(score.slots_per_bar)
-    names = display_names([s.label for s in score.sections])
-    for name, section in zip(names, score.sections):
-        source = section.inherited_from
-        inherited = names[source] if source is not None and 0 <= source < len(names) else None
-        show_box = not (section.uncertain or section.no_instrument)
-        bars = strip_bars(section)
-        grid = section_grid(section)
-        any_filled = any_filled or any(cell.filled for cell in _shown_cells(grid))
-        sections.append(
-            {
-                "label": name,
-                "uncertain": section.uncertain,
-                # truncated, not rounded, so 0.597 never prints as 60% beside a 60 percent threshold;
-                # the epsilon keeps 0.29 (0.28999... in binary) at 29
-                "explained_pct": int(section.explained * 100 + 1e-9),
-                # a pre-1.3 score.json has no explained figure: a certain section then omits it
-                "show_covers": section.explained > 0 or section.uncertain,
-                "no_instrument": section.no_instrument,
-                "inherited_from": inherited,
-                "riff": section.riff,
-                "example": (
-                    Markup(worked_example_svg(section.pattern, bars, score.meter, per_slot))
-                    if show_box
-                    else None
-                ),
-                # a one-bar strip sits beside the rows; a two-bar strip stays above them
-                "beside": show_box and len(bars) == 1,
-                "grid": grid,
-            }
-        )
+    shown_sections = _with_strokes(score)
+    bars = [bar for section in shown_sections for bar in section.bars]
+    any_filled = any(chord.filled and chord.name != NC for bar in bars for chord in bar.chords)
+    any_tab = any(bar.tab is not None for bar in bars)
+    names = display_names([s.label for s in shown_sections])
+    sections = [
+        {
+            "label": name,
+            "state": section.state or None,
+            "octave": octave_phrase(section.octave_shift),
+            "lines": _section_lines(section, score, power_badge),
+        }
+        for name, section in zip(names, shown_sections)
+    ]
     capo = score.instrument.capo
     return _ENV.get_template("sheet.html.j2").render(
         score=score,
@@ -149,5 +210,6 @@ def render_html(score: Score) -> str:
         without_capo=without_capo if capo > 0 and without_capo else None,
         power_badge=power_badge,
         power_lines=power_lines,
+        tab_legend=TAB_LEGEND if any_tab else None,
         sections=sections,
     )

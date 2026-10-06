@@ -1,12 +1,14 @@
 import pytest
 
 from tests.fakes import make_fake_stage as fake
+from youkelele.layout import RunLayout
 from youkelele.manifest import Manifest, load_manifest
 from youkelele.options import RunOptions
 from youkelele.profiles import get_profile
 from youkelele.runner import (
     StageFailed,
     build_chain,
+    earliest_start,
     resolve_stage,
     run_chain,
     status,
@@ -202,3 +204,26 @@ def test_runner_leaves_source_meta_alone(tmp_path, opts):
     run_chain(tmp_path, two_stages(), opts, start=1, log=quiet)
     assert (tmp_path / "source_meta.json").read_text(encoding="utf-8") == "{}"
     assert status(tmp_path, two_stages()) == [("a", "done"), ("b", "done")]
+
+
+def test_profile_chain_has_nine_stages_in_order():
+    names = [s.name for s in build_chain(get_profile("ukulele"))]
+    assert names == ["ingest", "separate", "grid", "harmony", "strums", "riff", "arrange", "score", "render"]
+
+
+def test_resume_from_arrange_on_a_folder_without_riff_json_starts_from_riff(tmp_path):
+    chain = build_chain(get_profile("ukulele"))
+    layout = RunLayout(tmp_path, [s.name for s in chain])
+    for stage in chain[:5]:
+        for key in stage.produces:
+            path = layout.path(key)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("x", encoding="utf-8")
+    assert earliest_start(chain, tmp_path, resolve_stage(chain, "arrange")) == resolve_stage(chain, "riff") == 5
+    # nothing missing: the start is kept; a start already at or before the producer is kept
+    riff = layout.path("riff/riff.json")
+    riff.parent.mkdir(parents=True)
+    riff.write_text("x", encoding="utf-8")
+    assert earliest_start(chain, tmp_path, 6) == 6
+    riff.unlink()
+    assert earliest_start(chain, tmp_path, 5) == 5

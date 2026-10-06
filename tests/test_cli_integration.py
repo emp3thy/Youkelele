@@ -22,6 +22,7 @@ from youkelele.profiles.ukulele import ukulele_profile
 from youkelele.schemas import (
     Arrangement,
     Bar,
+    Riffs,
     ChordEvent,
     Chords,
     Grid,
@@ -119,15 +120,16 @@ def _fake_pdf(html_path: Path, pdf_path: Path) -> None:
 def chain(monkeypatch):
     stems = {f"separate/stems/{s}.wav": None for s in STEMS}
     profile_stages = list(ukulele_profile().stages)
-    assert [s.name for s in profile_stages] == ["strums", "arrange", "score"]
+    assert [s.name for s in profile_stages] == ["strums", "riff", "arrange", "score"]
     stages = [
         _FixedStage("ingest", (), {"ingest/audio.wav": None, "ingest/source.json": _source()}),
         _FixedStage("separate", ("ingest/audio.wav",), stems),
         _FixedStage("grid", ("ingest/audio.wav",), {"grid/grid.json": _grid()}),
         _FixedStage("harmony", ("ingest/audio.wav", "grid/grid.json"), {"harmony/chords.json": _chords()}),
         _FixedStage("strums", profile_stages[0].requires, {"strums/strums.json": _strums()}),
-        profile_stages[1],
+        _FixedStage("riff", profile_stages[1].requires, {"riff/riff.json": Riffs()}),
         profile_stages[2],
+        profile_stages[3],
         RenderStage(pdf_writer=_fake_pdf),
     ]
     monkeypatch.setattr(commands, "_chain", lambda instrument: stages)
@@ -143,7 +145,7 @@ def test_hand_edits_flow_downstream_and_saved_options_survive_resume(tmp_path, c
     runs = ["--runs-dir", str(tmp_path)]
     assert main(["run", "song.wav", "--tier", "full", "--beat-octave", "half", *runs]) == 0
     run_dir = tmp_path / "song"
-    score_path = run_dir / "06_score" / "score.json"
+    score_path = run_dir / "07_score" / "score.json"
     first = load_model(score_path, Score)
     assert [s.label for s in first.sections] == ["Verse", "Chorus"]
     assert _bar_chord_names(first) == [["C"], ["C"], ["G"], ["Am"]]
@@ -161,25 +163,25 @@ def test_hand_edits_flow_downstream_and_saved_options_survive_resume(tmp_path, c
     assert main(["run", "song.wav", "--from", "arrange", *runs]) == 0
     out = capsys.readouterr().out
     assert "will be overwritten" not in out
-    assert "[00] ingest" not in out and "[05] arrange" in out
+    assert "[00] ingest" not in out and "[06] arrange" in out
 
     score = load_model(score_path, Score)
     assert [s.label for s in score.sections] == ["Verse", "Big Chorus"]
     assert _bar_chord_names(score) == [["C"], ["C"], ["G"], ["F"]]
     assert [d.name for d in score.chord_diagrams] == ["C", "G", "F"]
     assert score.tier == "full"
-    arrangement = load_model(run_dir / "05_arrange" / "arrangement.json", Arrangement)
+    arrangement = load_model(run_dir / "06_arrange" / "arrangement.json", Arrangement)
     assert arrangement.tier == "full"
-    html = (run_dir / "07_render" / "sheet.html").read_text(encoding="utf-8")
+    html = (run_dir / "08_render" / "sheet.html").read_text(encoding="utf-8")
     assert "<h2>Big Chorus</h2>" in html and "<h2>Chorus</h2>" not in html
-    assert '"F"' in (run_dir / "06_score" / "score.alphatex").read_text(encoding="utf-8")
+    assert '"F"' in (run_dir / "07_score" / "score.alphatex").read_text(encoding="utf-8")
 
     options = load_manifest(run_dir).options
     assert (options.tier, options.beat_octave) == ("full", "half")
     assert chain[0].seen_options[0].tier == "full"
     # harmony and strums read the edited grid.json and were not re-run, so they are stale
     stale = [name for name, state in commands.status(run_dir, chain) if state != "done"]
-    assert stale == ["harmony", "strums"]
+    assert stale == ["harmony", "strums", "riff"]
 
 
 def test_splitting_a_section_and_resuming_past_strums_explains_the_fix(tmp_path, chain, capsys):
@@ -198,10 +200,10 @@ def test_splitting_a_section_and_resuming_past_strums_explains_the_fix(tmp_path,
     assert main(["run", "song.wav", "--from", "arrange", *runs]) == 1
     out = capsys.readouterr().out
     assert (
-        "stage score (06) failed: strums.json has 2 patterns for 3 sections in grid.json; "
+        "stage score (07) failed: strums.json has 2 patterns for 3 sections in grid.json; "
         "re-run from strums"
     ) in out
-    assert f'resume with: youkelele run "song.wav" --from 6 --runs-dir "{tmp_path}"' in out
+    assert f'resume with: youkelele run "song.wav" --from 7 --runs-dir "{tmp_path}"' in out
 
 
 def test_non_harte_hand_edit_fails_with_the_field_path(tmp_path, chain, capsys):
@@ -214,5 +216,5 @@ def test_non_harte_hand_edit_fails_with_the_field_path(tmp_path, chain, capsys):
     capsys.readouterr()
     assert main(["run", "song.wav", "--from", "arrange", *runs]) == 1
     out = capsys.readouterr().out
-    assert "stage arrange (05) failed" in out
+    assert "stage arrange (06) failed" in out
     assert "events.2.label" in out and "expected Harte syntax such as A:min" in out

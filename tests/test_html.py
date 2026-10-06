@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import re
+from pathlib import Path
 
+from youkelele.jsonio import load_model
 from youkelele.render.html import display_names, render_html
 from youkelele.schemas import (
     ChordDiagram,
@@ -12,28 +14,38 @@ from youkelele.schemas import (
     ScoreChord,
     ScoreSection,
     Shape,
+    Stroke,
+    TabNote,
 )
 
+FIXTURES = Path(__file__).parent / "fixtures"
 ISLAND = list("D-DU-UDU")
 C = Shape(frets=[0, 0, 0, 3], fingers=[0, 0, 0, 3], base_fret=1, barres=[])
 G = Shape(frets=[0, 2, 3, 2], fingers=[0, 1, 3, 2], base_fret=1, barres=[])
+RIFF = [TabNote(slot=0, midi=60, string=1, fret=0), TabNote(slot=3, midi=62, string=1, fret=2)]
+
+
+def _strokes(pattern=ISLAND, rings=True) -> list[Stroke]:
+    return [Stroke(slot=j, kind=k, rings=rings) for j, k in enumerate(pattern) if k != "-"]
 
 
 def _section(
-    label, n_bars, start, uncertain=False, no_instrument=False, pattern=ISLAND, inherited_from=None,
-    explained=0.85,
-    names=("C",),
+    label, n_bars, start, names=("C",), state="", grey=False, tab=False, pattern=ISLAND,
+    no_instrument=False, octave_shift=0,
 ):
     bars = [
         ScoreBar(
             index=start + i,
             chords=[ScoreChord(name=names[i % len(names)], diagram=0, start_slot=0, slots=list(pattern))],
+            strokes=[] if no_instrument else _strokes(pattern),
+            tab=list(RIFF) if tab else None,
+            grey=grey,
         )
         for i in range(n_bars)
     ]
     return ScoreSection(
-        label=label, pattern=list(pattern), uncertain=uncertain, bars=bars, bar_repeat=0.875,
-        no_instrument=no_instrument, inherited_from=inherited_from, explained=explained,
+        label=label, pattern=list(pattern), uncertain=grey, bars=bars, bar_repeat=0.875,
+        no_instrument=no_instrument, state=state, octave_shift=octave_shift,
     )
 
 
@@ -48,7 +60,7 @@ def _score(sections, strum_source="other_stem", slots_per_bar=8, capo=0):
         tier="easy",
         slots_per_bar=slots_per_bar,
         strum_source=strum_source,
-        strums_uncertain=any(s.uncertain for s in sections),
+        strums_uncertain=False,
         chord_diagrams=[ChordDiagram(name="C", shape=C), ChordDiagram(name="G", shape=G)],
         sections=sections,
     )
@@ -64,6 +76,104 @@ def _section_html(html: str, label: str) -> str:
     return html[start:end]
 
 
+def _chord_names(html: str) -> list[str]:
+    """The chord row's names in page order, the power badge's tspan kept as written."""
+    return re.findall(r'class="chord[^"]*">(.*?)</text>', html)
+
+
+# the brief's tests
+
+
+def test_render_html_prints_every_bar_in_order_with_state_phrases_and_no_strip():
+    score = _score([_section("verse", 12, 0), _section("chorus", 4, 12, state="pattern uncertain", grey=True)])
+    html = render_html(score)
+    diagrams = score.chord_diagrams
+    assert html.count("<svg") >= 16 + len(diagrams) and "worked-example" not in html and "×" not in html
+    assert "pattern uncertain" in html and "play " not in html
+    assert html.count('class="bar"') == 16
+    # the uncertain chorus draws its strokes in grey; the verse in black
+    chorus = _section_html(html, "Chorus")
+    assert 'stroke="#999"' in chorus and 'class="arrow down"' in chorus
+    assert re.search(r'<span class="strum-label">pattern uncertain</span>', chorus)
+    assert "strum-label" not in _section_html(html, "Verse")  # a certain section prints no phrase
+
+
+def test_render_html_folds_identical_lines_and_prints_the_tab_legend_once():
+    html = render_html(_score([_section("outro", 24, 0, names=("G",))]))  # eight-bar lines, three identical
+    assert html.count("play three times") == 1
+    outro = _section_html(html, "Outro")
+    assert outro.count('class="line"') == 1 and outro.count('class="bar"') == 8
+    html_tab = render_html(_score([_section("verse", 8, 0, tab=True, state="riff")]))
+    assert html_tab.count("Tab: A E C G top to bottom; numbers are frets.") == 1 and "written an octave" not in html_tab
+    assert html_tab.count("Tab: A E C G top to bottom; numbers are frets. Re-entrant tuning: G is the high string.") == 1
+    assert html_tab.index("Tab: A E C G") < html_tab.index('class="sections"')
+    assert "Tab: A E C G" not in html
+
+
+def test_v15_score_fixture_renders():
+    html = render_html(load_model(FIXTURES / "v15_score.json", Score))
+    assert "<svg" in html  # bars with empty strokes draw their chords' slots as strokes, all ringing
+    assert 'class="arrow down"' in html and 'class="sustain"' in html
+    # a 1.5 file has no state phrases: its section flags give them (intro, chorus 2, verse 3,
+    # chorus 3 are uncertain in the fixture)
+    assert html.count('<span class="strum-label">pattern uncertain</span>') == 4
+    assert '<span class="strum-label">pattern uncertain</span>' in _section_html(html, "Intro")
+    quiet = render_html(_score([_section("Intro", 2, 0, no_instrument=True), _section("Verse", 2, 2, no_instrument=True)]))
+    assert _section_html(quiet, "Intro").count('<span class="strum-label">no strummed instrument detected</span>') == 1
+
+
+# the page around the bars
+
+
+def test_octave_shift_is_named_after_the_state_phrase():
+    up = render_html(_score([_section("verse", 4, 0, tab=True, state="riff", octave_shift=1)]))
+    assert '<span class="strum-label">riff</span>' in up and "written an octave up" in up
+    down = render_html(_score([_section("verse", 4, 0, tab=True, state="riff", octave_shift=-1)]))
+    assert "written an octave down" in down
+    two = render_html(_score([_section("verse", 4, 0, tab=True, state="riff", octave_shift=2)]))
+    assert "written two octaves up" in two
+
+
+def test_tab_lines_draw_the_tab_block_and_labels_once_per_line():
+    html = render_html(_score([_section("verse", 8, 0, tab=True, state="riff")]))
+    verse = _section_html(html, "Verse")
+    assert verse.count('class="line"') == 1
+    assert verse.count('class="string-label"') == 4  # A E C G on the line's first bar only
+    assert verse.count('class="fret"') == 16
+    assert verse.count('class="count beat"') == 4  # one count row per line
+
+
+def test_no_instrument_section_prints_its_phrase_and_empty_stroke_rows():
+    score = _score(
+        [_section("Intro", 2, 0, no_instrument=True, state="no strummed instrument detected"), _section("Verse", 2, 2)]
+    )
+    intro = _section_html(render_html(score), "Intro")
+    assert "no strummed instrument detected" in intro
+    assert intro.count('class="bar"') == 2 and 'class="arrow' not in intro
+
+
+def test_html_nc_and_pickup_bars():
+    pickup = ScoreBar(
+        index=0, pickup=True, chords=[ScoreChord(name="N.C.", diagram=-1, start_slot=0, slots=ISLAND)],
+        strokes=_strokes(),
+    )
+    split = ScoreBar(
+        index=1,
+        chords=[
+            ScoreChord(name="C", diagram=0, start_slot=0, slots=ISLAND[:4]),
+            ScoreChord(name="G", diagram=1, start_slot=4, slots=ISLAND[4:]),
+        ],
+        strokes=_strokes(),
+    )
+    section = ScoreSection(
+        label="Intro", pattern=ISLAND, uncertain=False, bars=[pickup, split], bar_repeat=1.0,
+        no_instrument=False,
+    )
+    html = render_html(_score([section]))
+    assert _chord_names(html) == ["N.C.", "C", "G"]
+    assert html.count('class="pickup-label"') == 1
+
+
 def test_html_has_no_scripts_and_no_assets():
     html = render_html(_two_sections())
     assert "<script" not in html
@@ -73,52 +183,8 @@ def test_html_has_no_scripts_and_no_assets():
     assert "Song &amp; Dance" in html
 
 
-def test_html_renders_grid_rows_with_repeat_marker():
-    chorus = _section("Chorus", 12, 8, names=("G", "C"))
-    html = render_html(_score([_section("Verse 1", 6, 0, names=("C", "G")), chorus]))
-    verse = _section_html(html, "Verse 1")
-    assert verse.count('class="row"') == 2  # 4 + 2 bars, different rows
-    assert "×" not in verse
-    body = _section_html(html, "Chorus")
-    assert body.count('class="row"') == 1
-    assert body.count('class="cell"') == 4
-    assert "×3" in body
-    assert re.findall(r'<div class="cell">([^<]*)</div>', body) == ["G", "C", "G", "C"]
-
-
-def test_html_nc_and_pickup_cells():
-    pickup = ScoreBar(
-        index=0, pickup=True, chords=[ScoreChord(name="N.C.", diagram=-1, start_slot=0, slots=ISLAND)]
-    )
-    split = ScoreBar(
-        index=1,
-        chords=[
-            ScoreChord(name="C", diagram=0, start_slot=0, slots=ISLAND[:4]),
-            ScoreChord(name="G", diagram=1, start_slot=4, slots=ISLAND[4:]),
-        ],
-    )
-    section = ScoreSection(
-        label="Intro", pattern=ISLAND, uncertain=False, bars=[pickup, split], bar_repeat=1.0,
-        no_instrument=False,
-    )
-    html = render_html(_score([section]))
-    assert html.count('class="cell nc pickup"') == 1
-    assert "pickup" in _section_html(html, "Intro").split('class="cell nc pickup"')[1][:80]
-    assert ">C / G<" in html
-
-
-def test_html_uncertain_section_has_heading_note_and_no_strum_box():
-    score = _score(
-        [_section("Verse 1", 2, 0, uncertain=True), _section("Chorus", 2, 2)], strum_source="mix"
-    )
-    html = render_html(score)
-    verse = _section_html(html, "Verse 1")
-    assert "(uncertain)" in verse
-    assert "Strum heard in this section; covers 85% of detected strokes. Up and down follow the beat (uncertain)" in verse
-    assert 'class="strum-box"' not in verse and "<svg" not in verse
-    assert 'class="row"' in verse
-    chorus = _section_html(html, "Chorus")
-    assert chorus.count('class="strum-box"') == 1 and "(uncertain)" not in chorus
+def test_html_strum_source_note():
+    html = render_html(_two_sections(strum_source="mix"))
     assert "Strum detected from full mix" in html
     assert "Strum detected from full mix" not in render_html(_two_sections())
 
@@ -174,24 +240,9 @@ def test_html_fixed_sheet_width_for_print():
     assert ".no-print { display: none }" in print_block
     assert "@page { size: A4; margin: 14mm }" in html
     assert ".section-head { break-after: avoid }" in html
-    assert "avoid-page" not in html
-    assert ".row { display: grid; grid-template-columns: repeat(4, 1fr) auto; break-inside: avoid; }" in html
-    assert ".cell { border: 1px solid; padding: 2mm; font-size: 12pt; }" in html
-    assert ".cell.nc { color: var(--muted); }" in html
-    assert ".cell.pickup { grid-column: span 1; font-size: 9pt; }" in html
-    assert ".repeat { font-size: 10pt; align-self: center; }" in html
-    # a fixed border-box width keeps bracketed block rows as wide as every other row
-    assert ".repeat { grid-column: -2; min-width: 12mm; box-sizing: border-box;" in html
-
-
-def test_html_no_instrument_section_replaces_strum_box():
-    score = _score([_section("Intro", 2, 0, no_instrument=True), _section("Verse", 2, 2)])
-    html = render_html(score)
-    intro = _section_html(html, "Intro")
-    assert "No strummed instrument detected" in intro
-    assert "Strum as played" not in intro and 'class="strum-box"' not in intro
-    assert 'class="row"' in intro
-    assert html.count('class="strum-box"') == 1
+    assert ".line { display: flex; gap: 1.5mm; break-inside: avoid; margin-bottom: 1.5mm }" in html
+    for gone in (".row {", ".cell {", ".block {", ".strum-box", ".section-body"):
+        assert gone not in html
 
 
 def test_html_has_one_legend_diagram_per_chord():
@@ -209,6 +260,12 @@ def test_html_escapes_hostile_title():
     assert "&lt;/script&gt;" in html and "&lt;!-- x" in html
 
 
+def test_html_escapes_hostile_chord_names():
+    section = _section("Verse", 1, 0, names=("<b>X</b>",))
+    html = render_html(_score([section]))
+    assert "<b>X</b>" not in html and "&lt;b&gt;X&lt;/b&gt;" in html
+
+
 STRUMS_NOTE = "Strum detection uncertain for this song (onsets fit the beat grid poorly)"
 
 
@@ -220,54 +277,6 @@ def test_html_shows_song_level_strum_uncertainty_note():
     assert STRUMS_NOTE not in render_html(_two_sections())
 
 
-def test_html_inherited_section_names_its_donor_without_the_donors_covers_figure():
-    score = _score(
-        [
-            _section("Verse", 4, 0, explained=0.97),
-            _section("Pre-chorus", 2, 4, uncertain=True, inherited_from=0, explained=0.97),
-        ]
-    )
-    html = render_html(score)
-    pre = _section_html(html, "Pre-chorus")
-    assert "Strum as in Verse (uncertain)" in pre
-    assert "covers" not in pre  # 97% is the donor's figure, not this section's
-    assert "Strum heard" not in pre
-    assert 'class="strum-box"' not in pre  # uncertain, so no strip, as before
-    assert "covers 97% of detected strokes" in _section_html(html, "Verse")
-    assert "same as" not in html and "inherited from" not in html
-
-
-def test_html_prints_explained_not_repeatable():
-    html = render_html(_two_sections())
-    verse = _section_html(html, "Verse 1")
-    assert "Strum heard in this section; covers 85% of detected strokes. Up and down follow the beat" in verse
-    assert "(uncertain)" not in verse
-    assert "repeatable" not in html
-    assert "Strum as played" not in html
-
-
-def test_html_explained_percentage_truncates_not_rounds():
-    score = _score([_section("Verse 1", 2, 0, explained=0.859)])
-    assert "covers 85% of detected strokes" in render_html(score)
-    # never 60% beside the 60 percent threshold when the figure is under it
-    score = _score([_section("Verse 1", 2, 0, explained=0.597)])
-    assert "covers 59% of detected strokes" in render_html(score)
-    # 0.29 is 28.999... per cent in binary; the epsilon keeps it at 29
-    score = _score([_section("Verse 1", 2, 0, explained=0.29)])
-    assert "covers 29% of detected strokes" in render_html(score)
-
-
-def test_html_certain_section_without_explained_omits_the_covers_clause():
-    # a score.json written before version 1.3 has explained 0.0 on every section
-    html = render_html(_score([_section("Verse 1", 2, 0, explained=0.0)]))
-    verse = _section_html(html, "Verse 1")
-    assert "Strum heard in this section. Up and down follow the beat" in verse
-    assert "covers" not in verse
-    # an uncertain section keeps its 0% figure: nothing it heard is on the pattern
-    html = render_html(_score([_section("Verse 1", 2, 0, uncertain=True, explained=0.0)]))
-    assert "covers 0% of detected strokes" in html
-
-
 B = Shape(frets=[4, 3, 2, 2], fingers=[3, 2, 1, 1], base_fret=1, barres=[2])
 FILLED_NOTE = "Italic chords were inferred where the recording had no clear chord"
 
@@ -277,6 +286,7 @@ def _bars(names: list[str], start: int = 0, filled: bool = False) -> list[ScoreB
         ScoreBar(
             index=start + i,
             chords=[ScoreChord(name=n, diagram=0, start_slot=0, slots=ISLAND, filled=filled)],
+            strokes=_strokes(),
         )
         for i, n in enumerate(names)
     ]
@@ -328,13 +338,15 @@ def _power_score(tier: str) -> Score:
             ScoreChord(name="C#m", diagram=0, start_slot=0, slots=ISLAND[:4], power=True),
             ScoreChord(name="G", diagram=1, start_slot=4, slots=ISLAND[4:]),
         ],
+        strokes=_strokes(),
     )
     whole = ScoreBar(
         index=0,
         chords=[ScoreChord(name="C#m", diagram=0, start_slot=0, slots=ISLAND, power=True)],
+        strokes=_strokes(),
     )
     plain = ScoreBar(
-        index=2, chords=[ScoreChord(name="G", diagram=1, start_slot=0, slots=ISLAND)]
+        index=2, chords=[ScoreChord(name="G", diagram=1, start_slot=0, slots=ISLAND)], strokes=_strokes(),
     )
     section = ScoreSection(
         label="Verse", pattern=ISLAND, uncertain=False, bars=[whole, split, plain],
@@ -351,16 +363,17 @@ def _power_score(tier: str) -> Score:
     )
 
 
+BADGE = re.compile(r'C#m<tspan [^>]*class="power"[^>]*>5</tspan>')
+
+
 def test_html_power_badge_and_legend_line():
     html = render_html(_power_score("full"))
-    assert re.findall(r'<div class="cell">([^<]*(?:<sup>5</sup>[^<]*)*)</div>', html) == [
-        "C#m<sup>5</sup>", "C#m<sup>5</sup> / G", "G",
-    ]
-    assert "<sup>5</sup>" in html
+    names = _chord_names(html)
+    assert len(names) == 4 and BADGE.fullmatch(names[0]) and BADGE.fullmatch(names[1])
+    assert names[2:] == ["G", "G"]
     legend_line = "C#m is a power chord on the record"
     assert html.count(legend_line) == 1
     assert html.index('class="legend"') < html.index(legend_line) < html.index('class="sections"')
-    assert "sup {" in html  # the badge is styled small and raised
 
 
 def test_html_power_legend_line_follows_the_passing_line():
@@ -372,11 +385,11 @@ def test_html_power_legend_line_follows_the_passing_line():
 
 def test_html_easy_tier_prints_the_plain_name_without_badge_and_the_triad_line():
     html = render_html(_power_score("easy"))
-    assert "<sup>5</sup>" not in html
+    assert 'class="power"' not in html
     # the easy tier names the power chord once, with the triad clause, not the full tier's line
     assert html.count("power chord") == 1
     assert "C#m is a power chord on the record" not in html
-    assert re.findall(r'<div class="cell">([^<]*)</div>', html) == ["C#m", "C#m / G", "G"]
+    assert _chord_names(html) == ["C#m", "C#m", "G", "G"]
 
 
 def test_html_power_legend_line_once_per_name():
@@ -389,95 +402,60 @@ def test_html_power_legend_line_once_per_name():
 
 def test_html_without_power_has_no_badge_markup():
     html = render_html(_two_sections())
-    assert "<sup>5</sup>" not in html and "power chord" not in html
+    assert 'class="power"' not in html and "power chord" not in html
 
 
-def test_filled_cell_italic_and_header_note():
+def test_easy_tier_prints_the_power_line_with_the_triad_clause():
+    html = render_html(_power_score("easy"))
+    line = "C#m is a power chord (root and fifth) on the record; this sheet prints the triad."
+    assert line in html
+    assert html.count(line) == 1
+    assert html.index('class="legend"') < html.index(line) < html.index('class="sections"')
+
+
+def test_full_tier_power_line_unchanged():
+    html = render_html(_power_score("full"))
+    assert "C#m is a power chord on the record" in html
+    assert "root and fifth" not in html and "prints the triad" not in html
+
+
+def test_filled_chord_italic_and_header_note():
     bars = _bars(["C", "G"]) + _bars(["G"], start=2, filled=True)
     html = render_html(_score([_plain_section("Verse", bars)]))
-    assert ".cell.filled { font-style: italic }" in html
-    assert re.findall(r'<div class="cell filled">([^<]*)</div>', html) == ["G"]
-    assert re.findall(r'<div class="cell">([^<]*)</div>', html) == ["C", "G"]
+    assert re.findall(r'font-style="italic"[^>]*class="chord">([^<]*)<', html) == ["G"]
+    assert html.count('font-style="italic"') == 1
     head = html[html.index('<header class="sheet-head">'):html.index("</header>")]
     assert FILLED_NOTE in head
     assert FILLED_NOTE not in render_html(_two_sections())
 
 
-def test_block_repeat_marker_printed_once():
-    names = (["G"] * 4 + ["D"] * 4) * 5
-    html = render_html(_score([_plain_section("Chorus", _bars(names))]))
-    body = _section_html(html, "Chorus")
-    assert body.count("×5") == 1
-    assert body.count("×") == 1
-    assert body.count('class="row"') == 2
-    assert body.count('class="cell"') == 8
-    # the marker sits on the block's last row, after the D cells
-    rows = body.split('class="row"')[1:]
-    assert "×5" in rows[1] and "×" not in rows[0]
-    assert re.findall(r'<div class="cell">([^<]*)</div>', rows[1]) == ["D"] * 4
+def test_a_line_with_two_chords_in_a_bar_holds_four_bars():
+    bars = _bars(["C", "G", "C", "G"]) + [
+        ScoreBar(
+            index=4,
+            chords=[
+                ScoreChord(name="C", diagram=0, start_slot=0, slots=ISLAND[:4]),
+                ScoreChord(name="G", diagram=1, start_slot=4, slots=ISLAND[4:]),
+            ],
+            strokes=_strokes(),
+        ),
+        *_bars(["C", "G", "C"], start=5),
+    ]
+    verse = _section_html(render_html(_score([_plain_section("Verse", bars)])), "Verse")
+    assert verse.count('class="line"') == 2
+    widths = re.findall(r'<svg [^>]*class="bar"[^>]*width="(\d+)"|<svg [^>]*width="(\d+)"[^>]*class="bar"', verse)
+    assert {a or b for a, b in widths} == {"168"}  # four bars a line: 21 px a slot
 
 
-def test_pickup_is_narrow_leading_cell_not_its_own_row():
-    pickup = ScoreBar(
-        index=0, pickup=True, chords=[ScoreChord(name="N.C.", diagram=-1, start_slot=0, slots=ISLAND)]
-    )
-    bars = [pickup] + _bars(["C", "G", "C", "G", "C", "G", "C", "G", "F"], start=1)
-    verse = _plain_section("Verse", _bars(["C"] * 4, start=10))
-    html = render_html(_score([_plain_section("Intro", bars), verse]))
-    assert "grid-template-columns: 0.25fr repeat(4, 1fr) auto" in html
-    intro = _section_html(html, "Intro")
-    assert 'class="grid has-pickup"' in intro
-    rows = intro.split('class="row"')[1:]
-    assert len(rows) == 2  # [pickup] C G C G (x2), then F; the pickup has no row of its own
-    assert 'class="cell nc pickup"' in rows[0]
-    assert re.findall(r'<div class="cell">([^<]*)</div>', rows[0]) == ["C", "G", "C", "G"]
-    assert "×2" in rows[0]
-    # later rows carry an empty leading track so the columns line up
-    assert 'class="lead"' in rows[1] and "pickup" not in rows[1]
-    verse_html = _section_html(html, "Verse")
-    assert "has-pickup" not in verse_html and 'class="lead"' not in verse_html
-
-
-def test_html_prints_worked_example_under_each_box():
-    score = _score(
-        [
-            _section("Verse 1", 4, 0, names=("C", "G")),
-            _section("Pre-chorus", 2, 4, uncertain=True),
-            _section("Chorus", 4, 6),
-        ]
-    )
-    html = render_html(score)
-    boxed = [s for s in score.sections if not (s.uncertain or s.no_instrument)]
-    assert html.count('class="worked-example"') == len(boxed) == 2
-    verse = _section_html(html, "Verse 1")
-    # no bar changes chord inside it: a one-bar strip, beside the rows (after the grid)
-    box = verse[verse.index('class="strum-box"'):]
-    assert box.count("<svg") == 1 and box.index('class="worked-example"') < box.index("<svg")
-    assert verse.index('class="strum-label"') < verse.index('class="grid') < verse.index('class="strum-box"')
-    example = box[box.index('class="worked-example"'):]
-    assert re.findall(r'class="chord">([^<]*)<', example) == ["C"]
-    assert 'class="worked-example"' not in _section_html(html, "Pre-chorus")
-
-
-def test_html_no_example_without_instrument():
-    score = _score([_section("Intro", 2, 0, no_instrument=True), _section("Verse", 2, 2)])
-    html = render_html(score)
-    assert 'class="worked-example"' not in _section_html(html, "Intro")
-    assert html.count('class="worked-example"') == 1
-
-
-def test_html_sixteen_slot_strip_uses_the_narrow_slot_width():
+def test_eight_bar_lines_use_the_narrow_slot_and_sixteenths_too():
+    verse = _section_html(render_html(_score([_section("Verse", 8, 0, names=("C", "G"))])), "Verse")
+    assert verse.count('class="line"') == 1 and 'width="80"' in verse
     sixteenths = list("D-DU-UDU" * 2)
-    plain = _section("Verse", 2, 0, pattern=sixteenths)
-    # the second bar changes chord inside it, so the strip keeps both bars
-    changing = plain.model_copy(update={"bars": [plain.bars[0], _split_bar(1, "C", "G", 8)]})
-    score = _score([changing], slots_per_bar=16)
-    verse = _section_html(render_html(score), "Verse")
-    widths = re.findall(r'<svg [^>]*width="(\d+)"', verse)
-    assert widths == ["652"]  # 2 * 16 * 20 + 12, within the 688 px text width
-    # with no change inside a bar the strip is one bar: 16 * 20
-    one = _section_html(render_html(_score([plain], slots_per_bar=16)), "Verse")
-    assert re.findall(r'<svg [^>]*width="(\d+)"', one) == ["320"]
+    fast = _section_html(
+        render_html(_score([_section("Verse", 4, 0, names=("C", "G"), pattern=sixteenths)], slots_per_bar=16)),
+        "Verse",
+    )
+    assert fast.count('class="line"') == 1 and fast.count('width="160"') == 4
 
 
 def test_display_names_number_by_occurrence():
@@ -495,20 +473,19 @@ def test_display_names_number_by_occurrence():
     assert display_names(["Verse", "verse"]) == ["Verse 1", "Verse 2"]
 
 
-def test_html_headings_and_strum_as_in_use_display_names():
+def test_html_headings_use_display_names():
     score = _score(
         [
             _section("verse", 4, 0),
             _section("chorus", 4, 4),
             _section("verse", 4, 8),
             _section("bridge", 4, 12),
-            _section("verse", 2, 16, uncertain=True, inherited_from=2),
+            _section("verse", 2, 16),
         ]
     )
     html = render_html(score)
     headings = re.findall(r"<h2>(.*?)</h2>", html)
     assert headings == ["Verse 1", "Chorus", "Verse 2", "Bridge", "Verse 3"]
-    assert "Strum as in Verse 2 (uncertain)" in _section_html(html, "Verse 3")
 
 
 CSHARP = Shape(frets=[1, 1, 1, 4], fingers=[1, 1, 1, 4], base_fret=1, barres=[1])
@@ -542,115 +519,3 @@ def test_html_no_capo_line_in_fret_notation_with_barre_marks():
 def test_html_no_capo_line_absent_without_a_capo():
     assert "Without a capo" not in render_html(_alternative_score(0))
     assert "Without a capo" not in render_html(_two_sections(capo=3))
-
-
-def _split_bar(index: int, first: str, second: str, at: int = 4) -> ScoreBar:
-    """A bar that changes chord inside it, at slot ``at``."""
-    return ScoreBar(
-        index=index,
-        chords=[
-            ScoreChord(name=first, diagram=0, start_slot=0, slots=ISLAND[:at]),
-            ScoreChord(name=second, diagram=0, start_slot=at, slots=ISLAND[at:]),
-        ],
-    )
-
-
-def test_one_bar_strip_renders_beside_the_rows():
-    score_with_plain_section = _score([_section("Verse", 4, 0, names=("C", "G"))])
-    html = render_html(score_with_plain_section)
-    assert 'class="section-body beside"' in html and html.index("<div class=\"grid") < html.index("worked-example")
-    verse = _section_html(html, "Verse")
-    # the strip shares the body with the grid; the head holds only the title line
-    body = verse[verse.index('class="section-body beside"'):]
-    assert body.index('class="grid') < body.index('class="strum-box"')
-    assert "strum-box" not in verse[:verse.index('class="section-body')]
-
-
-def test_two_bar_strip_stays_above_the_rows():
-    bars = [*_bars(["C"]), _split_bar(1, "G", "C"), *_bars(["C", "G"], start=2)]
-    score_with_mid_bar_change = _score([_plain_section("Verse", bars)])
-    html = render_html(score_with_mid_bar_change)
-    assert "section-body beside" not in html and html.index("worked-example") < html.index("<div class=\"grid")
-    assert 'class="section-body"' in html
-
-
-def test_beside_layout_keeps_the_pickup_column_and_single_row():
-    pickup = ScoreBar(
-        index=0, pickup=True, chords=[ScoreChord(name="N.C.", diagram=-1, start_slot=0, slots=ISLAND)]
-    )
-    bars = [pickup, *_bars(["C", "G", "C", "G"], start=1)]
-    score_with_pickup_and_one_row = _score([_plain_section("Intro", bars)])
-    html = render_html(score_with_pickup_and_one_row)
-    assert ".section-body.beside .grid.has-pickup .row" in html and 'class="section-body beside"' in html
-    assert "grid-template-columns: minmax(13mm, 0.25fr) repeat(4, minmax(0, 1fr)) auto" in html
-    intro = _section_html(html, "Intro")
-    assert intro.count('class="row"') == 1 and 'class="cell nc pickup"' in intro
-
-
-def test_beside_css_is_the_measured_layout():
-    html = render_html(_two_sections())
-    css = html[html.index("<style>"):html.index("</style>")]
-    assert (
-        ".section-body.beside { display: grid; grid-template-columns: minmax(0, 1fr) auto; "
-        "column-gap: 4mm; align-items: start; }" in css
-    )
-    assert ".section-body.beside > .strum-box { grid-column: 2; grid-row: 1; margin: 0; }" in css
-    assert css.index(".section-body.beside") < css.index("@page")
-    assert ".section-head { break-after: avoid }" in css
-
-
-def test_section_without_a_strip_is_not_beside():
-    sections = [_section("Verse", 4, 0, uncertain=True), _section("Intro", 2, 4, no_instrument=True)]
-    assert "section-body beside" not in render_html(_score(sections))
-
-
-def test_riff_section_prints_the_riff_wording():
-    riff = _section("Verse", 4, 0, explained=0.62).model_copy(update={"riff": True})
-    score_with_riff_section = _score([riff])
-    html = render_html(score_with_riff_section)
-    assert "Riff heard in this section: strum the chord to this rhythm" in html
-    assert "Strum heard in this section" not in html
-    verse = _section_html(html, "Verse")
-    label = re.search(r'<span class="strum-label">([^<]*)</span>', verse).group(1)
-    assert label == "Riff heard in this section: strum the chord to this rhythm; covers 62% of detected strokes"
-    # the riff section keeps its pattern strip
-    assert 'class="worked-example"' in verse
-
-
-def test_uncertain_riff_section_keeps_the_uncertain_suffix():
-    riff = _section("Verse", 4, 0, uncertain=True, explained=0.3).model_copy(update={"riff": True})
-    verse = _section_html(render_html(_score([riff])), "Verse")
-    label = re.search(r'<span class="strum-label">([^<]*)</span>', verse).group(1)
-    assert label == (
-        "Riff heard in this section: strum the chord to this rhythm; covers 30% of detected strokes (uncertain)"
-    )
-
-
-def test_inherited_riff_section_keeps_the_strum_as_in_wording():
-    donor = _section("Verse", 4, 0)
-    riff = _section("Chorus", 4, 4, inherited_from=0).model_copy(update={"riff": True})
-    chorus = _section_html(render_html(_score([donor, riff])), "Chorus")
-    assert "Strum as in Verse" in chorus and "Riff heard" not in chorus
-
-
-def test_easy_tier_prints_the_power_line_with_the_triad_clause():
-    score_easy_with_power = _power_score("easy")
-    html = render_html(score_easy_with_power)
-    line = "C#m is a power chord (root and fifth) on the record; this sheet prints the triad."
-    assert line in html
-    assert "<sup>5</sup>" not in html  # badge still full-tier only
-    assert html.count(line) == 1
-    assert html.index('class="legend"') < html.index(line) < html.index('class="sections"')
-
-
-def test_easy_tier_power_line_once_per_name():
-    score = _power_score("easy")
-    diagrams = [*score.chord_diagrams, ChordDiagram(name="C#m", shape=B, power=True)]
-    html = render_html(score.model_copy(update={"chord_diagrams": diagrams}))
-    assert html.count("C#m is a power chord (root and fifth) on the record") == 1
-
-
-def test_full_tier_power_line_unchanged():
-    html = render_html(_power_score("full"))
-    assert "C#m is a power chord on the record" in html
-    assert "root and fifth" not in html and "prints the triad" not in html

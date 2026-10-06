@@ -75,6 +75,34 @@ def check_requirements(
     return missing
 
 
+def earliest_start(
+    chain: Sequence[Stage],
+    run_dir: Path,
+    start: int,
+    end: int | None = None,
+    log: Callable[[str], None] | None = None,
+) -> int:
+    """The lowest stage index to start from: `start`, or a producer of any artifact still missing.
+
+    A folder written before a stage existed (a pre-1.6 run has no riff.json) resumed
+    from a later stage starts at the missing artifact's producer instead of failing.
+    """
+    layout = RunLayout(Path(run_dir), [s.name for s in chain])
+    last = len(chain) - 1 if end is None else end
+    names = [s.name for s in chain]
+    current = start
+    while True:
+        missing = check_requirements(chain, layout, current, last)
+        moved = [(names.index(m.producer), m) for m in missing if m.producer in names]
+        lowest = min((i for i, _ in moved if i < current), default=None)
+        if lowest is None:
+            return current
+        if log is not None:
+            first = next(m for i, m in moved if i == lowest)
+            log(f"starting from {first.producer}: {first.key} is missing")
+        current = lowest
+
+
 def _quote(text: str) -> str:
     """Double-quote an argument so a pasted command survives "&" and spaces in any shell."""
     return '"' + text.replace('"', '\\"') + '"'

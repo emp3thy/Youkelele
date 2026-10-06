@@ -2,32 +2,49 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING
 
+from youkelele.jsonio import ArtifactError
+from youkelele.music.compat import with_bars
 from youkelele.music.key import hedge_text
+from youkelele.music.members import member_spans
 from youkelele.music.phrase import NO_CHORD, aligned_starts, bar_change_bars
-from youkelele.music.relabel import default_plan, section_plan
+from youkelele.music.relabel import default_plan, longest_member, section_plan
 from youkelele.music.trailing import trailing_silent_bars
 from youkelele.schemas import (
     ArrangedChord,
     Arrangement,
+    BarStrums,
     ChordDiagram,
     Chords,
     Grid,
     Instrument,
     PlannedSection,
+    Riffs,
     Score,
     ScoreBar,
     ScoreChord,
     ScoreSection,
+    SectionPattern,
     SourceInfo,
+    Stroke,
     Strums,
+    TabNote,
 )
 
 if TYPE_CHECKING:  # profiles imports the score stage, which imports this module
     from youkelele.profiles.base import Tuning
 
 _EPS = 1e-6
+SCORE_SCHEMA = 2  # 1.6: per-bar strokes, tab and grey; a state phrase per section
+_RIFF_FILE = Path("riff/riff.json")  # the artifact key an ArtifactError names
+
+# the section header's state phrases (spec 3.2), verbatim
+STATE_NO_INSTRUMENT = "no strummed instrument detected"
+STATE_RIFF = "riff"
+STATE_RIFF_NOT_TRANSCRIBED = "riff heard, not transcribed"
+STATE_UNCERTAIN = "pattern uncertain"
 
 
 def _plan(grid: Grid, strums: Strums, chords: Chords) -> list[PlannedSection]:
@@ -52,8 +69,18 @@ def _plan_difference(stored: list[PlannedSection], current: list[PlannedSection]
     return "; ".join(parts) or None
 
 
-def check_strums_match_grid(grid: Grid, strums: Strums, chords: Chords) -> None:
-    """Fail clearly when grid.json was edited after strums.json was made from it."""
+def _check_riffs_match_plan(grid: Grid, plan: list[PlannedSection], riffs: Riffs) -> None:
+    """Each riff.json section must name a planned section and one of its members' spans."""
+    for r in riffs.sections:
+        if not 0 <= r.section < len(plan) or (r.start_bar, r.end_bar) not in member_spans(plan[r.section], grid):
+            raise ArtifactError(
+                _RIFF_FILE, "riff.json describes sections the plan does not have; re-run from strums"
+            )
+
+
+def check_strums_match_grid(grid: Grid, strums: Strums, chords: Chords, riffs: Riffs | None = None) -> None:
+    """Fail clearly when grid.json was edited after strums.json was made from it, or when
+    riff.json (if given) does not follow the plan strums.json carries."""
     plan = _plan(grid, strums, chords)
     n, m = len(strums.patterns), len(plan)
     if n != m:
@@ -79,6 +106,14 @@ def check_strums_match_grid(grid: Grid, strums: Strums, chords: Chords) -> None:
             f"strums.json has slots_per_bar {strums.slots_per_bar} but grid.json meter "
             f"{num}/{grid.meter.denominator} needs {2 * num} or {4 * num}; re-run from strums"
         )
+    # bar records (1.6) must cover grid.json's bars one to one; a file without them is backfilled
+    if strums.bars and [b.index for b in strums.bars] != list(range(len(grid.bars))):
+        raise ValueError(
+            f"strums.json has {len(strums.bars)} bar records but grid.json has {len(grid.bars)} bars; "
+            "re-run from strums"
+        )
+    if riffs is not None:
+        _check_riffs_match_plan(grid, plan, riffs)
 
 
 def _place_events(grid: Grid, chords: Chords, spb: int) -> list[tuple[int, int, int]]:
@@ -137,18 +172,70 @@ def _bar_ends(starts: list[dict[int, ArrangedChord]]) -> list[tuple[str, str]]:
     return ends
 
 
+def _tab_by_bar(riffs: Riffs, spb: int) -> dict[int, list[TabNote]]:
+    """Bar index -> the tab it prints, for every bar of a printable riff.
+
+    A riff is one unit of tab (one or two bars of slots); a bar prints the unit's bar at
+    its own offset from the riff's first bar, with slots counted inside the bar.
+    """
+    tabs: dict[int, list[TabNote]] = {}
+    for r in riffs.sections:
+        if not r.printable:
+            continue
+        unit = max(r.unit, 1)
+        for b in range(r.start_bar, r.end_bar):
+            lo = ((b - r.start_bar) % unit) * spb
+            tabs[b] = [
+                n.model_copy(update={"slot": n.slot - lo}) for n in r.riff if lo <= n.slot < lo + spb
+            ]
+    return tabs
+
+
+def _bar_strokes(record: BarStrums) -> list[Stroke]:
+    """The strokes a bar prints: its pattern's non-rest cells, ringing when its member rings
+    (the flag is per member and recorded on every bar, detected strokes or not)."""
+    rings = record.rings
+    return [Stroke(slot=j, kind=cell, rings=rings) for j, cell in enumerate(record.pattern) if cell != "-"]
+
+
+def _state(pattern: SectionPattern, bars: list[ScoreBar]) -> str:
+    """The section header's state phrase (spec 3.2)."""
+    if pattern.no_instrument:
+        return STATE_NO_INSTRUMENT
+    if any(b.tab is not None for b in bars):  # an empty list is a tab bar with no note starting in it
+        return STATE_RIFF
+    if pattern.riff:
+        return STATE_RIFF_NOT_TRANSCRIBED
+    if pattern.uncertain:
+        return STATE_UNCERTAIN
+    return ""
+
+
+def _octave_shift(k: int, planned: PlannedSection, grid: Grid, riffs: Riffs) -> int:
+    """The octave shift the header names (spec 3.2): the longest member's when it prints tab, else
+    the first member's (by start bar) that does, so a "riff" header never lacks its shift; 0 with no tab."""
+    printed = sorted((r for r in riffs.sections if r.section == k and r.printable), key=lambda r: r.start_bar)
+    span = longest_member(planned, grid)
+    chosen = next((r for r in printed if (r.start_bar, r.end_bar) == span), printed[0] if printed else None)
+    return chosen.octave_shift if chosen else 0
+
+
 def build_score(
     source: SourceInfo,
     grid: Grid,
     chords: Chords,
     strums: Strums,
     arrangement: Arrangement,
+    riffs: Riffs,
     tuning: Tuning,
     instrument_name: str,
 ) -> Score:
-    check_strums_match_grid(grid, strums, chords)
+    check_strums_match_grid(grid, strums, chords, riffs)
+    strums = with_bars(strums, grid)  # a file before 1.6 gets its bar records rebuilt
+    records = {b.index: b for b in strums.bars}
     plan = _plan(grid, strums, chords)
     spb = strums.slots_per_bar
+    tabs = _tab_by_bar(riffs, spb)
     arranged = {a.event: a for a in arrangement.chords}
     starts = _bar_starts(grid, chords, arranged, spb)
 
@@ -192,6 +279,8 @@ def build_score(
             end_bar -= dropped
         bars: list[ScoreBar] = []
         for bar_idx in range(start_bar, end_bar):
+            record = records[bar_idx]
+            bar_pattern = record.pattern  # the bar's own record, wherever phrase alignment put it
             slot_map = starts[bar_idx]
             ordered = sorted(slot_map)
             chord_list: list[ScoreChord] = []
@@ -201,7 +290,7 @@ def build_score(
                 chord_list.append(
                     ScoreChord(
                         name=a.name, diagram=diagram_index(diagrams, a), start_slot=slot,
-                        slots=list(pattern.slots[slot:end]),
+                        slots=list(bar_pattern[slot:end]),
                         filled=chords.events[a.event].filled, passing=a.passing, power=a.power,
                     )
                 )
@@ -209,29 +298,34 @@ def build_score(
                 lead = chord_list[0].start_slot
                 chord_list.insert(
                     0,
-                    ScoreChord(name="N.C.", diagram=-1, start_slot=0, slots=list(pattern.slots[:lead])),
+                    ScoreChord(name="N.C.", diagram=-1, start_slot=0, slots=list(bar_pattern[:lead])),
                 )
             if not chord_list:
                 chord_list.append(
-                    ScoreChord(name="N.C.", diagram=-1, start_slot=0, slots=list(pattern.slots))
+                    ScoreChord(name="N.C.", diagram=-1, start_slot=0, slots=list(bar_pattern))
                 )
+            tab = tabs.get(bar_idx)
             bars.append(
                 ScoreBar(
                     index=bar_idx, chords=chord_list, pickup=grid.bars[bar_idx].pickup,
                     struck=bar_idx < len(strums.bar_onsets)
                     and any(slot != "-" for slot in strums.bar_onsets[bar_idx]),
+                    # a tab bar's stroke row prints in full black (spec 3.4)
+                    strokes=_bar_strokes(record), tab=tab, grey=record.uncertain and tab is None,
                 )
             )
         sections.append(
             ScoreSection(
                 label=planned.label, pattern=list(pattern.slots), uncertain=pattern.uncertain,
                 bars=bars, bar_repeat=pattern.bar_repeat, no_instrument=pattern.no_instrument,
-                inherited_from=pattern.inherited_from, shifted=shifted,
+                inherited_from=None, shifted=shifted,  # no section inherits from 1.6 (spec 4.5)
                 explained=pattern.explained, riff=pattern.riff, members=list(planned.members),
+                state=_state(pattern, bars), octave_shift=_octave_shift(k, planned, grid, riffs),
             )
         )
 
     return Score(
+        schema_version=SCORE_SCHEMA,
         instrument=Instrument(
             name=instrument_name, strings=len(tuning.pitches), tuning=list(tuning.pitches),
             capo=arrangement.capo,

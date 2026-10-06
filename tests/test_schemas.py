@@ -6,17 +6,26 @@ from pydantic import ValidationError
 
 from youkelele.jsonio import ArtifactError, load_model, save_model
 from youkelele.schemas import (
+    BarStrums,
     Chords,
     Grid,
     Key,
     Meter,
     PlannedSection,
+    RiffNote,
+    RiffSection,
+    Riffs,
+    Score,
     ScoreSection,
     SectionPattern,
     SourceInfo,
+    Stroke,
     Strums,
+    TabNote,
     TonicVotes,
 )
+
+FIXTURES = Path(__file__).parent / "fixtures"
 
 
 def make_grid(n_bars=8):
@@ -251,3 +260,42 @@ def test_score_section_riff_and_members_default():
         label="verse", pattern=["-"] * 8, uncertain=False, bars=[], bar_repeat=0.0, no_instrument=False
     )
     assert sec.riff is False and sec.members == []
+
+
+def test_strums_v15_fixture_loads_with_empty_bars_and_defaults():
+    s = load_model(FIXTURES / "v15_strums.json", Strums)
+    assert s.bars == [] and s.patterns[0].candidate == "majority" and s.patterns[0].rings is True
+
+
+def test_bar_strums_round_trips_and_checks_slot_length():
+    bar = BarStrums(index=3, member=0, strokes=[Stroke(slot=0, kind="D", rings=False, decay_db=12.5)], pattern=list("D-D-D-DU"))
+    s = Strums(slots_per_bar=8, source="guitar_stem", source_ratio=0.4, grid_fit=0.9, uncertain=False, patterns=[], bar_onsets=[], bars=[bar])
+    assert Strums.model_validate_json(s.model_dump_json()).bars[0].strokes[0].decay_db == 12.5
+    with pytest.raises(ValidationError):
+        Strums(slots_per_bar=8, source="guitar_stem", source_ratio=0.4, grid_fit=0.9, uncertain=False, patterns=[], bar_onsets=[], bars=[bar.model_copy(update={"pattern": list("D-D-")})])
+
+
+def test_bar_strums_rejects_stroke_slot_out_of_range():
+    bar = BarStrums(index=0, member=0, strokes=[Stroke(slot=8, kind="D")], pattern=list("D-------"))
+    with pytest.raises(ValidationError):
+        Strums(slots_per_bar=8, source="guitar_stem", source_ratio=0.4, grid_fit=0.9, uncertain=False, patterns=[], bar_onsets=[], bars=[bar])
+
+
+def test_riffs_round_trip_and_reject_negative_fret():
+    note = TabNote(slot=2, midi=62, string=1, fret=2)
+    sec = RiffSection(section=1, start_bar=13, end_bar=24, unit=1, onsets=[[RiffNote(slot=0, midi=60)]], riff=[note], agreement=0.74, support=0.8, named_share=0.91, candidate="medoid", octave_shift=0, printable=True)
+    assert Riffs.model_validate_json(Riffs(sections=[sec]).model_dump_json()).sections[0].riff[0].fret == 2
+    with pytest.raises(ValidationError):
+        TabNote(slot=2, midi=62, string=1, fret=-1)
+
+
+def test_riffs_reject_string_out_of_range():
+    sec = dict(section=1, start_bar=0, end_bar=4, unit=1, onsets=[], agreement=0.7, support=0.8, named_share=0.9, candidate="majority", octave_shift=0, printable=True)
+    with pytest.raises(ValidationError):
+        Riffs(sections=[RiffSection(riff=[TabNote(slot=0, midi=60, string=4, fret=0)], **sec)])
+
+
+def test_score_v15_fixture_loads_with_empty_strokes_and_state():
+    sc = load_model(FIXTURES / "v15_score.json", Score)
+    bar = sc.sections[0].bars[0]
+    assert bar.strokes == [] and bar.tab is None and bar.grey is False and sc.sections[0].state == ""

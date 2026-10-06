@@ -5,25 +5,32 @@ from pathlib import Path
 
 import pytest
 
+from youkelele.jsonio import ArtifactError
 from youkelele.music import score_builder
+from youkelele.music.alphatex import score_to_alphatex
 from youkelele.music.score_builder import build_score, check_strums_match_grid
 from youkelele.profiles.ukulele import UKULELE_TUNING
 from youkelele.schemas import (
     ArrangedChord,
     Arrangement,
     Bar,
+    BarStrums,
     ChordEvent,
     Chords,
     Grid,
     Key,
     Meter,
     PlannedSection,
+    Riffs,
+    RiffSection,
     ScoreBar,
     Section,
     SectionPattern,
     Shape,
     SourceInfo,
+    Stroke,
     Strums,
+    TabNote,
 )
 
 ISLAND = list("D-DU-UDU")
@@ -82,6 +89,7 @@ def _score(n_bars, events, shapes, capo=0, explained=0.0):
         Chords(key=Key(tonic="C", mode="major", confidence=0.9), events=evs),
         _strums(explained=explained),
         Arrangement(capo=capo, transpose=0, tier="easy", chords=arranged, substitutions=[]),
+        Riffs(),
         UKULELE_TUNING,
         "Ukulele",
     )
@@ -99,7 +107,7 @@ def test_pickup_flag_is_copied_from_the_grid_bar():
         Chords(key=Key(tonic="C", mode="major", confidence=0.9), events=[]),
         _strums(),
         Arrangement(capo=0, transpose=0, tier="easy", chords=[], substitutions=[]),
-        UKULELE_TUNING, "Ukulele",
+        Riffs(), UKULELE_TUNING, "Ukulele",
     )
     assert [b.pickup for b in score.sections[0].bars] == [True, False, False]
 
@@ -124,7 +132,7 @@ def test_score_carries_key_hedge_from_chords_key():
         return build_score(
             _source(), _grid(1), Chords(key=key, events=[]), _strums(),
             Arrangement(capo=0, transpose=0, tier="easy", chords=[], substitutions=[]),
-            UKULELE_TUNING, "Ukulele",
+            Riffs(), UKULELE_TUNING, "Ukulele",
         )
 
     close = Key(tonic="G", mode="major", confidence=0.3, method="chords_stems", margin=0.02,
@@ -215,7 +223,7 @@ def _build(grid, strums):
     return build_score(
         _source(), grid, Chords(key=Key(tonic="C", mode="major", confidence=0.9), events=[]),
         strums, Arrangement(capo=0, transpose=0, tier="easy", chords=[], substitutions=[]),
-        UKULELE_TUNING, "Ukulele",
+        Riffs(), UKULELE_TUNING, "Ukulele",
     )
 
 
@@ -252,12 +260,13 @@ def test_slots_per_bar_must_fit_the_grid_meter():
     assert "slots_per_bar 6" in str(e.value) and "re-run from strums" in str(e.value)
 
 
-def test_inherited_from_is_copied_into_the_score_section():
+def test_inherited_from_is_always_none_in_the_score_section():
+    # spec 4.5: no section inherits a neighbour's pattern from 1.6, even when a 1.5 file says so
     strums = _strums()
     inherited = strums.patterns[0].model_copy(update={"section": 1, "inherited_from": 0})
     strums = strums.model_copy(update={"patterns": [strums.patterns[0], inherited]})
     score = _build(_split(_grid(2)), strums)
-    assert [s.inherited_from for s in score.sections] == [None, 0]
+    assert [s.inherited_from for s in score.sections] == [None, None]
 
 
 CALYPSO = list("D-D-DUDU")
@@ -303,7 +312,7 @@ def _mid_phrase_score():
         Chords(key=Key(tonic="D", mode="major", confidence=0.9), events=evs),
         _two_section_strums(),
         Arrangement(capo=0, transpose=0, tier="easy", chords=arranged, substitutions=[]),
-        UKULELE_TUNING, "Ukulele",
+        Riffs(), UKULELE_TUNING, "Ukulele",
     )
 
 
@@ -313,7 +322,7 @@ def _build_events(n_bars, evs, arranged):
         Chords(key=Key(tonic="C", mode="major", confidence=0.9), events=evs),
         _strums(),
         Arrangement(capo=0, transpose=0, tier="easy", chords=arranged, substitutions=[]),
-        UKULELE_TUNING, "Ukulele",
+        Riffs(), UKULELE_TUNING, "Ukulele",
     )
 
 
@@ -411,8 +420,9 @@ def test_score_sections_use_aligned_starts_and_record_shift():
     assert [b.chords[0].name for b in chorus.bars[:4]] == ["D", "D", "A", "A"]
     # section fields still come from the grid section's own pattern
     assert verse.pattern == ISLAND and chorus.pattern == CALYPSO
-    assert (chorus.uncertain, chorus.bar_repeat, chorus.inherited_from) == (True, 0.8, 0)
-    assert verse.bars[-1].chords[0].slots == ISLAND  # bar 8 now plays the verse pattern
+    assert (chorus.uncertain, chorus.bar_repeat, chorus.inherited_from) == (True, 0.8, None)
+    # bar 8 moved into the verse but keeps its own record: the chorus pattern its grid section plays
+    assert verse.bars[-1].chords[0].slots == CALYPSO
 
 
 def test_in_phase_sections_are_not_shifted():
@@ -428,7 +438,8 @@ def test_every_bar_still_has_slots_per_bar_slots_after_alignment():
         for bar in section.bars:
             slots = [s for c in bar.chords for s in c.slots]
             assert len(slots) == score.slots_per_bar
-            assert slots == section.pattern
+            # each bar plays its own grid section's pattern, wherever alignment placed it
+            assert slots == (ISLAND if bar.index < 8 else CALYPSO)
             assert bar.chords[0].start_slot == 0
 
 
@@ -442,6 +453,7 @@ def test_score_json_without_new_fields_still_loads():
                 del chord["filled"], chord["passing"]
     for diagram in data["chord_diagrams"]:
         del diagram["passing"]
+    data["schema"] = 1  # as a file written before 1.6 says
     loaded = type(score).model_validate(data)
     assert loaded.schema_version == 1
     assert [s.shifted for s in loaded.sections] == [0, 0]
@@ -472,7 +484,7 @@ def _verse_chorus_score(specs):
         Chords(key=Key(tonic="D", mode="major", confidence=0.9), events=evs),
         _two_section_strums(),
         Arrangement(capo=0, transpose=0, tier="easy", chords=arranged, substitutions=[]),
-        UKULELE_TUNING, "Ukulele",
+        Riffs(), UKULELE_TUNING, "Ukulele",
     )
 
 
@@ -554,7 +566,7 @@ def test_score_trailing_drop_is_capped_to_leave_the_last_section_a_bar():
             capo=0, transpose=0, tier="easy",
             chords=[ArrangedChord(event=0, name="C", shape=C)], substitutions=[],
         ),
-        UKULELE_TUNING, "Ukulele",
+        Riffs(), UKULELE_TUNING, "Ukulele",
     )
     assert [len(s.bars) for s in score.sections] == [8, 1]
     assert score.trailing_bars_dropped == 1
@@ -581,7 +593,7 @@ def test_score_trailing_drop_is_clamped_again_after_a_phrase_shift(monkeypatch):
             capo=0, transpose=0, tier="easy",
             chords=[ArrangedChord(event=0, name="C", shape=C)], substitutions=[],
         ),
-        UKULELE_TUNING, "Ukulele",
+        Riffs(), UKULELE_TUNING, "Ukulele",
     )
     verse, outro = score.sections
     assert [b.index for b in verse.bars] == list(range(7))
@@ -593,6 +605,7 @@ def test_score_json_without_trailing_field_loads():
     score = _trailing_score(8, [_ev(0, 6, "C"), _ev(6, 8, "N")])
     data = score.model_dump(by_alias=True)
     del data["trailing_bars_dropped"]
+    data["schema"] = 1  # as a file written before 1.6 says
     loaded = type(score).model_validate(data)
     assert loaded.schema_version == 1
     assert loaded.trailing_bars_dropped == 0
@@ -627,7 +640,7 @@ def test_score_uses_refined_labels():
     score = build_score(
         _source(), grid, Chords(key=Key(tonic="C", mode="major", confidence=0.9), events=evs),
         strums, Arrangement(capo=0, transpose=0, tier="easy", chords=arranged, substitutions=[]),
-        UKULELE_TUNING, "Ukulele",
+        Riffs(), UKULELE_TUNING, "Ukulele",
     )
     assert [s.label for s in score.sections] == ["verse", "bridge", "chorus"]
     assert [s.label for s in grid.sections] == ["verse", "verse", "chorus"]
@@ -654,7 +667,7 @@ def _capo_score(capo, alternative):
             capo=capo, transpose=-capo, tier="easy", chords=arranged, substitutions=[],
             no_capo_alternative=alternative,
         ),
-        UKULELE_TUNING, "Ukulele",
+        Riffs(), UKULELE_TUNING, "Ukulele",
     )
 
 
@@ -688,7 +701,7 @@ def test_score_bar_struck_flag_from_bar_onsets():
             capo=0, transpose=0, tier="easy", substitutions=[],
             chords=[ArrangedChord(event=0, name="C", shape=C)],
         ),
-        UKULELE_TUNING, "Ukulele",
+        Riffs(), UKULELE_TUNING, "Ukulele",
     )
     # bar 3 has no bar_onsets entry at all: not struck
     assert [b.struck for b in score.sections[0].bars] == [False, True, True, False]
@@ -732,7 +745,7 @@ _ARRANGEMENT = Arrangement(capo=0, transpose=0, tier="easy", chords=[], substitu
 
 
 def _plan_score(grid, chords, strums, arrangement=_ARRANGEMENT):
-    return build_score(_source(), grid, chords, strums, arrangement, UKULELE_TUNING, "Ukulele")
+    return build_score(_source(), grid, chords, strums, arrangement, Riffs(), UKULELE_TUNING, "Ukulele")
 
 
 def test_build_score_follows_the_plan_and_records_members():
@@ -891,3 +904,218 @@ def test_plan_pattern_count_mismatch_names_the_planned_sections():
     with pytest.raises(ValueError) as e:
         check_strums_match_grid(_sectioned(16, _THREE, _THREE_LABELS), strums, _CHORDS)
     assert str(e.value) == "strums.json has 1 patterns for 2 planned sections in strums.json; re-run from strums"
+
+
+# version 1.6: every bar carries its own strokes, grey flag and tab; each section a state phrase
+
+
+def _bars(*runs) -> list[BarStrums]:
+    """BarStrums from bar 0 on; each run is (bars, pattern, member, rings, uncertain, riff).
+
+    A bar's strokes are its pattern's non-rest cells, each carrying the run's ring flag.
+    """
+    records: list[BarStrums] = []
+    for count, pattern, member, rings, uncertain, riff in runs:
+        for _ in range(count):
+            strokes = [Stroke(slot=j, kind=c, rings=rings) for j, c in enumerate(pattern) if c != "-"]
+            records.append(
+                BarStrums(
+                    index=len(records), member=member, strokes=strokes, pattern=list(pattern),
+                    uncertain=uncertain, riff=riff, rings=rings,
+                )
+            )
+    return records
+
+
+_C_CHORDS = Chords(
+    key=Key(tonic="C", mode="major", confidence=0.9), events=[_ev(i, i + 1, "C") for i in range(6)]
+)
+_C_ARRANGEMENT = Arrangement(
+    capo=0, transpose=0, tier="easy", chords=[ArrangedChord(event=i, name="C", shape=C) for i in range(6)],
+    substitutions=[],
+)
+_FOUR_TWO = [(0, 4), (4, 6)]  # a four-bar verse and a two-bar fragment the plan merges into it
+
+
+def _merged_strums(bars: list[BarStrums], pattern: SectionPattern) -> Strums:
+    plan = [PlannedSection(start_bar=0, end_bar=6, label="verse", members=[0, 1])]
+    return _strums_with_plan(plan, [pattern]).model_copy(update={"bars": bars})
+
+
+def _riff_strums(n_bars: int, riff: bool, unit: int = 1) -> Strums:
+    """One grid section, one planned section of one member, every bar flagged riff."""
+    plan = [PlannedSection(start_bar=0, end_bar=n_bars, label="Verse", members=[0])]
+    pattern = _pattern(riff=riff).model_copy(update={"unit": unit})
+    bars = _bars((n_bars, "D-D-D-D-", 0, True, False, riff))
+    return _strums_with_plan(plan, [pattern]).model_copy(update={"bars": bars})
+
+
+def _riff_section(start=0, end=4, unit=1, notes=((0, 0), (2, 2)), printable=True, section=0, shift=1):
+    """notes: (slot, fret) on the C string (diagram string 1)."""
+    return RiffSection(
+        section=section, start_bar=start, end_bar=end, unit=unit, onsets=[],
+        riff=[TabNote(slot=s, midi=60 + f, string=1, fret=f) for s, f in notes] if printable else [],
+        agreement=0.8, support=0.9, named_share=0.9, candidate="medoid",
+        octave_shift=shift if printable else 0, printable=printable,
+        reason=None if printable else "agreement 0.40 < 0.60",
+    )
+
+
+def _riff_score(n_bars, strums, riffs):
+    chords = Chords(key=Key(tonic="C", mode="major", confidence=0.9), events=[])
+    return build_score(_source(), _grid(n_bars), chords, strums, _ARRANGEMENT, riffs, UKULELE_TUNING, "Ukulele")
+
+
+def test_bars_carry_strokes_grey_and_state_from_strums_bars():
+    section_pattern = SectionPattern(
+        section=0, slots=list("D-D-D-DU"), confidence=0.8, bar_repeat=0.9, uncertain=False,
+        no_instrument=False, inherited_from=None,
+    )
+    bars = _bars((4, "D-D-D-DU", 0, False, False, False), (2, "D-------", 1, True, True, False))
+    score = build_score(
+        _source(), _sectioned(6, _FOUR_TWO), _C_CHORDS, _merged_strums(bars, section_pattern),
+        _C_ARRANGEMENT, Riffs(), UKULELE_TUNING, "Ukulele",
+    )
+    out = score.sections[0].bars
+    assert [k.slot for k in out[0].strokes] == [0, 2, 4, 6, 7]
+    assert [k.kind for k in out[0].strokes] == list("DDDDU")
+    assert not out[0].strokes[0].rings and not out[0].grey and out[0].tab is None
+    assert [k.slot for k in out[4].strokes] == [0] and out[4].strokes[0].rings and out[4].grey
+    # the chord's slots are its share of the bar's own pattern
+    assert out[4].chords[0].slots == list("D-------") and out[0].chords[0].slots == list("D-D-D-DU")
+    assert score.sections[0].state == "" and score.sections[0].octave_shift == 0
+    assert score.schema_version == 2
+
+
+def test_a_bar_without_detected_strokes_takes_its_members_ring_flag():
+    # a short member (rings False) with a strokeless bar: the bar prints its pattern with no
+    # sustain, as the member's other bars do (spec 4.4: the flag is the member's)
+    bars = _bars((4, "D-D-D-DU", 0, False, False, False))
+    bars[1] = bars[1].model_copy(update={"strokes": []})
+    plan = [PlannedSection(start_bar=0, end_bar=4, label="Verse", members=[0])]
+    strums = _strums_with_plan(plan, [_pattern()]).model_copy(update={"bars": bars})
+    score = _riff_score(4, strums, Riffs())
+    assert [k.slot for k in score.sections[0].bars[1].strokes] == [0, 2, 4, 6, 7]
+    assert not any(k.rings for b in score.sections[0].bars for k in b.strokes)
+
+
+def test_a_strokeless_bar_of_a_ringing_member_rings():
+    bars = _bars((4, "D-D-D-DU", 0, True, False, False))
+    bars[2] = bars[2].model_copy(update={"strokes": []})
+    plan = [PlannedSection(start_bar=0, end_bar=4, label="Verse", members=[0])]
+    strums = _strums_with_plan(plan, [_pattern()]).model_copy(update={"bars": bars})
+    score = _riff_score(4, strums, Riffs())
+    assert all(k.rings for k in score.sections[0].bars[2].strokes)
+
+
+def test_printable_riff_puts_tab_on_every_bar_and_sets_state_riff():
+    score = _riff_score(4, _riff_strums(4, riff=True), Riffs(sections=[_riff_section()]))
+    assert all(b.tab and [n.fret for n in b.tab] == [0, 2] for b in score.sections[0].bars)
+    assert all([n.slot for n in b.tab] == [0, 2] for b in score.sections[0].bars)
+    assert score.sections[0].state == "riff" and score.sections[0].octave_shift == 1
+
+
+def test_a_two_bar_riff_alternates_its_halves_with_slots_inside_the_bar():
+    # notes at slot 1 of the first bar and slot 3 of the second (8 + 3 in the two-bar unit)
+    riffs = Riffs(sections=[_riff_section(unit=2, notes=((1, 0), (11, 3)))])
+    score = _riff_score(4, _riff_strums(4, riff=True, unit=2), riffs)
+    tabs = [[(n.slot, n.fret) for n in b.tab] for b in score.sections[0].bars]
+    assert tabs == [[(1, 0)], [(3, 3)], [(1, 0)], [(3, 3)]]
+
+
+def test_a_tab_bar_is_never_grey_even_when_its_member_is_uncertain():
+    strums = _riff_strums(4, riff=True)
+    strums = strums.model_copy(update={"bars": [b.model_copy(update={"uncertain": True}) for b in strums.bars]})
+    score = _riff_score(4, strums, Riffs(sections=[_riff_section()]))
+    assert all(b.tab is not None and not b.grey for b in score.sections[0].bars)
+
+
+def test_a_two_bar_riff_with_an_empty_half_keeps_an_empty_tab_of_rests():
+    # every note starts in the first bar of the unit: the second bar is tab with nothing starting
+    riffs = Riffs(sections=[_riff_section(unit=2, notes=((1, 0),))])
+    score = build_score(
+        _source(), _grid(4), _C_CHORDS, _riff_strums(4, riff=True, unit=2), _C_ARRANGEMENT, riffs,
+        UKULELE_TUNING, "Ukulele",
+    )
+    tabs = [b.tab for b in score.sections[0].bars]
+    assert [len(t) for t in tabs] == [1, 0, 1, 0] and tabs[1] == []
+    assert score.sections[0].state == "riff"
+    beat_lines = [line for line in score_to_alphatex(score).splitlines() if line.startswith(":8")]
+    # rests on every slot under the C chord, not the C brushes of a strummed bar
+    assert beat_lines[1] == (
+        ':8 r{ch "C" lyrics "D"} r{lyrics "-"} r{lyrics "D"} r{lyrics "-"} '
+        'r{lyrics "D"} r{lyrics "-"} r{lyrics "D"} r{lyrics "-"} |'
+    )
+
+
+def _merged_riff_strums() -> Strums:
+    bars = _bars((4, "D-D-D-D-", 0, True, False, True), (2, "D-D-D-D-", 1, True, False, True))
+    return _merged_strums(bars, _pattern(riff=True))
+
+
+def _merged_riff_score(riffs: Riffs):
+    return build_score(
+        _source(), _sectioned(6, _FOUR_TWO), _CHORDS, _merged_riff_strums(), _ARRANGEMENT, riffs,
+        UKULELE_TUNING, "Ukulele",
+    )
+
+
+def test_octave_shift_comes_from_a_shorter_member_when_only_it_prints_tab():
+    riffs = Riffs(sections=[
+        _riff_section(start=0, end=4, printable=False),
+        _riff_section(start=4, end=6, shift=-1),
+    ])
+    section = _merged_riff_score(riffs).sections[0]
+    assert section.state == "riff" and section.octave_shift == -1
+    assert [b.tab is not None for b in section.bars] == [False] * 4 + [True] * 2
+
+
+def test_octave_shift_prefers_the_longest_member_when_it_prints_tab():
+    riffs = Riffs(sections=[_riff_section(start=0, end=4, shift=1), _riff_section(start=4, end=6, shift=-1)])
+    assert _merged_riff_score(riffs).sections[0].octave_shift == 1
+
+
+def test_unprintable_riff_sets_the_not_transcribed_state_and_no_tab():
+    riffs = Riffs(sections=[_riff_section(printable=False)])
+    score = _riff_score(4, _riff_strums(4, riff=True), riffs)
+    assert score.sections[0].state == "riff heard, not transcribed"
+    assert all(b.tab is None for b in score.sections[0].bars)
+    assert score.sections[0].octave_shift == 0
+    # its strokes still print, as a strummed section's do
+    assert all([k.slot for k in b.strokes] == [0, 2, 4, 6] for b in score.sections[0].bars)
+
+
+def test_state_names_an_uncertain_pattern_and_a_missing_instrument():
+    plan = [PlannedSection(start_bar=0, end_bar=2, label="Verse", members=[0])]
+    uncertain = _strums_with_plan(plan, [_pattern().model_copy(update={"uncertain": True})])
+    assert _riff_score(2, uncertain, Riffs()).sections[0].state == "pattern uncertain"
+    silent = _pattern().model_copy(update={"uncertain": True, "no_instrument": True, "riff": True})
+    state = _riff_score(2, _strums_with_plan(plan, [silent]), Riffs()).sections[0].state
+    assert state == "no strummed instrument detected"
+
+
+def test_riff_file_that_does_not_match_the_plan_is_refused():
+    grid, strums = _grid(4), _riff_strums(4, riff=True)
+    with pytest.raises(ArtifactError, match="riff.json describes sections the plan does not have"):
+        check_strums_match_grid(grid, strums, _CHORDS, Riffs(sections=[_riff_section(section=7)]))
+    # the right section, but a span no member of it has
+    with pytest.raises(ArtifactError, match="riff.json describes sections the plan does not have; re-run from strums"):
+        check_strums_match_grid(grid, strums, _CHORDS, Riffs(sections=[_riff_section(end=3)]))
+    check_strums_match_grid(grid, strums, _CHORDS, Riffs(sections=[_riff_section()]))
+
+
+def test_riff_sections_match_member_spans_of_a_merged_section():
+    plan_strums = _three_section_plan_strums()
+    grid = _sectioned(16, _THREE, _THREE_LABELS)
+    member = Riffs(sections=[_riff_section(section=1, start=14, end=16)])
+    check_strums_match_grid(grid, plan_strums, _CHORDS, member)
+    whole = Riffs(sections=[_riff_section(section=1, start=8, end=16)])
+    with pytest.raises(ArtifactError, match="riff.json describes sections the plan does not have"):
+        check_strums_match_grid(grid, plan_strums, _CHORDS, whole)
+
+
+def test_bar_records_that_do_not_cover_the_grid_are_refused():
+    strums = _riff_strums(4, riff=False)
+    strums = strums.model_copy(update={"bars": strums.bars[:3]})
+    with pytest.raises(ValueError, match="re-run from strums"):
+        check_strums_match_grid(_grid(4), strums, _CHORDS)
