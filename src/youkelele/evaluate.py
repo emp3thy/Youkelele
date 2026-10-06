@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from itertools import zip_longest
+from collections.abc import Sequence
 from pathlib import Path
 
 import mir_eval
@@ -65,6 +66,10 @@ class SectionDiag:
     member_patterns: list[tuple[int, int, str, bool, bool]] = field(default_factory=list)
     # the riff gate: (agreement, support, named share, printable, reason), when the run has one
     riff_gate: tuple[float, float, float, bool, str | None] | None = None
+    riff_rule: str | None = None  # the rule that marked the section a riff ("A"), when one did
+    root_share: float | None = None  # share of named onset pitches on the chord root
+    named_share: float | None = None  # share of the section's onsets the pitch tracker named
+    resting_bars: list[int] = field(default_factory=list)  # bars in the planned span whose record rests
 
 
 def _label_text(d: SectionDiag) -> str:
@@ -99,6 +104,7 @@ class Report:
     vocal_runs: list[tuple[int, int]] | None = None  # None when the grid has no vocal levels
     vocal_bars: int | None = None  # the bar count, so a trailing run prints marked
     sections: list[SectionDiag] = field(default_factory=list)
+    resting_bars: list[int] = field(default_factory=list)  # every bar whose record rests, in index order
     truth_given: bool = False  # a truth directory was supplied: print the truth lines (n/a if absent)
 
 
@@ -113,6 +119,8 @@ class SectionDelta:
     certainty_changed: bool = False  # the uncertain flag differs between the runs
     pattern_changes: int = 0  # bars whose printed pattern differs (grids that match only)
     candidate_changed: bool = False  # the vote kept a different candidate
+    rest_changes: int = 0  # bars in the paired span whose `rests` differs (grids that match only)
+    riff_rule_b: str | None = None  # the right side's riff rule
 
     @property
     def changed(self) -> bool:
@@ -122,6 +130,7 @@ class SectionDelta:
             or self.certainty_changed
             or self.pattern_changes
             or self.candidate_changed
+            or self.rest_changes
             or self.strikes_per_bar
             or self.explained
             or self.rest_share
@@ -291,6 +300,9 @@ def _section_diags(
         bars = strums.bar_onsets[start:end]
         strikes = sum(1 for bar in bars for cell in bar if cell != "-")
         rests = sum(1 for slot in pattern.slots if slot == "-")
+        resting = sorted(
+            b.index for b in strums.bars if b.rests and section.start_bar <= b.index < section.end_bar
+        )
         diags.append(
             SectionDiag(
                 index=k,
@@ -327,6 +339,10 @@ def _section_diags(
                     if (gate := gates.get(k)) is not None
                     else None
                 ),
+                riff_rule=pattern.riff_rule,
+                root_share=pattern.root_share,
+                named_share=pattern.named_share,
+                resting_bars=resting,
             )
         )
     return diags
@@ -361,6 +377,7 @@ def _diagnose(run_dir: Path) -> tuple[Report, Strums | None]:
         report.vocal_bars = len(grid.bar_vocal_db)
     if strums is not None:
         report.sections = _section_diags(grid, strums, chords, _load_riffs(run_dir))
+        report.resting_bars = sorted(b.index for b in _with_bars_or_self(strums, grid).bars if b.rests)
         report.boxes_mostly_rests = _boxes_mostly_rests(strums, report.sections)
     return report, strums
 
@@ -465,6 +482,29 @@ def _printed_patterns(strums: Strums | None, grid: Grid) -> dict[int, list[str]]
     return {b.index: list(b.pattern) for b in strums.bars}
 
 
+def _with_bars_or_self(strums: Strums, grid: Grid) -> Strums:
+    """The strums with its per-bar records, backfilled when it can be; as read otherwise."""
+    try:
+        return with_bars(strums, grid)
+    except ValueError:  # patterns that do not match the plan cannot be backfilled
+        return strums
+
+
+def _rest_flags(strums: Strums | None, grid: Grid) -> dict[int, bool]:
+    """Each bar's `rests` flag by bar index; a run before 1.7 rests nowhere."""
+    if strums is None:
+        return {}
+    return {b.index: b.rests for b in _with_bars_or_self(strums, grid).bars}
+
+
+def _rest_changes(
+    left: SectionDiag, right: SectionDiag, rests_a: dict[int, bool], rests_b: dict[int, bool]
+) -> int:
+    """Bars both sections cover that both runs record, whose `rests` flag differs."""
+    bars = set(range(left.start_bar, left.end_bar)) & set(range(right.start_bar, right.end_bar))
+    return sum(1 for i in bars if i in rests_a and i in rests_b and rests_a[i] != rests_b[i])
+
+
 def _pattern_changes(
     left: SectionDiag,
     right: SectionDiag,
@@ -507,6 +547,8 @@ def compare_runs(a: Path, b: Path) -> Comparison:
     grid_b = load_model(b / "02_grid" / "grid.json", Grid)
     printed_a = _printed_patterns(strums_a, grid_a)
     printed_b = _printed_patterns(strums_b, grid_b)
+    rests_a = _rest_flags(strums_a, grid_a)
+    rests_b = _rest_flags(strums_b, grid_b)
     same_grid = _grid_shape(grid_a) == _grid_shape(grid_b)
     deltas = [
         SectionDelta(
@@ -517,6 +559,8 @@ def compare_runs(a: Path, b: Path) -> Comparison:
             certainty_changed=left.uncertain != right.uncertain,
             pattern_changes=_pattern_changes(left, right, printed_a, printed_b) if same_grid else 0,
             candidate_changed=left.candidate != right.candidate,
+            rest_changes=_rest_changes(left, right, rests_a, rests_b) if same_grid else 0,
+            riff_rule_b=right.riff_rule,
         )
         if left is not None and right is not None
         else None
@@ -531,6 +575,17 @@ def _pct(value: float | None) -> str:
 
 def _num(value: float | int | None, spec: str = "") -> str:
     return "n/a" if value is None else format(value, spec)
+
+
+def _ranges(indices: Sequence[int]) -> str:
+    """Sorted bar indices as ranges: `0-3, 10, 11` (only a run of three or more prints as `a-b`)."""
+    runs: list[list[int]] = []
+    for i in sorted(indices):
+        if runs and i == runs[-1][1] + 1:
+            runs[-1][1] = i
+        else:
+            runs.append([i, i])
+    return ", ".join(f"{a}-{b}" if b - a >= 2 else ", ".join(map(str, range(a, b + 1))) for a, b in runs)
 
 
 def _section_line(d: SectionDiag) -> str:
@@ -564,6 +619,10 @@ def _vote_figures(d: SectionDiag) -> str:
     if d.unit == 2:
         parts.append("unit 2")
     parts.append(f"pcs {_num(d.pitch_change_share, '.2f')}")
+    if d.riff_rule:
+        parts.append(f"rule {d.riff_rule}")
+    parts.append(f"root {_num(d.root_share, '.2f')}")
+    parts.append(f"named {_num(d.named_share, '.2f')}")
     if d.ring_decay_db is None:
         parts.append("rings n/a")
     else:
@@ -627,6 +686,8 @@ def format_report(r: Report) -> str:
         f"Vocal runs: {'n/a' if r.vocal_runs is None else runs_text(r.vocal_runs, r.vocal_bars)}",
     ]
     lines.extend(_section_line(d) for d in r.sections)
+    if r.resting_bars:
+        lines.append(f"{len(r.resting_bars)} bars rest: {_ranges(r.resting_bars)}")
     truth = [r.beat_f, r.downbeat_f, r.chord_root, r.chord_majmin, r.chord_triads]
     if r.truth_given or any(value is not None for value in truth):
         lines.extend(
@@ -653,9 +714,14 @@ def _delta(d: SectionDelta | None) -> str:
     if d is None:
         return "n/a"
     marks = (
-        (" riff flag changed" if d.riff_changed else "")
+        (
+            " riff flag changed" + (f" (rule {d.riff_rule_b})" if d.riff_rule_b else "")
+            if d.riff_changed
+            else ""
+        )
         + (" certainty changed" if d.certainty_changed else "")
         + (f" patterns changed in {d.pattern_changes} bars" if d.pattern_changes else "")
+        + (f" rests changed in {d.rest_changes} bars" if d.rest_changes else "")
     )
     return f"{d.strikes_per_bar:+.1f}/{d.explained * 100:+.1f}pp/{d.rest_share * 100:+.1f}pp{marks}"
 
