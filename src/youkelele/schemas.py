@@ -191,9 +191,9 @@ class SectionPattern(_Artifact):
     pitch_change_share: float | None = None  # share of consecutive named onsets whose MIDI pitches differ; None when not measured or before 1.6
     rings: bool = True  # the strokes ring on rather than being muted
     ring_decay_db: float | None = None  # median decay in dB over the ring window; None before 1.6
-    root_share: float | None = None  # share of the section's onsets whose lowest pitch class is the chord root; None before 1.7
-    named_share: float | None = None  # share of the section's onsets that name a single pitch; None before 1.7
-    riff_rule: Literal["A", "B"] | None = None  # which riff rule marked the section, A or B; None when no rule fired or before 1.7
+    root_share: float | None = None  # share of named onset pitches whose pitch class is the chord root under the onset; None before 1.7
+    named_share: float | None = None  # share of the section's onsets the pitch tracker named; None before 1.7
+    riff_rule: Literal["A", "B"] | None = None  # which rule marked the section a riff: A is the 1.6 chroma gate plus the pitch-change floor, B is reserved for a later chroma-free rule; None when not a riff or before 1.7
 
 
 class PlannedSection(_Artifact):
@@ -221,9 +221,9 @@ class BarStrums(_Artifact):
     uncertain: bool = True  # the bar's strokes are a guess
     riff: bool = False  # the bar belongs to a riff section
     rings: bool = True  # the bar's member rings (spec 4.4); a bar with no detected strokes still carries it
-    rests: bool = False  # the guitar is silent or out of register in this bar, so it prints as a rest; False before 1.7
-    energy_ratio: float | None = None  # the bar's guitar energy as a ratio of the song's median bar energy; None before 1.7
-    low_share: float | None = None  # share of the bar's guitar energy in the ukulele's register; None before 1.7
+    rests: bool = False  # the bar fails the rest rule (energy ratio or low share under its floor) and is left out of its member's vote; False before 1.7
+    energy_ratio: float | None = None  # the bar's stem RMS over the bar's mix RMS; the bar holds only at 0.05 or more; None before 1.7
+    low_share: float | None = None  # share of the bar's STFT power below 330 Hz (n_fft 2048, hop 512, 22 050 Hz); the bar holds only at 0.005 or more; None before 1.7
 
 
 class Strums(_Artifact):
@@ -349,8 +349,8 @@ class ScoreBar(_Artifact):
     strokes: list[Stroke] = []  # the bar's own strokes; empty before 1.6
     tab: list[TabNote] | None = None  # the bar's riff tab; None when the bar is not a printed riff
     grey: bool = False  # the bar is shown greyed out
-    label: str = ""  # a short note printed over the bar, such as "riff heard"; empty before 1.7
-    rests: bool = False  # copied from the strums bar: the bar prints as a rest; False before 1.7
+    label: str = ""  # the chord-row label ("riff" or "riff heard") on the first bar of a riff member inside a merged section whose header does not say riff; empty otherwise and before 1.7
+    rests: bool = False  # copied from the strums bar: the bar failed the rest rule; False before 1.7
 
 
 class ScoreSection(_Artifact):
