@@ -82,6 +82,23 @@ def test_lines_of_different_widths_never_fold():
     assert [(len(l.bars), l.repeat) for l in folded] == [(8, 1), (4, 2)]
 
 
+def test_a_labelled_bar_in_the_window_drops_the_line_to_four():
+    # an eight-bar box is 80 px wide: "riff heard" alone fills it and pushed the chord name out
+    # of the box (Wet Leg bar 58 in the 1.7 validation); four wide boxes hold both
+    bars = _cycle("C", 16)
+    bars[5] = bars[5].model_copy(update={"label": "riff heard"})
+    assert line_width(bars, 0, 8, M44) == 4
+    assert [len(l.bars) for l in pack_lines(_section(bars), 8, M44)] == [4, 4, 8]
+
+
+def test_a_labelled_line_never_folds_into_an_unlabelled_one():
+    plain = pack_lines(_section(_cycle("C", 4)), 16, M44)
+    labelled = pack_lines(_section(_cycle("C", 4)), 16, M44)
+    labelled[0].bars[0] = labelled[0].bars[0].model_copy(update={"label": "riff heard"})
+    folded = fold_repeats(plain + labelled)
+    assert [l.repeat for l in folded] == [1, 1] and folded[1].bars[0].label == "riff heard"
+
+
 def test_line_width_and_a_short_tail():
     bars = _cycle("G", 11)
     assert line_width(bars, 0, 8, M44) == 8
