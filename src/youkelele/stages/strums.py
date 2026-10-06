@@ -362,8 +362,11 @@ def _bar_records(
                 )
             )
             continue
-        # the vote's phase is aligned to its first voted bar, the member's first holding bar
-        cell = vector_bar(shown.vote.vector, shown.vote.unit, slots, b - member.first_holding + offset)
+        # the vote's phase is aligned to its first voted bar, the member's first holding bar.
+        # The vote pairs holding bars by compressed position; the sheet prints by absolute parity
+        # from the first holding bar, so an odd interior gap in a two-bar member can lower the
+        # vote's figures, never the printed phase.
+        cell =vector_bar(shown.vote.vector, shown.vote.unit, slots, b - member.first_holding + offset)
         strokes = [
             Stroke(slot=j, kind=rendered[b][j], rings=member.rings, decay_db=decays[i])
             for j, i in enumerate(owners(b))

@@ -1106,6 +1106,25 @@ def test_two_bar_pattern_phase_starts_at_the_first_holding_bar(tmp_path):
     assert [b.pattern for b in s.bars[1:]] == [s.bar_onsets[i] for i in range(1, 9)]  # what it plays
 
 
+def test_an_interior_resting_bar_keeps_the_printed_two_bar_phase_on_absolute_parity(tmp_path):
+    # A, B, A, B ... over twelve bars with bar 9 silent: the vote reads the holding bars as a
+    # compressed list (... A, B, A, A, B), so its pairs after the gap are in the opposite phase,
+    # but each bar prints its cell by absolute parity from the first holding bar. With eight
+    # bars and the gap at bar 3 the mixed-phase list defeats the two-bar rule (unit 1); twelve
+    # bars with the gap at bar 9 keep unit 2. The vote's confidence and certainty are not this
+    # test's concern
+    stem_bars = [A, B] * 6
+    stem_bars[9] = SILENT
+    s = _run_stage(tmp_path, stem_bars)
+    assert s.patterns[0].unit == 2
+    assert s.bars[9].rests and s.bars[9].strokes == [] and s.bars[9].pattern == ["-"] * 8
+    assert not any(b.rests for i, b in enumerate(s.bars) if i != 9)
+    even, odd = s.bars[0].pattern, s.bars[1].pattern
+    assert even != odd
+    assert all(s.bars[i].pattern == even for i in (2, 4, 6, 8, 10))  # bar 10, after the gap, as bar 0
+    assert all(s.bars[i].pattern == odd for i in (3, 5, 7, 11))  # bar 11, after the gap, as bar 1
+
+
 def test_root_and_named_shares_are_written_for_a_strummed_section(tmp_path, real_pitch):
     s = _run_stage(tmp_path, [ISLAND_BAR] * 8)  # not a riff: a chord fails the chroma gate
     p = s.patterns[0]
