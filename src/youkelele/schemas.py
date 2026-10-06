@@ -188,7 +188,7 @@ class SectionPattern(_Artifact):
     score_majority: float | None = None  # the majority candidate's score; None before 1.6
     score_medoid: float | None = None  # the medoid candidate's score; None before 1.6
     unit: int = 1  # the vote's unit in bars: 1 is a one-bar pattern, 2 a two-bar pattern (spec 4.2)
-    pitch_change_share: float | None = None  # share of consecutive onsets whose chroma changes; None before 1.6
+    pitch_change_share: float | None = None  # share of consecutive named onsets whose MIDI pitches differ; None when not measured or before 1.6
     rings: bool = True  # the strokes ring on rather than being muted
     ring_decay_db: float | None = None  # median decay in dB over the ring window; None before 1.6
 
@@ -251,7 +251,7 @@ class RiffNote(_Artifact):
 
 
 class TabNote(_Artifact):
-    slot: int  # slot index within the bar
+    slot: int  # slot index: within the riff's unit (one or two bars) in riff.json, within the bar in score.json
     midi: int  # MIDI pitch
     string: int = Field(ge=0, lt=4)  # index into the instrument's tuning in diagram order, 0 = G
     fret: int = Field(ge=0)  # fret number, 0 is open
@@ -264,7 +264,7 @@ class RiffSection(_Artifact):
     end_bar: int  # exclusive
     unit: int  # the riff's unit in bars, 1 or 2
     onsets: list[list[RiffNote]]  # the notes heard, one list per onset
-    riff: list[TabNote]  # the riff as one bar of tab
+    riff: list[TabNote]  # the riff as one unit of tab: one bar, or two bars of slots when `unit` is 2
     agreement: float  # how closely the section's bars agree with the riff
     support: float  # share of the section's bars that support the riff
     named_share: float  # share of onsets with a named pitch

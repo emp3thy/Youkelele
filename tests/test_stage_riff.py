@@ -156,3 +156,14 @@ def test_riff_stage_reads_a_v15_strums_file_through_its_backfilled_bars(tmp_path
         for m in strums.plan[k].members
     ]
     assert [(s.section, s.start_bar, s.end_bar) for s in r.sections] == expected
+
+
+def test_the_riff_stage_imports_before_the_profiles_package():
+    # the profiles package imports the riff stage, so the stage may name Tuning only for type checking
+    import subprocess
+    import sys
+
+    proc = subprocess.run(
+        [sys.executable, "-c", "import youkelele.stages.riff"], capture_output=True, text=True, timeout=60
+    )
+    assert proc.returncode == 0, proc.stderr

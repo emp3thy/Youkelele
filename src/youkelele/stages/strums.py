@@ -18,7 +18,7 @@ from youkelele.music.as_played import (
     eighth_grid,
     structure_test,
 )
-from youkelele.music.members import first_bar_agreement, member_figures, member_spans, vector_bar
+from youkelele.music.members import aligned_agreement, member_figures, member_spans, section_offset, vector_bar
 from youkelele.music.onsets import (
     Onsets,
     StrikeClass,
@@ -46,9 +46,10 @@ _NO_ONSETS = Onsets(times=np.zeros(0), centroid=np.zeros(0), zcr=np.zeros(0))
 _EPS = 1e-6
 # the riff thresholds were measured on the source signal at this rate (riff-thresholds.md)
 _RIFF_SR = 22050
-# A member of a merged section prints the section's pattern when the first bars of the two
-# votes agree at least this much, else its own (spec 4.3). Measured on the one merged section
-# with disagreeing members: 0.31 must print its own, 0.375 the section's (A4).
+# A member of a merged section prints the section's pattern when its vote's first bar agrees at
+# least this much with the section vote's bar at the member's best alignment, else its own
+# (spec 4.3). Measured on the one merged section with disagreeing members: 0.31 must print its
+# own, 0.375 the section's (A4).
 MEMBER_AGREE = 0.35
 STRUMS_SCHEMA = 2  # 1.6: every bar carries its strokes (`bars`)
 
@@ -76,6 +77,9 @@ class _Member:
     riff: bool = False
     rings: bool = True
     ring_decay_db: float | None = None
+    # the alignment (0 or 1 bars) of the section's vote that fits this member's own bars;
+    # always 0 for a one-bar section vote and for the longest member itself
+    section_offset: int = 0
 
 
 def _onset_chroma_at_riff_rate(y: np.ndarray, sr: int, times: np.ndarray) -> np.ndarray:
@@ -199,8 +203,9 @@ def _vote_member(member: _Member, classes: Sequence[Sequence[StrikeClass]], slot
     """Rule 1: the member's own vote, figures, chance test and certainty."""
     bars = classes[member.start : member.analysed_end]
     vote = choose_pattern(bars)
-    # a unit-2 vote is tested by its first bar, the vote's representative
-    structured, p, density = structure_test(bars, vote.vector[:slots], seed=member.start)
+    # the whole unit vector is the vote's representative: a two-bar vote is a full vote only
+    # when both its bars are, whichever bar the member starts on (spec 4.1)
+    structured, p, density = structure_test(bars, vote.vector, seed=member.start)
     confidence, repeat, explained = member_figures(bars, vote.vector, vote.unit, slots)
     member.vote, member.chance_p, member.density = vote, p, density
     member.confidence, member.repeat, member.explained = confidence, repeat, explained
@@ -252,7 +257,19 @@ def _prints_section(member: _Member, longest: _Member, slots: int) -> bool:
         return False
     if longest.silent:
         return False
-    return first_bar_agreement(member.vote.vector, longest.vote.vector, slots) >= MEMBER_AGREE
+    agreement = aligned_agreement(
+        member.vote.vector, longest.vote.vector, longest.vote.unit, slots, member.section_offset
+    )
+    return agreement >= MEMBER_AGREE
+
+
+def _align_member(member: _Member, longest: _Member, classes: Sequence[Sequence[StrikeClass]], slots: int) -> None:
+    """Rule 5, first half: the alignment of the section's vote that fits the member's own bars
+    (spec 4.3, amended in the final fix wave), read over the bars the member's vote read."""
+    if member is longest or longest.silent:
+        return
+    bars = classes[member.start : member.analysed_end]
+    member.section_offset = section_offset(bars, longest.vote.vector, longest.vote.unit, slots)
 
 
 def _section_pattern(k: int, longest: _Member, slots: int, meter: Meter, boosted: bool) -> SectionPattern:
@@ -290,9 +307,10 @@ def _bar_records(
             for b in range(member.start, member.end)
         ]
     shown = longest if _prints_section(member, longest, slots) else member
+    offset = member.section_offset if shown is longest else 0
     records = []
     for b in range(member.start, member.end):
-        cell = vector_bar(shown.vote.vector, shown.vote.unit, slots, b - member.start)
+        cell = vector_bar(shown.vote.vector, shown.vote.unit, slots, b - member.start + offset)
         strokes = [
             Stroke(slot=j, kind=rendered[b][j], rings=member.rings, decay_db=decays[i])
             for j, i in enumerate(owners(b))
@@ -445,6 +463,12 @@ class StrumsStage(Stage):
             track = track_pitch(y, sr)
             for m in candidates:
                 _riff_test(m, track, riff_times, bars)
+        for k, sec in enumerate(sections):
+            for m in sec:
+                if not m.silent:
+                    _align_member(m, longest[k], classes, slots)
+                if m.section_offset:
+                    ctx.log(f"  member {m.start}-{m.end} aligns to its section's two-bar pattern from its second bar")
 
         patterns = [_section_pattern(k, longest[k], slots, meter, boosted[k]) for k in range(len(plan))]
 

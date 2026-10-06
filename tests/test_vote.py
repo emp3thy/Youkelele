@@ -3,7 +3,7 @@ from youkelele.music.vote import (
     HYBRID_DELTA,
     PERIOD2_MARGIN,
     choose_pattern,
-    choose_unit,
+    unit_and_phase,
     medoid,
     period_margin,
 )
@@ -47,8 +47,8 @@ def test_choose_pattern_never_switches_to_a_medoid_under_the_stroke_floor():
 
 def test_period_margin_and_unit_two_on_alternating_bars():
     a, b = list("S--S--S-"), list("SSS-SSS-")
-    assert period_margin([a, b] * 4) >= PERIOD2_MARGIN and choose_unit([a, b] * 4) == 2
-    assert choose_unit([a, list("-------S")] * 4) == 1  # the sparse bar fails the strike floor
+    assert period_margin([a, b] * 4) >= PERIOD2_MARGIN and unit_and_phase([a, b] * 4)[0] == 2
+    assert unit_and_phase([a, list("-------S")] * 4)[0] == 1  # the sparse bar fails the strike floor
     r = choose_pattern([a, b] * 4)
     assert r.unit == 2 and r.vector == a + b
 
@@ -62,7 +62,7 @@ def test_unit_stays_one_when_lag_agreement_fires_but_the_two_bar_medoid_gains_li
     lag1 = sum(jaccard(x, y) for x, y in zip(bars, bars[1:])) / (len(bars) - 1)
     lag2 = sum(jaccard(x, y) for x, y in zip(bars, bars[2:])) / (len(bars) - 2)
     assert lag2 - lag1 >= PERIOD2_MARGIN  # the statistic spec 4.2 first named would fire
-    assert period_margin(bars) < PERIOD2_MARGIN and choose_unit(bars) == 1
+    assert period_margin(bars) < PERIOD2_MARGIN and unit_and_phase(bars)[0] == 1
 
 
 def test_period_margin_is_the_two_bar_medoid_over_the_one_bar_medoid():
@@ -78,6 +78,7 @@ def test_unit_two_pairs_from_the_best_pairs_phase_and_prints_aligned_to_the_firs
     a, b = list("S--S--S-"), list("SSS-SSS-")
     stray = list("S-------")
     bars = [stray] + [a, b] * 4
+    assert unit_and_phase(bars) == (2, 1)
     r = choose_pattern(bars)
     assert r.unit == 2
     # bar 0 (and every even bar) plays the second bar of the figure, odd bars the first

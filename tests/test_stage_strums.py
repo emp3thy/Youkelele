@@ -957,3 +957,32 @@ def test_bar_records_carry_the_members_ring_flag_without_strokes():
         longest, longest, 8, Meter(numerator=4, denominator=4), rendered, lambda b: [None] * 8, [],
     )
     assert all(r.strokes == [] and r.rings is False for r in records)
+
+
+def test_a_two_bar_vote_is_tested_the_same_whichever_bar_the_member_starts_on():
+    # a full bar alternating with a sparse one: from bar 0 the vote's first bar is full, from
+    # bar 1 it is not; the whole unit vector is the representative, so both take the shuffle test
+    classes = [list("SSSSSSSS"), list("S-S-S---")] * 5
+    for start in (0, 1):
+        m = strums_module._Member(position=0, start=start, end=start + 8, analysed_end=start + 8, silent=False)
+        strums_module._vote_member(m, classes, 8, 0.45)
+        assert m.vote.unit == 2 and m.chance_p is not None
+
+
+def test_a_member_playing_the_sections_two_bar_figure_from_its_second_bar_prints_it_aligned(tmp_path):
+    # the section alternates A, B from bar 0; the three-bar fragment merged into it plays B, A, B.
+    # Its own one-bar vote is B, which agrees 0.43 with A, so it prints the section's pattern,
+    # and must print it aligned to its own bars, not A, B, A
+    a, b = "S-S-S-S-", "SS-SS-SS"
+    grid = _labelled_grid([("verse", 8), ("verse", 3)])
+    bar_patterns = [a, b] * 4 + [b, a, b]
+    lines: list[str] = []
+    s, _, _ = _run(
+        tmp_path, grid, _detector(_bar_patterns_times(bar_patterns)), other=_bursts_bars(bar_patterns),
+        mix_amp=0.1, log=lines.append,
+    )
+    assert s.plan[0].members == [0, 1] and s.patterns[0].unit == 2
+    assert [r.pattern for r in s.bars[8:11]] == [list("DU-UD-DU"), list("D-D-D-D-"), list("DU-UD-DU")]
+    assert [r.pattern for r in s.bars[8:11]] == [s.bar_onsets[i] for i in range(8, 11)]  # what it plays
+    assert all(r.member == 1 and r.unit == 2 for r in s.bars[8:11])
+    assert any("member 8-11 aligns" in line for line in lines)

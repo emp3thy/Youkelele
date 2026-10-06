@@ -10,12 +10,14 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, TypeVar
 
 import numpy as np
 
 from youkelele.music.as_played import _topped_vote, jaccard
 from youkelele.music.onsets import StrikeClass
+
+T = TypeVar("T")
 
 HYBRID_DELTA = 0.04  # the medoid must beat the majority by at least this mean agreement
 MEDOID_MIN_STROKES = 2  # a medoid needs at least this many `S` cells (mutes do not count)
@@ -102,14 +104,9 @@ def unit_and_phase(bars: Sequence[Sequence[StrikeClass]]) -> tuple[int, int]:
     return 2, start % 2
 
 
-def choose_unit(bars: Sequence[Sequence[StrikeClass]]) -> int:
-    """2 when the bars repeat every two bars and each bar of the best pair has real strikes."""
-    return unit_and_phase(bars)[0]
-
-
-def _pairs(bars: Sequence[Sequence[StrikeClass]], phase: int = 0) -> list[list[StrikeClass]]:
+def _pairs(bars: Sequence[Sequence[T]], phase: int = 0) -> list[list[T]]:
     """Consecutive pairs concatenated, starting at bar `phase`; a bar before the first pair
-    or after the last is left out."""
+    or after the last is left out. Shared with the riff reduction (`riff_line.py`)."""
     return [list(bars[i]) + list(bars[i + 1]) for i in range(phase, len(bars) - 1, 2)]
 
 

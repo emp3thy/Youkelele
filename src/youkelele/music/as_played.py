@@ -22,7 +22,8 @@ UNCERTAIN_BELOW = 0.45  # on the eighth-note grid, a section pattern with lower 
 # for 0.55, rejecting random sprays, is now the chance test's job (spec 1.5, section 4.1).
 UNCERTAIN_BELOW_SIXTEENTH = 0.53
 # Shorter sections inherited a neighbour's pattern up to 1.5; 1.6 votes them on their own bars
-# (spec 4.5). Kept for the evaluate text of 1.5 files.
+# (spec 4.5). No code reads it any more: it is kept so that what `inherited_from` meant in a
+# 1.5 file stays documented.
 MIN_SECTION_BARS = 4
 STAGE_UNCERTAIN_GRID_FIT = 0.6  # the whole stage is uncertain below this grid fit
 STRIKE_SHARE = 1 / 3  # a slot struck in more than this share of a section's bars is kept
@@ -176,7 +177,9 @@ def structure_test(
     """(structured, chance_p or None when the vote is full, strike_density).
 
     A full vote gives a shuffled baseline equal to the bar density, so it is tested
-    as a claim about density; any other vote is tested against the shuffles.
+    as a claim about density; any other vote is tested against the shuffles. `vector`
+    is the whole vote: a two-bar vote (spec 1.6, 4.2) is full only when both its bars
+    are, so the test never depends on which bar a section starts on.
     """
     density = strike_density(bars)
     if full_vote(vector):

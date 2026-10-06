@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import numpy as np
 import soundfile as sf
@@ -14,9 +15,11 @@ from youkelele.music.members import member_spans
 from youkelele.music.pitch import PitchTrack, name_notes, track_pitch
 from youkelele.music.riff_line import RIFF_NAMED_MIN, NoteBar, choose_riff, gate
 from youkelele.music.tab import to_tab, tuning_midis
-from youkelele.profiles.base import Tuning
 from youkelele.schemas import BarStrums, Grid, RiffNote, Riffs, RiffSection, Strums
 from youkelele.stage import Stage, StageContext
+
+if TYPE_CHECKING:  # the profiles package imports this stage, so a runtime import would be circular
+    from youkelele.profiles.base import Tuning
 
 _STEMS = {
     "guitar_stem": "separate/stems/guitar.wav",

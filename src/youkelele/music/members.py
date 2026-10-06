@@ -2,7 +2,8 @@
 
 A planned section's members are whole grid sections. Each member votes its own
 pattern, which may be one bar long or two (unit 2); a bar is always compared with
-the bar of the vote at its own offset from the member's first bar. Pure numpy.
+the bar of the vote at its own offset from the member's first bar; a member printing its
+section's two-bar vote adds the alignment that fits its own bars. Pure numpy.
 """
 
 from __future__ import annotations
@@ -49,6 +50,33 @@ def member_figures(
     return confidence, bar_repeat(bars), explained_onsets([flat_bars], flat_halves)
 
 
-def first_bar_agreement(a: Sequence[StrikeClass], b: Sequence[StrikeClass], slots_per_bar: int) -> float:
-    """Jaccard of the first bars of two votes: the representative bar of a unit-2 vote."""
-    return jaccard(a[:slots_per_bar], b[:slots_per_bar])
+def section_offset(
+    bars: Sequence[Sequence[StrikeClass]], vector: Sequence[StrikeClass], unit: int, slots_per_bar: int
+) -> int:
+    """The alignment, 0 or 1 bars, of a section's vote that best fits a member's own bars.
+
+    A member's first bar is not always the bar the section's vote starts on: a member
+    playing a two-bar figure from its second bar would print it swapped. Each alignment is
+    scored by the mean Jaccard of the member's bars with the vote's bar at their offset plus
+    the alignment; a one-bar vote, a tie or no bars gives 0.
+    """
+    if unit != 2 or not bars:
+        return 0
+
+    def fit(offset: int) -> float:
+        return float(np.mean([
+            jaccard(bar, vector_bar(vector, unit, slots_per_bar, i + offset)) for i, bar in enumerate(bars)
+        ]))
+
+    return 1 if fit(1) > fit(0) else 0
+
+
+def aligned_agreement(
+    own: Sequence[StrikeClass], section: Sequence[StrikeClass], section_unit: int, slots_per_bar: int, offset: int
+) -> float:
+    """Jaccard of a member vote's first bar with the section vote's bar at `offset`.
+
+    The first bar is a vote's representative; at offset 0 this is the agreement of the two
+    votes' first bars, as 1.6 measured `MEMBER_AGREE` on.
+    """
+    return jaccard(own[:slots_per_bar], vector_bar(section, section_unit, slots_per_bar, offset))

@@ -13,7 +13,7 @@ from typing import Literal
 
 import numpy as np
 
-from youkelele.music.vote import HYBRID_DELTA, MEDOID_MIN_STROKES, align_to_first_bar, unit_and_phase
+from youkelele.music.vote import HYBRID_DELTA, MEDOID_MIN_STROKES, _pairs, align_to_first_bar, unit_and_phase
 
 RIFF_AGREE_MIN = 0.70
 RIFF_SUPPORT_MIN = 0.75
@@ -42,12 +42,6 @@ def note_jaccard(a: NoteBar, b: NoteBar) -> float:
         if x == y:
             same += 1
     return same / union if union else 1.0
-
-
-def _pairs(bars: Sequence[NoteBar], phase: int = 0) -> list[NoteBar]:
-    """Consecutive pairs concatenated, starting at bar `phase`; a bar before the first pair
-    or after the last is left out."""
-    return [list(bars[i]) + list(bars[i + 1]) for i in range(phase, len(bars) - 1, 2)]
 
 
 def _majority(bars: Sequence[NoteBar]) -> NoteBar:
