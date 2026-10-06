@@ -83,8 +83,14 @@ def test_readme_command_names_real_subcommand_and_flags(line):
 def test_readme_states_the_1_5_limitation_and_history():
     text = _readme()
     assert "splitting the onsets by pitch register" in text  # the two-guitar limitation, spec 4.2 wording
-    assert "Riff heard in this section" in text
     assert "1.5" in text and "0.6.0" in text
+
+
+def test_readme_describes_the_1_6_riff_phrase_and_bar_boxes():
+    text = _readme()
+    assert "riff heard, not transcribed" in text  # the 1.6 state phrase (spec 3.2)
+    assert "strumming pattern of each section" not in text  # the 1.5 description
+    assert "two-bar patterns" in text and "ring flag" in text  # the 1.6 history line
 
 
 def test_readme_states_the_1_6_stage_limitation_and_history():
