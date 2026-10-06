@@ -353,3 +353,60 @@ Every row of spec section 9, with its status after these runs.
 ## README sample
 
 The README's sample image (`docs/images/sample-sheet.png`) was regenerated from the test suite's synthetic 120-bar song (`_realistic_120_bar_score` in `tests/test_stage_render.py`) through the render stage and real Chromium, page 1 rasterised at 110 dpi (`make_sample.py`; 109 kB, two pages). Page 1 shows the Intro (four wide bars from the pickup, then four narrow), Verse 1 and Verse 2 folded to "play twice", the greyed Pre-chorus with "pattern uncertain", and Chorus 1. The README's sample text, its version line, the limitation that spoke of the pattern "beside" a section and the "55-bar" illustration were updated to match.
+
+## Listening pass (owner, 2026-10-06)
+
+The owner listened to all 37 clips the day after the merge. Verdicts are the owner's words.
+
+| # | Clip | Tests | Owner's verdict |
+|---|---|---|---|
+| 1 | all-fired-up\held_outro_132 | held strokes drawn with a sustain line (4 held slots) | PARTLY: "two notes - syncopated, short note first, long note cut" (the long stroke rings but is cut before the next stroke; the sustain line over four slots overstates it) |
+| 2 | summer-of-69\held_verse_95 | held strokes with a sustain line (6 held slots) | YES: "rings through" |
+| 3 | chelsea-dagger\held_chorus_61 | held strokes with a sustain line (5 held slots) | PARTLY: "syncopated duu du da and cut on the third note" (the third stroke is cut; the sustain line overstates it) |
+| 4 | mangetout\held_verse_18 | held strokes with a sustain line (3 held slots) | NO: "cut" |
+| 5 | the-cars-you-might-think\held_chorus_68 | held stroke with a one-slot sustain line | NO: "cut" |
+| 6 | pour-some-sugar-on-me\held_verse_77 | greyed pattern, 14 held slots with a sustain line | YES: "a single note - plays through" |
+| 7 | need-you-tonight\short_chorus_24 | short strokes, no sustain line (9 empty slots) | NO: "rings" (the song-level short flag is wrong for this chorus) |
+| 8 | need-you-tonight\short_verse_31 | short strokes, no sustain line (5 empty slots) | YES: "damped" |
+| 9 | need-you-tonight\short_verse_56 | short strokes, no sustain line (5 empty slots) | YES: "damped" |
+| 10 | fame\short_instrumental_47 | short strokes, no sustain line (7 empty slots) | YES: "damped" |
+| 11 | fame\short_chorus_61 | short strokes, no sustain line (6 empty slots) | damped YES; pattern NO: "too many clicks - i think it's clicking to the higher pitched strumming" (the second, higher guitar) |
+| 12 | summer-of-69\changed_verse_4-12 | Verse 1 4-19 new two-bar pattern D-DU-xxx / xxxxxxD- (printed uncertain) | YES: "clicks fit" |
+| 13 | summer-of-69\changed_verse_31-39 | verse 31-41 new two-bar medoid D--U--D- / DUD-DUD- (was DUDUD-D-) | NO: "way too many clicks it's a quarter note and then the rest of the measure is a single tone and the clicker is missing this" (one strum then a held tone per bar; both candidates over-strike) |
+| 14 | summer-of-69\changed_verse_53-58 | Verse 3 53-58 new medoid DU-U-UDU (1.5 DU-UDUDU was "too fast") | NO: "too many clicks. I think you're clicking 16th notes when it's playing 8th notes" (still too dense; the ear hears eighths, the grid or the clip may be at twice the rate) |
+| 15 | summer-of-69\changed_verse_75-83 | verse 75-83 new two-bar D-DU-UD- / DU-UD-D- (was DUDUDUD-) | YES: "clicks fit" |
+| 16 | summer-of-69\changed_verse_95-103 | verse 95-111 new two-bar D--U---- / DUDUDUDU (was D--UD-D-) | MOSTLY: "much better except for the very end where there was a single note and then 8th notes rather than the 16th notes you were clicking" (the full bar is at half the clicked density) |
+| 17 | summer-of-69\changed_outro_111-119 | outro 111-121 new medoid xU--DU-- (was x---D---) | NO: "too few notes - it was playing the signature riff and you were doing 2 8th notes and then a pause then another 2 8th notes" (the outro is the riff; a strum pattern is the wrong object) |
+| 18 | chelsea-dagger\changed_chorus_61-69 | chorus 61-71 new medoid D-D---D- (was D-D-D-D-) | YES: "clicks fit" |
+| 19 | pour-some-sugar-on-me\changed_chorus_55-63 | chorus 55-67 new medoid D---D-DUD---D--U (was ----D---D-D-D---), greyed | NO: "wrong" |
+| 20 | mangetout\changed_verse_58-66 | Verse 4 member 58-65, newly flagged riff, prints its own D-DU-UDU (never ear-judged before) | NO: "clicks do not fit the riff at all. it's playing a syncopated rhythm and it is 8th notes evenly spaced" (the owner calls it a riff; the printed strokes do not match) |
+| 21 | fame\changed_chorus_61-69 | chorus 61-71 new medoid DUDUDUD---D-D-D- (was DUDUDUD---D-DUD-) | NO: "too many clicks" (two guitars in one stem; as clip 11) |
+| 22 | fame\changed_verse_71-79 | verse 71-81 new medoid D-DUDUD--UD-DUxx (was D-DUDUD-DUD-DUxx) | NO: "too many clicks" (two guitars in one stem) |
+| 23 | need-you-tonight\changed_chorus_24-31 | chorus 24-31 new two-bar D---D---D--UxU-U / D-DUD-DU-UDU-U-U (was D-DUD-DUDUDUxU-U) | NO: "you're using syncopation when it does not exist. it goes 3 1 beat notes, all cut off, and then 9 fast notes" (three quarter-note stabs then a run of nine fast notes; neither bar of the pair is right) |
+| 24 | need-you-tonight\changed_outro_79-86 | outro 79-86 new medoid DU-U-UDU--DU-U-x (was DU-UDUDUD-xU-UDU) | MOSTLY: "clicks mostly fit" |
+| 25 | the-cars-you-might-think\changed_instrumental_72-76 | instrumental 72-76 new two-bar -UD-D-D- / DUD-DUDU (was DUD-DUDU) | NO: "not enough clicks - they don't fit" (the sparse half under-strikes) |
+| 26 | all-fired-up\member_verse2_55-61 | member 55-61 prints the section D-D-D-DU (agreement above 0.35) | MOSTLY: "mostly fits" |
+| 27 | all-fired-up\member_verse2_90-97 | member 90-97 prints its own greyed xUDxxxx- (agreement below 0.35) | NO: "completely, hilariously, wrong" (the own vote of a sparse sustained stretch is mutes; grey does not rescue it) |
+| 28 | all-fired-up\member_verse2_97-104 | riff member 97-104 prints its own xxDxDxDx, short, unlabelled | NO: "clicks are completely wrong" |
+| 29 | all-fired-up\member_verse2_104-110 | member 104-110 prints the section D-D-D-DU | NO: "this is a damped note, a pause, and then 8th notes" (1.5 pass said the end fit; now rejected) |
+| 30 | summer-of-69\shortsection_intro_0-4 | intro flagged short inside a ringing song (median 6.01 dB) | NO: "the strokes are not damped" (the short flag is wrong here) |
+| 31 | chelsea-dagger\shortsection_intro_0-8 | intro flagged short inside a ringing song (median 12.16 dB) | NO MUSIC: "there is no music in that piece - that's a doorbell" (the stem holds no guitar here; the section should be no-instrument, and 1.4 printed this intro as uncertain/no strum) |
+| 32 | the-cars-you-might-think\shortsection_chorus2_45-52 | Chorus 2 flagged short inside a ringing song (median 12.47 dB) | YES: "damped" |
+| 33 | the-cars-you-might-think\shortsection_verse3_52-60 | Verse 3 (a riff by ear) flagged short inside a ringing song (median 9.35 dB) | YES: "damped" |
+| 34 | need-you-tonight\tab_verse_13-24 | Verse 1 printed tab (C string frets 0 2 3) as plucks at tempo | YES: "that is the pattern. That's the riff." (notes and rhythm both right; the only printed tab of 1.6 is verified) |
+| 35 | need-you-tonight\tabover_verse_13-24 | the same tab plucks over the stem | YES: "sits right on it" |
+| 36 | the-beatles-day-tripper\unflagged_intro_0-8 | blind intro, not flagged, printed D-DUDUDU | NO: "it's playing a riff and you did not match it" (riff test false negative on a single-note riff; the pattern does not fit either) |
+| 37 | the-beatles-day-tripper\unflagged_verse_52-58 | blind verse 52-58, nearest to a riff flag (pcs 0.29), printed DUDUDUDU | RIFF OVER STRUM: "it's a riff with a strum in the background (strum is the low notes, riff is the high notes). the clicks match the strum, not the riff" |
+
+**Tally.** Held strokes: 2 ring through, 4 cut or partly cut (the per-member ring flag is not per-stroke length). Short strokes: 4 damped, 1 rings (Need You Tonight's chorus). Changed patterns: 3 fit, 2 mostly fit, 9 wrong. All Fired Up Verse 2 members: 1 mostly fit, 3 wrong. Short sections inside ringing songs: 2 damped, 1 not damped, 1 holds no guitar at all. Tab: 2 of 2 right. Blind song: both sections are riffs the test did not flag.
+
+**What the pass settles.**
+
+- **The riff path works when the gate passes (A9, A12 verified).** Need You Tonight's Verse 1 tab is the riff, notes and rhythm, and sits on the stem. It is the first transcription the chain has had verified end to end.
+- **The strum pattern machinery is the weak link, not the vote alone.** Nine of fourteen changed patterns are wrong, and the complaints repeat across songs: too many clicks (Summer of '69 three times, "clicking 16th notes when it's playing 8th notes"; Fame twice, the clicks follow the higher second guitar), long notes voted into rows of hits (Summer of '69 31-41 "a quarter note and then the rest of the measure is a single tone"), syncopation printed where there is none (Need You Tonight's chorus: "3 1 beat notes, all cut off, and then 9 fast notes"). The onset grid and what counts as a strike need the ear before the vote can help.
+- **Sustain lines need per-stroke length (A5 refuted in use).** A section-level ring flag draws lines through slots the player cuts: 4 of 6 held clips. Stroke duration must be measured per onset.
+- **The ring threshold is on the wrong side for one section and meaningless for another.** Summer of '69's intro (6.01 dB) is not damped; Chelsea Dagger's intro holds no guitar ("that's a doorbell") and should be a no-instrument section.
+- **The riff test misses riffs on one or two pitches and riffs over a strum.** Day Tripper's intro and verse are riffs (the verse a riff over a low strum, and the clicks match the strum); All Fired Up's Verse 2 figure (61-90) was heard as a riff in 1.5 and lost its flag. Wet Leg 58-65 was flagged correctly but its printed strokes do not fit.
+- **The member rule's print is only as good as the member's pattern.** 90-97 printing its own vote is "completely, hilariously, wrong"; the sparse sustained stretch comes out as mutes.
+
+**Priorities for 1.7, from the ear.** Per-onset stroke duration instead of a section flag; the onset grid and the recall gate re-examined against these clips (sixteenth versus eighth density); riff detection for repeated-pitch riffs and riff-over-strum; no-instrument detection on sections of drums and bells; then more riff-led songs so the gate's bands rest on more than one verified riff.
