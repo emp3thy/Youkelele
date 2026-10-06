@@ -1019,6 +1019,18 @@ def test_printable_riff_puts_tab_on_every_bar_and_sets_state_riff():
     assert score.sections[0].state == "riff" and score.sections[0].octave_shift == 1
 
 
+def test_a_resting_bar_of_a_printable_riff_prints_no_tab():
+    strums = _riff_strums(4, riff=True)
+    bars = _bars((2, "D-D-D-D-", 0, True, False, True), (1, "D-D-D-D-", 0, True, False, True, True),
+                 (1, "D-D-D-D-", 0, True, False, True))
+    strums = strums.model_copy(update={"bars": bars})
+    score = _riff_score(4, strums, Riffs(sections=[_riff_section()]))
+    out = score.sections[0].bars
+    assert out[2].tab is None and out[2].strokes == [] and out[2].grey is False
+    assert all(out[i].tab and [n.fret for n in out[i].tab] == [0, 2] for i in (0, 1, 3))
+    assert score.sections[0].state == "riff"
+
+
 def test_a_two_bar_riff_alternates_its_halves_with_slots_inside_the_bar():
     # notes at slot 1 of the first bar and slot 3 of the second (8 + 3 in the two-bar unit)
     riffs = Riffs(sections=[_riff_section(unit=2, notes=((1, 0), (11, 3)))])

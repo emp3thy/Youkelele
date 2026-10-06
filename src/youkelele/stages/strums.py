@@ -67,6 +67,9 @@ class _Member:
     # the bars in [start, analysed_end) that hold by the rest rule, in order (1.7 spec 5): the
     # vote, the chance test, the ring flag and the riff features read these bars only
     holding: list[int] = field(default_factory=list)
+    # silent because the section-level cut failed: the per-bar rest rule never ran (1.7 spec 5),
+    # so every bar of the member carries rests False
+    section_cut_failed: bool = False
     vote: VoteResult | None = None
     confidence: float = 0.0
     repeat: float = 0.0
@@ -345,7 +348,7 @@ def _bar_records(
         return [
             BarStrums(
                 index=b, member=member.position, strokes=[], pattern=["-"] * slots, uncertain=True,
-                rings=member.rings, rests=rests(b), energy_ratio=energy[b], low_share=low[b],
+                rings=member.rings, rests=False if member.section_cut_failed else rests(b), energy_ratio=energy[b], low_share=low[b],
             )
             for b in range(member.start, member.end)
         ]
@@ -366,7 +369,7 @@ def _bar_records(
         # The vote pairs holding bars by compressed position; the sheet prints by absolute parity
         # from the first holding bar, so an odd interior gap in a two-bar member can lower the
         # vote's figures, never the printed phase.
-        cell =vector_bar(shown.vote.vector, shown.vote.unit, slots, b - member.first_holding + offset)
+        cell = vector_bar(shown.vote.vector, shown.vote.unit, slots, b - member.first_holding + offset)
         strokes = [
             Stroke(slot=j, kind=rendered[b][j], rings=member.rings, decay_db=decays[i])
             for j, i in enumerate(owners(b))
@@ -498,8 +501,11 @@ class StrumsStage(Stage):
             a, b = int(round(bars[start].start * sr)), int(round(bars[trimmed - 1].end * sr))
             # the section-level cut first, then the bars that hold inside it
             holding = [i for i in range(start, trimmed) if bar_holds(energy[i], low[i])]
-            silent = not section_has_instrument(y[a:b], mix[a:b]) or not holding
-            return _Member(position, start, end, trimmed, silent=silent, holding=holding)
+            cut_failed = not section_has_instrument(y[a:b], mix[a:b])
+            return _Member(
+                position, start, end, trimmed, silent=cut_failed or not holding, holding=holding,
+                section_cut_failed=cut_failed,
+            )
 
         # every planned section votes per member (spec 4.3); its own figures are its longest member's
         sections: list[list[_Member]] = []

@@ -1092,10 +1092,43 @@ def test_a_member_whose_bars_all_rest_is_silent(tmp_path, resting):
     # list makes that member silent
     s = _run_stage(tmp_path, [ISLAND_BAR] * 4 + [resting] * 4, sections=TWO_MEMBERS)
     assert s.plan[0].members == [0, 1] and len(s.patterns) == 1
-    assert all(b.rests and b.pattern == ["-"] * 8 and b.strokes == [] for b in s.bars[4:])
+    # the bell member rests bar by bar; the zeros member failed the section cut, so its flag is uniformly False
+    assert all(b.rests is (resting is BELL) and b.pattern == ["-"] * 8 and b.strokes == [] for b in s.bars[4:])
     assert [b.member for b in s.bars] == [0] * 4 + [1] * 4
     # the longest member (the first, on a tie) holds, so the header does not say no instrument
     assert not s.patterns[0].no_instrument and "".join(s.patterns[0].slots) == ISLAND_TEXT
+
+
+def test_the_longest_member_resting_throughout_gives_the_section_no_instrument(tmp_path):
+    # the resting member (five bars) is the longest, so the header follows it; the three-bar member holds
+    s = _run_stage(tmp_path, [ISLAND_BAR] * 3 + [BELL] * 5, sections=[("verse", 3), ("verse", 5)])
+    assert s.plan[0].members == [0, 1] and len(s.patterns) == 1
+    assert s.patterns[0].no_instrument is True
+    holding, resting = s.bars[:3], s.bars[3:]
+    assert all(b.strokes and not b.rests for b in holding)
+    assert all(b.rests and b.strokes == [] and b.pattern == ["-"] * 8 and b.uncertain for b in resting)
+
+
+def test_a_member_silent_by_the_section_cut_carries_a_uniform_rest_flag():
+    meter = Meter(numerator=4, denominator=4)
+    rendered = [["-"] * 8 for _ in range(4)]
+    resting_figures = ([0.0] * 4, [0.0] * 4)
+    holding_figures = ([1.0] * 4, [1.0] * 4)
+    # silent because no bar holds: every bar rests
+    none_hold = _member(0, 0, 4, "S-S-S-SS")
+    none_hold.silent, none_hold.holding = True, []
+    records = strums_module._bar_records(
+        none_hold, none_hold, 8, meter, rendered, lambda b: [None] * 8, [], *resting_figures
+    )
+    assert all(r.rests for r in records)
+    # silent because the section-level cut failed: no bar rests, whatever its own figures
+    cut_failed = _member(0, 0, 4, "S-S-S-SS")
+    cut_failed.silent, cut_failed.section_cut_failed = True, True
+    for figures in (resting_figures, holding_figures):
+        records = strums_module._bar_records(
+            cut_failed, cut_failed, 8, meter, rendered, lambda b: [None] * 8, [], *figures
+        )
+        assert all(not r.rests and r.strokes == [] and r.uncertain for r in records)
 
 
 def test_two_bar_pattern_phase_starts_at_the_first_holding_bar(tmp_path):

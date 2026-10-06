@@ -321,7 +321,7 @@ def build_score(
                 chord_list.append(
                     ScoreChord(name="N.C.", diagram=-1, start_slot=0, slots=list(bar_pattern))
                 )
-            tab = tabs.get(bar_idx)
+            tab = None if record.rests else tabs.get(bar_idx)
             bars.append(
                 ScoreBar(
                     index=bar_idx, chords=chord_list, pickup=grid.bars[bar_idx].pickup,
