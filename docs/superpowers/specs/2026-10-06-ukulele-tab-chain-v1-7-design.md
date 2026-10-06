@@ -9,7 +9,7 @@ The 1.6 listening pass verified the riff path (Need You Tonight's verse tab is t
 Version 1.7 therefore:
 
 - **Stops drawing what cannot be measured.** No sustain lines: stroke length cannot be read from the stem's energy (the strokes spike, section 2 here). The ring measurement stays in the data for evaluate.
-- **Widens the riff test** with a lower pitch-change floor and a second, chroma-free rule, recovering riffs on one or two pitches, and labels a riff member inside a merged section where it starts.
+- **Widens the riff test** with a lower pitch-change floor, recovering two riffs on one or two pitches, and labels a riff member inside a merged section where it starts. A second, chroma-free rule was measured and dropped (4.2).
 - **Rests bars with no strummed instrument**, per bar, so near-silent song openings and a bell in the stem print chords without invented strokes.
 - **Prints two-part sections honestly.** Where a riff or solo sits over a strum, the strokes follow the higher part (two-part spike), and the header says "riff heard, not transcribed" when the test fires. Separating the two parts is 1.8's research question (section 6).
 - **Records what the detector cannot do** rather than tuning it: weak strokes and fast runs are missed, and a stem that carries two guitars prints the higher one.
@@ -28,7 +28,7 @@ Package version 0.8.0. Schema version stays 2; every new field defaults so 1.6 f
 | Summer of '69's over-dense sections have onsets one eighth slot apart, no double triggers, no decay retriggers, and look like the ear-passed section in every measure; no filter reaches the ear's density without changing ear-passed patterns. | strokes spike, section 2 | Density is not tuned; the two-guitar limitation is stated (6). |
 | The detector under-fires: Need You Tonight's chorus run loses 7 of 36 fast notes below the default threshold; The Cars 72-76's weak strokes sit below it; raising sensitivity breaks other sections. | strokes spike, section 3 | Recorded as a limitation (6). |
 | Lowering the pitch-change floor to 0.26 recovers All Fired Up 61-90 (0.289) and Day Tripper 52-58 (0.292); the strum nearest below is All Fired Up 55-61 at 0.238. | riff-test spike | Rule A (4.1). |
-| Day Tripper's intro and Summer of '69's outro are riffs whose chroma entropy (0.86, 0.90) fails the gate; a chroma-free rule on pitch change (0.78, 0.60), root share (0.35, 0.11) and named share catches them; the strums sit at root share 0.86 to 0.95. | riff-test spike | Rule B (4.2). |
+| Day Tripper's intro and Summer of '69's outro are riffs whose chroma entropy (0.86, 0.90) fails the gate; a chroma-free rule on pitch change, root share and named share catches them on nine songs, but on AC/DC it flags a plain strum (pitch change 0.65, root share 0.31) and misses three riffs over chords. | riff-test spike and its AC/DC check | The rule is dropped (4.2); the two riffs stay known misses (6). |
 | No measured feature flags a riff over a strum across songs; the one splitter that separates AC/DC's four two-part sections needs a note detector the install cannot carry and is fitted to that song; the mixed pattern equals the high band's pattern nearly everywhere. | two-part spike | Two-part sections print the mixed strokes as the riff's rhythm (3.4); the split waits (6). |
 | Chelsea Dagger's intro is ten near-silent bars, a bell at MIDI 75 to 105, then seven bars of real power chords; a section-level cut cannot separate it from intros where the guitar enters late. | riff-test spike | The rest rule is per bar (5). |
 | A bar holds a strummed instrument when its guitar/mix energy is at least 0.05 and its energy share below 330 Hz is at least 0.005; band 0.001 to 0.04; 49 near-silent bars and the bell bars rest, no ear-verified bar does. | rests spike | Rule and constants (5). |
@@ -56,19 +56,19 @@ Where a riff or solo plays over a strum in one stem, the detected onsets follow 
 
 ## 4. The riff test
 
-A section or member is a riff when Rule A or Rule B fires. Both read the detector's own onsets before the recall gate, as 1.6 does, and the named pitches from the 1.6 pitch stage.
+A section or member is a riff when Rule A fires. It reads the detector's own onsets before the recall gate, as 1.6 does, and the named pitches from the 1.6 pitch stage.
 
 ### 4.1 Rule A: the 1.6 test with a lower floor
 
 `riff_entropy <= RIFF_ENTROPY_MAX` (0.82) and `riff_single_share >= RIFF_SINGLE_PC_MIN` (0.45), unchanged, and `pitch_change_share >= PITCH_CHANGE_MIN` with `PITCH_CHANGE_MIN = 0.26` (was 0.40). The band is 0.24 to 0.29: the recovered riffs sit at 0.289 and 0.292, the nearest strum below at 0.238 (A1).
 
-### 4.2 Rule B: chroma-free
+### 4.2 A chroma-free rule, considered and dropped
 
-`pitch_change_share >= RIFF_B_PITCH_CHANGE` (0.55), `root_share <= RIFF_B_ROOT_MAX` (0.40) and `named_share >= RIFF_B_NAMED_MIN` (0.50), where `root_share` is the share of named onsets whose pitch class equals the root of the chord event covering the onset (from `chords.json`; N.C. onsets count as not on the root) and `named_share` is the share of onsets the tracker named. Bands: pitch change 0.55 to 0.60 (the riffs it must catch sit at 0.60 and 0.78; strummed sections elsewhere reach 0.3 to 0.7, which is why the root test is needed); root 0.36 to 0.41 (riffs 0.10 to 0.35, strums 0.86 to 0.95, All Fired Up 61-90 at 0.95 is caught by Rule A instead); named share is a floor (A2).
+The riff-test spike proposed a second rule for riffs whose chroma entropy fails the gate (Day Tripper's intro, Summer of '69's outro): pitch-change share at least 0.55, share of named pitches on the chord root at most 0.40, named share at least 0.50. On the nine songs it measured, it caught both and added eleven unheard flags. On the tenth song, AC/DC, it fires on a plain strum (verse 43-57: pitch change 0.65, root share 0.31) and misses all three riff-over-chords sections (root shares 0.46 to 0.49), while the two features overlap between its strums and its riffs. A rule with a measured false positive on the first new song fails the generality rule, so it is not adopted. Day Tripper's intro and Summer of '69's outro remain known misses (6), and the rule's figures stay in `riff-test.md` as 1.8's lead. `root_share` and `named_share` are still computed and written (7) so the next version can measure further without re-running.
 
 ### 4.3 Expected flag changes on the known songs
 
-Rule A adds four flags: All Fired Up 61-90 and Day Tripper 52-58 (both riffs by ear), Summer of '69 0-4 and The Cars 0-11 (unheard). Rule B adds eleven: Day Tripper 0-11 and Summer of '69 111-121 (riffs by ear), Day Tripper 11-15, 26-30, 30-35, 35-46, 46-52, 58-63, 63-68 and 78-95 (unheard; the riff runs through the song), Wet Leg 33-42 and The Cars 72-76 (unheard). No 1.6 flag is removed. AC/DC's flags are measured in validation (8). Every changed flag gets an ear clip (A3).
+Rule A adds four flags: All Fired Up 61-90 and Day Tripper 52-58 (both riffs by ear), Summer of '69 0-4 and The Cars 0-11 (unheard). No 1.6 flag is removed. On AC/DC no section passes the chroma gate (entropy 0.84 to 0.95, single share at most 0.39), so none is flagged; its four riff-over-chords sections print as strums, which the validation records against its ear truth. Every changed flag gets an ear clip (A3).
 
 ### 4.4 What does not change
 
@@ -87,6 +87,7 @@ A bar that fails either test rests: it is left out of its member's bars for the 
 
 - **Rings.** `stroke_decay_db`, `section_rings` and the `rings` fields stay and are still computed and written; the renderer ignores them. The per-song muted-versus-ringing verdict was right on four of five short clips and may serve later; the per-stroke claim it drew was wrong on four of six and is withdrawn.
 - **Under-firing.** The onset detector misses strokes whose envelope peak is below librosa's default threshold (weak strokes, fast sixteenth runs). Raising sensitivity re-normalises the envelope and changes ear-passed sections, so no change is made. The README's limitations gain: "Quiet strokes and very fast runs can be missed, so a dense passage may print sparser than it is played."
+- **Riffs the test still misses.** Day Tripper's intro and Summer of '69's outro (chroma entropy above the ceiling) and AC/DC's three riffs over chords (no feature separates them from its strums) print as strums. The validation record lists them; the README's limitation says a riff that sounds chord-like to the chain prints as a strum.
 - **Two guitars in one stem.** The strokes follow the higher part. The README's two-guitar line becomes: "When two guitars share one stem, the printed strokes follow the higher one, and their notes interleave, so the riff stage finds no steady line and prints the riff as heard, not transcribed." The two-part split spike's measured leads (a polyphonic note split at MIDI 60 separates AC/DC's two-part sections; the high band's pitch-change share minus the low band's catches Day Tripper's verse) are 1.8's starting point.
 - **Chords, beats, bars, onsets, the recall gate, the section plan, the vote and its constants, the chance test, the tab gate**: unchanged. Chords and bars must be byte-identical to 1.6 on every re-run song.
 
@@ -94,7 +95,7 @@ A bar that fails either test rests: it is left out of its member's bars for the 
 
 - **strums.json** (schema 2): `BarStrums` gains `rests: bool = False`, `energy_ratio: float | None = None`, `low_share: float | None = None`; `SectionPattern` gains `root_share: float | None = None`, `named_share: float | None = None`, `riff_rule: Literal["A", "B"] | None = None`. `bar_onsets` is unchanged (written from all bars, resting ones included, so the regression line holds).
 - **score.json** (schema 2): `ScoreBar` gains `label: str = ""` and `rests: bool = False`. A resting bar has empty `strokes`, `grey` False, `tab` None.
-- **Stages.** `stages/strums.py`: the rest rule in a new `music/rests.py` (`bar_energy_ratio`, `bar_low_share`, `bar_holds`), applied per member before the vote; the riff test in `music/riff.py` gains `root_share` and `is_riff_b`, and `is_riff` becomes the disjunction with the rule recorded. The riff stage is unchanged. The score builder sets `rests` and `label`. The renderer drops the sustain drawing (`bar_svg` loses `rings` handling) and draws the label.
+- **Stages.** `stages/strums.py`: the rest rule in a new `music/rests.py` (`bar_energy_ratio`, `bar_low_share`, `bar_holds`), applied per member before the vote; `music/riff.py` gains `root_share` (computed and written for the next version's measurement, not used in the test); `PITCH_CHANGE_MIN` moves to 0.26 in `music/pitch.py`; `riff_rule` is "A" when the flag is set. The riff stage is unchanged. The score builder sets `rests` and `label`. The renderer drops the sustain drawing (`bar_svg` loses `rings` handling) and draws the label.
 - **evaluate and compare.** Per section: `riff_rule`, `root_share`, `named_share`; per bar: rests; compare counts bars whose rest state changed and sections whose flag changed, with the rule.
 - **Compatibility.** 1.6 files load with the defaults; a 1.6 `score.json` renders without sustain lines and without labels. No new dependency: STFT and RMS are librosa and numpy.
 - **Version** 0.8.0; README stage table, limitations (6) and history; the sample sheet regenerated.
@@ -107,7 +108,7 @@ Expectations written before the run:
 
 1. Byte identity as above on all ten songs.
 2. No sustain line on any sheet; the stroke rows of the eight 1.6 songs otherwise unchanged except where bars rest.
-3. Riff flags change exactly as 4.3 lists; AC/DC's flags per section recorded against its ear truth (intro, 34-43, 74-90, 90-113 riffs over chords; 16-34, 43-57 strums).
+3. Riff flags change exactly as 4.3 lists (four added, none removed); AC/DC gains none, and its sections are recorded against its ear truth (intro, 34-43, 74-90, 90-113 riffs over chords; 16-34, 43-57 strums).
 4. The 51 bars of section 5 rest and no bar of an ear-verified section rests; Chelsea Dagger's intro prints chords with empty strokes on bars 0-6, 10 and 11 and power-chord strokes from bar 13.
 5. The label appears on the first bar of every riff member whose section header does not say riff (All Fired Up 97-104, Wet Leg 58-65, and any member newly flagged), and nowhere else.
 6. Tab prints on Need You Tonight's verse as before; any newly flagged section that passes the gate is recorded, with its tab clip.
@@ -121,8 +122,8 @@ Ear clips: every section whose riff flag changed (clicks on its printed strokes,
 | # | Assumption | Status | If wrong |
 |---|---|---|---|
 | A1 | `PITCH_CHANGE_MIN` 0.26 separates riffs from strums | Measured on 68 sections; band 0.24 to 0.29 **rests on one strum below** (All Fired Up 55-61, ear "mostly fits") and two riffs above | A dense strum gains a riff flag, or a one-pitch riff is still missed; the gate still decides what prints |
-| A2 | Rule B's root band 0.36 to 0.41 and pitch-change floor 0.55 | Measured on nine sections; **root band 0.05 wide**; depends on chord labels being right | A strum on a wrong chord label gains a flag; a riff on the chord root is missed (All Fired Up 61-90 is caught by Rule A) |
-| A3 | The unheard flags Rules A and B add are riffs | **Unverified**: Summer of '69 0-4, The Cars 0-11 and 72-76, Wet Leg 33-42, eight Day Tripper sections | A strum prints "riff heard" over its own strokes; the strokes themselves are unchanged, so the cost is a wrong phrase |
+| A2 | A chroma-free riff rule can be made general | **Refuted on the tenth song** (AC/DC verse 43-57 false positive; three riffs over chords missed); dropped from this version | Day Tripper's intro and Summer of '69's outro stay unflagged and print as strums |
+| A3 | The two unheard flags Rule A adds are riffs | **Unverified**: Summer of '69 0-4, The Cars 0-11 | A strum prints "riff heard" over its own strokes; the strokes themselves are unchanged, so the cost is a wrong phrase |
 | A4 | `REST_RATIO_MIN` 0.05 | **Pinned by one song**: Need You Tonight's verified tab bars at 0.069 to 0.09 | Quiet real bars rest, losing their strokes; or near-silent bars print invented strokes |
 | A5 | `REST_LOW_SHARE_MIN` 0.005 marks a bar as outside a guitar's register | Measured on all bars of ten songs; band 0.001 to 0.04; the lowest verified bar is a decaying tail | A loud high-register bar rests (Day Tripper bar 1 at the looser 0.01); depends on the stem holding content below 330 Hz |
 | A6 | Chelsea Dagger bars 13-19 hold a real guitar | Measured (power chords at ratio 0.23 to 0.31); **unheard** by the owner, whose clip covered bars 0-8 | Those bars print strokes the ear would reject; the clip is in the validation pass |

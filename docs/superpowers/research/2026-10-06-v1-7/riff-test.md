@@ -38,3 +38,17 @@ Proposed per-bar rule (measured with basic-pitch; a librosa-only register featur
 ## Risks
 
 Every band rests on one or two examples per side; All Fired Up 55-61's ear label is weak and pins Rule A's low edge; Rule B trusts the chord roots with a 0.05-wide band; two Rule A flags and four Rule B flags are untested by ear.
+
+## AC/DC check (the tenth song)
+
+| Section | Ear | Entropy | Single | Pitch change | Root | Named | Rule A | Chroma-free rule |
+|---|---|---|---|---|---|---|---|---|
+| intro 0-16 | riff over a chord stab | 0.916 | 0.175 | 0.292 | 0.455 | 0.524 | no | no |
+| chorus 16-34 | strum | 0.942 | 0.082 | 0.364 | 0.343 | 0.479 | no | no |
+| verse 34-43 | riff over chords | 0.926 | 0.143 | 0.412 | 0.476 | 0.750 | no | no |
+| verse 43-57 | strum | 0.946 | 0.078 | 0.652 | 0.312 | 0.627 | no | **yes, a false positive** |
+| verse 57-74 | unheard | 0.916 | 0.095 | 0.391 | 0.548 | 0.738 | no | no |
+| instrumental 74-90 | solo over strum | 0.835 | 0.383 | 0.725 | 0.310 | 0.716 | no | yes |
+| verse 90-113 | riff over chords | 0.894 | 0.391 | 0.438 | 0.487 | 0.848 | no | no |
+
+Rule A fires nowhere (entropy above 0.82 everywhere, single share at most 0.39). The chroma-free rule fires on a plain strum and the solo and misses all three riffs over chords (root shares 0.46 to 0.49); on this song pitch-change, root and named shares overlap between strums and riffs over chords. The chroma-free rule is therefore not adopted in 1.7.
