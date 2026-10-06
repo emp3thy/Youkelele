@@ -16,6 +16,7 @@ from youkelele.schemas import (
     RiffSection,
     Riffs,
     Score,
+    ScoreBar,
     ScoreSection,
     SectionPattern,
     SourceInfo,
@@ -299,3 +300,20 @@ def test_score_v15_fixture_loads_with_empty_strokes_and_state():
     sc = load_model(FIXTURES / "v15_score.json", Score)
     bar = sc.sections[0].bars[0]
     assert bar.strokes == [] and bar.tab is None and bar.grey is False and sc.sections[0].state == ""
+
+
+def test_v16_strums_and_score_load_with_1_7_defaults():
+    strums = load_model(FIXTURES / "v16_strums.json", Strums)
+    assert all(not b.rests and b.energy_ratio is None and b.low_share is None for b in strums.bars)
+    assert all(p.root_share is None and p.named_share is None and p.riff_rule is None for p in strums.patterns)
+    score = load_model(FIXTURES / "v16_score.json", Score)
+    assert all(b.label == "" and not b.rests for s in score.sections for b in s.bars)
+
+
+def test_1_7_fields_round_trip():
+    bar = BarStrums(index=0, member=0, strokes=[], pattern=["-"] * 8, rests=True, energy_ratio=0.01, low_share=0.0002)
+    assert BarStrums.model_validate_json(bar.model_dump_json()).rests
+    pattern = SectionPattern(section=0, slots=["-"] * 8, confidence=0, bar_repeat=0, uncertain=True,
+                             no_instrument=False, inherited_from=None, root_share=0.9, named_share=0.5, riff_rule="A")
+    assert SectionPattern.model_validate_json(pattern.model_dump_json()).riff_rule == "A"
+    assert ScoreBar(index=0, chords=[], label="riff heard", rests=False).label == "riff heard"
