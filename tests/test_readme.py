@@ -93,11 +93,11 @@ def test_readme_describes_the_1_6_riff_phrase_and_bar_boxes():
     assert "two-bar patterns" in text and "ring flag" in text  # the 1.6 history line
 
 
-def test_readme_states_the_1_6_stage_limitation_and_history():
+def test_readme_states_the_1_7_stage_limitation_and_history():
     text = _readme()
     assert "1.7" in text and "0.8.0" in text
     assert "sparser than it is played" in text and "follow the higher one" in text
     assert "| `05_riff` |" in text  # the stage table lists the riff stage
-    assert "their notes interleave" in text  # the two-guitar sentence, spec 5.6
+    assert "their notes interleave" in text  # the two-guitar sentence, 1.7 spec 6
     assert "2026-10-05-ukulele-tab-chain-v1-6-design.md" in text
     assert "2026-10-05-v1-6-validation.md" in text
