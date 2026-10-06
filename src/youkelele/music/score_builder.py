@@ -211,6 +211,23 @@ def _state(pattern: SectionPattern, bars: list[ScoreBar]) -> str:
     return ""
 
 
+def _labels(
+    k: int, planned: PlannedSection, grid: Grid, records: dict[int, BarStrums], riffs: Riffs, state: str
+) -> dict[int, str]:
+    """Bar index -> the small label on the first bar of a riff member buried in a merged section
+    (spec 3.2). None when the header already says riff; "riff" when that member's tab printed,
+    else "riff heard"."""
+    if state.startswith("riff"):
+        return {}
+    printed = {(r.start_bar, r.end_bar) for r in riffs.sections if r.section == k and r.printable}
+    labels: dict[int, str] = {}
+    for s, e in member_spans(planned, grid):
+        first = next((records[b] for b in range(s, e) if b in records), None)
+        if first is not None and first.riff:
+            labels[s] = "riff" if (s, e) in printed else "riff heard"
+    return labels
+
+
 def _octave_shift(k: int, planned: PlannedSection, grid: Grid, riffs: Riffs) -> int:
     """The octave shift the header names (spec 3.2): the longest member's when it prints tab, else
     the first member's (by start bar) that does, so a "riff" header never lacks its shift; 0 with no tab."""
@@ -311,16 +328,22 @@ def build_score(
                     struck=bar_idx < len(strums.bar_onsets)
                     and any(slot != "-" for slot in strums.bar_onsets[bar_idx]),
                     # a tab bar's stroke row prints in full black (spec 3.4)
-                    strokes=_bar_strokes(record), tab=tab, grey=record.uncertain and tab is None,
+                    strokes=_bar_strokes(record), tab=tab,
+                    # a resting bar prints black, even in a member silent only through rests (spec 7)
+                    grey=record.uncertain and not record.rests and tab is None, rests=record.rests,
                 )
             )
+        state = _state(pattern, bars)
+        labelled = _labels(k, planned, grid, records, riffs, state)
+        for bar in bars:
+            bar.label = labelled.get(bar.index, "")
         sections.append(
             ScoreSection(
                 label=planned.label, pattern=list(pattern.slots), uncertain=pattern.uncertain,
                 bars=bars, bar_repeat=pattern.bar_repeat, no_instrument=pattern.no_instrument,
                 inherited_from=None, shifted=shifted,  # no section inherits from 1.6 (spec 4.5)
                 explained=pattern.explained, riff=pattern.riff, members=list(planned.members),
-                state=_state(pattern, bars), octave_shift=_octave_shift(k, planned, grid, riffs),
+                state=state, octave_shift=_octave_shift(k, planned, grid, riffs),
             )
         )
 

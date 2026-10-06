@@ -8,7 +8,7 @@ import pytest
 from youkelele.jsonio import ArtifactError
 from youkelele.music import score_builder
 from youkelele.music.alphatex import score_to_alphatex
-from youkelele.music.score_builder import build_score, check_strums_match_grid
+from youkelele.music.score_builder import _labels, build_score, check_strums_match_grid
 from youkelele.profiles.ukulele import UKULELE_TUNING
 from youkelele.schemas import (
     ArrangedChord,
@@ -910,18 +910,22 @@ def test_plan_pattern_count_mismatch_names_the_planned_sections():
 
 
 def _bars(*runs) -> list[BarStrums]:
-    """BarStrums from bar 0 on; each run is (bars, pattern, member, rings, uncertain, riff).
+    """BarStrums from bar 0 on; each run is (bars, pattern, member, rings, uncertain, riff[, rests]).
 
-    A bar's strokes are its pattern's non-rest cells, each carrying the run's ring flag.
+    A bar's strokes are its pattern's non-rest cells, each carrying the run's ring flag. A run
+    with rests True is resting bars: no strokes and an all-rest pattern.
     """
     records: list[BarStrums] = []
-    for count, pattern, member, rings, uncertain, riff in runs:
+    for count, pattern, member, rings, uncertain, riff, *rest in runs:
+        rests = bool(rest and rest[0])
+        if rests:
+            pattern = "-" * len(pattern)
         for _ in range(count):
             strokes = [Stroke(slot=j, kind=c, rings=rings) for j, c in enumerate(pattern) if c != "-"]
             records.append(
                 BarStrums(
                     index=len(records), member=member, strokes=strokes, pattern=list(pattern),
-                    uncertain=uncertain, riff=riff, rings=rings,
+                    uncertain=uncertain, riff=riff, rings=rings, rests=rests,
                 )
             )
     return records
@@ -1119,3 +1123,78 @@ def test_bar_records_that_do_not_cover_the_grid_are_refused():
     strums = strums.model_copy(update={"bars": strums.bars[:3]})
     with pytest.raises(ValueError, match="re-run from strums"):
         check_strums_match_grid(_grid(4), strums, _CHORDS)
+
+
+# version 1.7: a resting bar prints empty and black; a riff member inside a merged section is labelled
+
+_RIFF_CELLS = "D-D-D-D-"
+
+
+def _rest_score(runs, two_members=False, riffs=None, uncertain=False, riff=False):
+    """One planned section: one member over the runs' bars, or (two_members) member 0 over bars 0 to 8
+    and member 1 over bars 8 to 12, which the plan merges."""
+    n = sum(r[0] for r in runs)
+    pattern = _pattern(riff=riff).model_copy(update={"uncertain": uncertain})
+    bounds = [(0, 8), (8, 12)] if two_members else [(0, n)]
+    plan = [PlannedSection(start_bar=0, end_bar=n, label="verse", members=[0, 1] if two_members else [0])]
+    strums = _strums_with_plan(plan, [pattern]).model_copy(update={"bars": _bars(*runs)})
+    return build_score(
+        _source(), _sectioned(n, bounds), _CHORDS, strums, _ARRANGEMENT, riffs or Riffs(), UKULELE_TUNING,
+        "Ukulele",
+    )
+
+
+_ISLAND_CELLS = "".join(ISLAND)
+
+
+def test_a_resting_bar_prints_empty_strokes_in_black():
+    score = _rest_score([(2, _ISLAND_CELLS, 0, True, False, False, True), (6, _ISLAND_CELLS, 0, True, False, False)])
+    bar = score.sections[0].bars[0]
+    assert bar.rests and bar.strokes == [] and not bar.grey and bar.tab is None
+    assert score.sections[0].bars[2].strokes and not score.sections[0].bars[2].rests
+
+
+def test_a_resting_bar_of_an_uncertain_member_is_still_black():
+    # a member silent only through rests keeps uncertain=True; its resting bars print black all the same
+    score = _rest_score([(4, _ISLAND_CELLS, 0, True, True, False, True)])
+    assert all(b.rests and not b.grey for b in score.sections[0].bars)
+
+
+def test_an_embedded_riff_member_gets_one_label_on_its_first_bar():
+    score = _rest_score(
+        [(8, _ISLAND_CELLS, 0, True, False, False), (4, _RIFF_CELLS, 1, True, False, True)], two_members=True
+    )
+    labels = [b.label for b in score.sections[0].bars]
+    assert labels == [""] * 8 + ["riff heard", "", "", ""] and score.sections[0].state == ""
+
+
+def test_a_printed_riff_member_makes_the_header_say_riff_so_no_label_prints():
+    score = _rest_score(
+        [(8, _ISLAND_CELLS, 0, True, False, False), (4, _RIFF_CELLS, 1, True, False, True)], two_members=True,
+        riffs=Riffs(sections=[_riff_section(section=0, start=8, end=12)]),
+    )
+    assert score.sections[0].state == "riff" and all(b.label == "" for b in score.sections[0].bars)
+
+
+def test_labels_names_a_printed_member_riff_when_the_header_does_not():
+    plan = [PlannedSection(start_bar=0, end_bar=12, label="verse", members=[0, 1])]
+    grid = _sectioned(12, [(0, 8), (8, 12)])
+    records = {b.index: b for b in _bars((8, _ISLAND_CELLS, 0, True, False, False), (4, _RIFF_CELLS, 1, True, False, True))}
+    riffs = Riffs(sections=[_riff_section(section=0, start=8, end=12)])
+    assert _labels(0, plan[0], grid, records, riffs, state="pattern uncertain") == {8: "riff"}
+    assert _labels(0, plan[0], grid, records, Riffs(), state="pattern uncertain") == {8: "riff heard"}
+    assert _labels(0, plan[0], grid, records, riffs, state="riff") == {}
+
+
+def test_no_label_when_the_header_already_says_riff():
+    score = _rest_score([(8, _RIFF_CELLS, 0, True, False, True)], riff=True)
+    assert score.sections[0].state == "riff heard, not transcribed"
+    assert all(b.label == "" for b in score.sections[0].bars)
+
+
+def test_label_prints_under_an_uncertain_header():
+    score = _rest_score(
+        [(8, _ISLAND_CELLS, 0, True, True, False), (4, _RIFF_CELLS, 1, True, False, True)], two_members=True,
+        uncertain=True,
+    )
+    assert score.sections[0].state == "pattern uncertain" and score.sections[0].bars[8].label == "riff heard"

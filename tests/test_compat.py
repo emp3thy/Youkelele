@@ -52,3 +52,8 @@ def test_with_bars_fills_only_an_empty_bars_list():
     filled = with_bars(s, g)
     assert len(filled.bars) == len(g.bars) and s.bars == []
     assert with_bars(filled, g) is filled
+
+
+def test_backfilled_1_5_records_do_not_rest():
+    s, g = _v15()
+    assert all(not b.rests for b in backfill_bars(s, g))

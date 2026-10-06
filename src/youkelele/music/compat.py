@@ -43,7 +43,7 @@ def backfill_bars(strums: Strums, grid: Grid) -> list[BarStrums]:
                     BarStrums(
                         index=b, member=position, strokes=strokes, pattern=list(pattern.slots),
                         unit=pattern.unit, confidence=pattern.confidence, chance_p=pattern.chance_p,
-                        uncertain=pattern.uncertain, riff=pattern.riff, rings=pattern.rings,
+                        uncertain=pattern.uncertain, riff=pattern.riff, rings=pattern.rings, rests=False,
                     )
                 )
     return sorted(records, key=lambda r: r.index)
