@@ -17,8 +17,6 @@ README = ROOT / "README.md"
 SAMPLE = ROOT / "docs" / "images" / "sample-sheet.png"
 _FENCE = re.compile(r"^```[^\n]*\n(.*?)^```", re.MULTILINE | re.DOTALL)
 _LINK = re.compile(r"\]\(([^)\s]+)\)")
-# Task 13 writes the 1.6 validation record; delete this entry once it exists.
-_PENDING_LINKS = {"docs/superpowers/specs/2026-10-05-v1-6-validation.md"}
 
 
 def _readme() -> str:
@@ -53,8 +51,6 @@ def test_readme_local_links_resolve():
         if re.match(r"[a-z]+:", target) or target.startswith("#"):
             continue
         path = unquote(target.split("#", 1)[0])
-        if path in _PENDING_LINKS:
-            continue
         assert (ROOT / path).exists(), f"README links to a missing file: {target}"
 
 
