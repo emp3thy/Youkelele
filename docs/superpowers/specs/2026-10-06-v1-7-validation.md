@@ -270,9 +270,24 @@ Cut on 2026-10-06 from the 1.7 run folders (`%TEMP%\youkulele-v17-validation\cli
 | 12 | `pour-some-sugar-on-me\changed_pssom_verse1_19-27.wav` | 19-26 | `DUD-D-DU----D---` (was `D-D--UDU----DU--`), grey | |
 | 13 | `pour-some-sugar-on-me\changed_pssom_verse3_80-84.wav` | 80-83 | `D-----D----U----` (was `D----------U----`), grey | |
 | 14 | `mangetout\changed_wetleg_verse2_26-33.wav` | 26-32 | `D-D-DUDU` (was `D-D-D-DU`) | |
+| 15 | `cream-badge\blind_verse1_4-12.wav` | 4-11 | blind song Verse 1, "riff heard", prints `DxxxDxDU`; the tab says a chord guitar | |
+| 16 | `cream-badge\blind_verse2_61-70.wav` | 61-69 | blind song Verse 2, "riff heard" uncertain, prints `D-DUD-DU`; the tab says chords | |
 
 (Verdicts to be recorded.)
 
 ## Blind song
 
-(To be filled.)
+Cream, "Badge" (https://www.youtube.com/watch?v=4hjVjYfLMjI), chosen by the owner on 2026-10-07 and run from ingest at commit `cbc40ad` (`logs\blind.txt`, exit 0; run folder `runs\cream-badge`). Figures recorded, not judged (expectation 8).
+
+| Figure | Value |
+|---|---|
+| Grid | 70 bars, 107.9 bpm, 4/4; 7 sections: Intro 0-4, Verse 1 4-28, Instrumental 1 28-34, Chorus 1 34-50, Instrumental 2 50-56, Chorus 2 56-61, Verse 2 61-70 |
+| Key | D major, confidence 0.49 (score margin 0.174; runner-up A) |
+| Strums source | guitar stem, ratio 0.56, 8 slots per bar, grid fit 0.88 |
+| Resting bars | none (no bar fails either test) |
+| Riff flags | Verse 1 4-28 (entropy 0.70, single 0.52, pitch change 0.57, rule A; gate 0.22, 0.27, 0.71: fails); Instrumental 1 28-34 (0.82, 0.57, 0.69, rule A, uncertain; gate 0.05); Verse 2 61-70 (0.69, 0.62, 0.70, rule A, uncertain; gate 0.08). All three print "riff heard, not transcribed"; no tab |
+| Other headers | Intro `DUDxDUDx` certain; Chorus 1 `--DUDUDU` certain (p 0.047); Instrumental 2 `-UD-D-DU` pattern uncertain; Chorus 2 `D-D-DUD-` certain |
+| Labels, sustain lines | none, 0 |
+| Pages | 2 |
+
+Against the published sources (Songsterr s4135, 106 bpm, 71 bars; Beatles Bible; Skidmore listening guide): the tab has a chord guitar from bar 1 with the bass and piano from bar 5, no lead or arpeggio guitar until the bridge, the single-note arpeggio figure in the bridge, a solo after it, and two guitar parts throughout (the sources disagree on which player takes which). The chain's Instrumental 1 (28-34, about 1:04 to 1:17) falls where the bridge arpeggio is, and its "riff heard" agrees with the source. Its "riff heard" on Verse 1 and Verse 2 does not: the source has a chord guitar there. Both verses have pitch-change shares of 0.57 and 0.70 and single shares of 0.52 and 0.62 on the guitar stem, so either the separator put the arpeggio or lead part on the guitar stem under the verses, or the chord guitar's part is picked rather than strummed; the 1.6 limitation line about two guitars on one stem covers the print. The key the chain names (D major) differs from the researcher's reading of the tab (G major or E minor, an inference). Clips for the owner: `cream-badge\blind_verse1_4-12.wav` and `cream-badge\blind_verse2_61-70.wav` (clicks on the printed strokes).
