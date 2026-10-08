@@ -665,11 +665,35 @@ def test_an_unrelated_hedge_is_dropped_but_a_fifth_hedge_stays():
     # on a close margin an unrelated hedge stays
     close = second.model_copy(update={"margin": 0.01, "runner_up": None})
     assert hedge_tonic(close) == "A"
-    # end to end: the mix names A major against a clear G; nothing is hedged or stored
+    # end to end: the mix names A major against a clear G; nothing is hedged, and the stems'
+    # mode at A stays stored so no fallback mode can revive the hedge
     key, _ = key_and_decision(events_clear_g, bars, sections, chroma_g,
                               Key(tonic="A", mode="major", confidence=0.2))
     assert key.tonic == "G" and key.margin >= KEY_HEDGE_MARGIN
-    assert key_text(key) == "G major" and key.hedge_mode is None
+    assert key.hedge_mode is not None
+    assert not hedged(key) and hedge_text(key) is None and key_text(key) == "G major"
+
+
+def test_a_dropped_mix_hedge_stays_dropped_when_the_mixs_own_mode_would_relate_it():
+    # the mix names E minor (G's relative), but the stems hear E major: unrelated to G major
+    chroma = _triad_chroma((4, 8, 11))
+    assert mode_at("G", chroma)[0] == "major" and mode_at("E", chroma)[0] == "major"
+    key, _ = key_and_decision(events_clear_g, bars, sections, chroma,
+                              Key(tonic="E", mode="minor", confidence=0.2))
+    assert (key.tonic, key.mode) == ("G", "major") and key.margin >= KEY_HEDGE_MARGIN
+    assert key.hedge_mode == "major"
+    assert not hedged(key) and hedge_text(key) is None and key_text(key) == "G major"
+
+
+def test_a_dropped_chord_rule_hedge_stays_dropped_when_the_keys_mode_would_relate_it():
+    # the score leads C over the pair rule's F (the mix names neither); the stems hear F minor,
+    # unrelated to C major, where the key's own mode would read F major, a fifth
+    chroma = _triad_chroma((0, 4, 5, 7, 8))
+    assert mode_at("C", chroma)[0] == "major" and mode_at("F", chroma)[0] == "minor"
+    key, _ = key_and_decision(events_score_c_pair_f, bars, sections, chroma, mix_key_g)
+    assert (key.tonic, key.mode, key.tonic_votes.decided_by) == ("C", "major", "score")
+    assert key.margin >= KEY_HEDGE_MARGIN and key.hedge_mode == "minor"
+    assert not hedged(key) and hedge_text(key) is None and key_text(key) == "C major"
 
 
 def test_tonic_votes_note_prints_the_set():

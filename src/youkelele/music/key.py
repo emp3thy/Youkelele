@@ -422,9 +422,9 @@ def key_and_decision(
             relative_key(key.tonic, key.mode)[1] if source == "set"
             else _mode_of(other, chroma_mean, events)[0]
         )
+        # kept even when `_hedge` drops an unrelated tonic: cleared, the old-file fallback
+        # mode (the mix's own, or the key's) could find it related and revive the hedge
         key = key.model_copy(update={"hedge_mode": hedge_mode})
-        if _hedge(key) is None:  # an unrelated tonic on a clear margin is not named
-            key = key.model_copy(update={"hedge_mode": None})
     return key, decision
 
 
