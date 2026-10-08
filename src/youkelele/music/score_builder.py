@@ -9,6 +9,7 @@ from youkelele.jsonio import ArtifactError
 from youkelele.music.compat import with_bars
 from youkelele.music.key import hedge_text
 from youkelele.music.members import member_spans
+from youkelele.music.onsets import direction_for_slot
 from youkelele.music.phrase import NO_CHORD, aligned_starts, bar_change_bars
 from youkelele.music.relabel import default_plan, longest_member, section_plan
 from youkelele.music.trailing import trailing_silent_bars
@@ -218,18 +219,21 @@ def _bar_strokes(record: BarStrums) -> list[Stroke]:
 
 
 def _on_pickup_columns(
-    strokes: list[Stroke], chords: list[ScoreChord], n: int, k: int
+    strokes: list[Stroke], chords: list[ScoreChord], n: int, k: int, meter: Meter
 ) -> tuple[list[Stroke], list[ScoreChord]]:
     """A pickup bar's strokes and chord starts moved onto its last ``k`` columns (1.8 spec 3.2).
 
-    The first stroke that lands on a column keeps it; of chords that land on one column the
-    later replaces the earlier, as for two events rounding to one slot. A chord's ``slots`` list
-    stays full length: the renderer reads ``start_slot`` only.
+    The first stroke that lands on a column keeps it; its down or up is re-read from the column,
+    since the pattern's directions belong to the full-bar slots and a pickup's strokes are as
+    for any bar (down on the beat, up between); a muted stroke stays muted. Of chords that land
+    on one column the later replaces the earlier, as for two events rounding to one slot. A
+    chord's ``slots`` list stays full length: the renderer reads ``start_slot`` only.
     """
     placed: dict[int, Stroke] = {}
     for stroke in strokes:
         column = pickup_column(stroke.slot, n, k)
-        placed.setdefault(column, stroke.model_copy(update={"slot": column}))
+        kind = direction_for_slot(column, n, meter) if stroke.kind in ("D", "U") else stroke.kind
+        placed.setdefault(column, stroke.model_copy(update={"slot": column, "kind": kind}))
     named: dict[int, ScoreChord] = {}
     for chord in chords:
         column = pickup_column(chord.start_slot, n, k)
@@ -366,7 +370,7 @@ def build_score(
             strokes = _bar_strokes(record)
             partial = pickup_slots(grid.bars[bar_idx], spb, grid.meter)
             if partial is not None:  # 1.8 spec 3.2: a pickup draws only the columns its beats cover
-                strokes, chord_list = _on_pickup_columns(strokes, chord_list, spb, partial)
+                strokes, chord_list = _on_pickup_columns(strokes, chord_list, spb, partial, grid.meter)
             bars.append(
                 ScoreBar(
                     index=bar_idx, chords=chord_list, pickup=grid.bars[bar_idx].pickup,

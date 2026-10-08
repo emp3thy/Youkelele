@@ -1256,6 +1256,30 @@ def test_score_maps_a_pickup_bars_strokes_and_chord_onto_its_columns():
     assert [c.start_slot for c in full.chords] == [0]
 
 
+def _pickup_score(cells: str):
+    grid = _grid(2)
+    grid.bars[0] = grid.bars[0].model_copy(update={"beats": [0], "pickup": True})
+    plan = [PlannedSection(start_bar=0, end_bar=2, label="Verse", members=[0])]
+    strums = _strums_with_plan(plan, [_pattern()]).model_copy(update={"bars": _bars((2, cells, 0, False, False, False))})
+    return build_score(_source(), grid, _C_CHORDS, strums, _C_ARRANGEMENT, Riffs(), UKULELE_TUNING, "Ukulele")
+
+
+def test_pickup_strokes_take_their_direction_from_their_column_on_eighths():
+    # D---D---: the full bar's beats 1 and 3 land on the pickup's beat (column 6) and its "&" (column 7)
+    pickup = _pickup_score("D---D---").sections[0].bars[0]
+    assert [(k.slot, k.kind) for k in pickup.strokes] == [(6, "D"), (7, "U")]
+    assert [(k.slot, k.kind) for k in _pickup_score("D-D-D-D-").sections[0].bars[0].strokes] == [(6, "D"), (7, "U")]
+
+
+def test_pickup_strokes_take_their_direction_from_their_column_on_sixteenths_and_muted_stays_muted():
+    m44 = Meter(numerator=4, denominator=4)
+    strokes = [Stroke(slot=j, kind="D") for j in range(0, 16, 2)]
+    placed, _ = score_builder._on_pickup_columns(strokes, [], 16, 4, m44)
+    assert [(k.slot, k.kind) for k in placed] == [(12, "D"), (13, "U"), (14, "D"), (15, "U")]
+    muted, _ = score_builder._on_pickup_columns([Stroke(slot=4, kind="x")], [], 16, 4, m44)
+    assert [(k.slot, k.kind) for k in muted] == [(13, "x")]
+
+
 def test_state_phrase_for_a_gated_section():
     plan = [PlannedSection(start_bar=0, end_bar=4, label="Verse", members=[0])]
     gated = _pattern().model_copy(update={"uncertain": True, "bass_on_stem": True})
