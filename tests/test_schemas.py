@@ -9,6 +9,7 @@ from youkelele.schemas import (
     BarStrums,
     Chords,
     Grid,
+    Instrument,
     Key,
     Meter,
     PlannedSection,
@@ -317,3 +318,32 @@ def test_1_7_fields_round_trip():
                              no_instrument=False, inherited_from=None, root_share=0.9, named_share=0.5, riff_rule="A")
     assert SectionPattern.model_validate_json(pattern.model_dump_json()).riff_rule == "A"
     assert ScoreBar(index=0, chords=[], label="riff heard", rests=False).label == "riff heard"
+
+
+def test_section_pattern_1_8_fields_default():
+    p = SectionPattern(section=0, slots=["-"] * 8, confidence=0.0, bar_repeat=0.0, uncertain=True, no_instrument=False, inherited_from=None)
+    assert p.voted_bars == [] and p.dropped_bars == [] and p.top2_margin is None
+    assert p.runner_up_vector is None and p.confidence_all_bars is None and p.chance_p_all_bars is None
+    assert p.bass_on_stem is False and p.low_mix_share_bass is None and p.low_mix_share_source is None
+    assert p.low_own_share is None and p.bass_stem_ratio is None
+
+
+def test_score_bar_pickup_slots_defaults_to_none():
+    assert ScoreBar(index=0, chords=[]).pickup_slots is None
+
+
+def test_tonic_votes_admit_set():
+    v = TonicVotes(decided_by="set", set_tonic="G", set_share_best=0.995, set_share_decided=0.756)
+    assert v.set_tonic == "G" and TonicVotes().set_tonic is None
+    assert TonicVotes().set_share_best is None and TonicVotes().set_share_decided is None
+
+
+def test_source_info_and_score_provenance_default_to_none():
+    info = SourceInfo(url=None, path="a.wav", video_id=None, title="T", artist=None, duration=1.0,
+                      sample_rate=44100, channels=2, fetched_at="2026-01-01T00:00:00Z")
+    for name in ("uploader", "channel", "credited_artist", "credited_track", "artist_source", "title_source", "provenance"):
+        assert getattr(info, name) is None
+    score = Score(instrument=Instrument(name="ukulele", strings=4, tuning=["G", "C", "E", "A"], capo=0), title="T", artist=None, key="C major", bpm=120.0,
+                  meter=Meter(numerator=4, denominator=4), tier="strum", slots_per_bar=8,
+                  strum_source="mix", strums_uncertain=False, chord_diagrams=[], sections=[])
+    assert score.provenance is None

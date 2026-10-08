@@ -8,6 +8,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 Slot = Literal["D", "U", "x", "-"]
+StrikeClass = Literal["S", "x", "-"]  # a strike class of the as-played vote: struck, muted or rest (same alias as music/onsets.py, which imports this module)
 
 
 class _Artifact(BaseModel):
@@ -39,6 +40,13 @@ class SourceInfo(_Artifact):
     sample_rate: int
     channels: int
     fetched_at: datetime
+    uploader: str | None = None  # the uploader the downloader reports (spec 8.1); None before 1.8
+    channel: str | None = None  # the channel the downloader reports (spec 8.1); None before 1.8
+    credited_artist: str | None = None  # the artist the platform credits for the track (spec 8.1); None before 1.8
+    credited_track: str | None = None  # the track the platform credits (spec 8.1); None before 1.8
+    artist_source: str | None = None  # where the printed artist came from (spec 8.1); None before 1.8
+    title_source: str | None = None  # where the printed title came from (spec 8.1); None before 1.8
+    provenance: str | None = None  # the uploader the sheet prints after "uploaded by" (spec 8.1); None before 1.8
 
 
 class Bar(_Artifact):
@@ -115,7 +123,10 @@ class TonicVotes(_Artifact):
     score: str | None = None  # the tonic by chord-stream score
     pair: str | None = None  # the tonic by the pair rule
     mix: str | None = None  # the tonic of the mix estimate
-    decided_by: Literal["agreement", "pair rule", "mix", "score"] | None = None  # the rule that settled it
+    decided_by: Literal["agreement", "pair rule", "mix", "score", "set"] | None = None  # the rule that settled it
+    set_tonic: str | None = None  # the tonic the set of the song's chords votes for (spec 7.4); None before 1.8
+    set_share_best: float | None = None  # the best tonic's share of the set vote (spec 7.4); None before 1.8
+    set_share_decided: float | None = None  # the decided tonic's share of the set vote (spec 7.4); None before 1.8
 
 
 class Key(_Artifact):
@@ -194,6 +205,17 @@ class SectionPattern(_Artifact):
     root_share: float | None = None  # share of named onset pitches whose pitch class is the chord root under the onset; None before 1.7
     named_share: float | None = None  # share of the section's onsets the pitch tracker named; None before 1.7
     riff_rule: Literal["A", "B"] | None = None  # which rule marked the section a riff: A is the 1.6 chroma gate plus the pitch-change floor, B is reserved for a later chroma-free rule; None when not a riff or before 1.7
+    voted_bars: list[int] = []  # grid bar indices that voted in the section's pattern (spec 5); empty before 1.8
+    dropped_bars: list[int] = []  # grid bar indices left out of the vote (spec 5); empty before 1.8
+    top2_margin: float | None = None  # the winning candidate's score minus the runner-up's (spec 5); None before 1.8
+    runner_up_vector: list[StrikeClass] | None = None  # the runner-up candidate's slot vector (spec 5); None before 1.8
+    confidence_all_bars: float | None = None  # the pattern's confidence over all bars, dropped ones included (spec 5); None before 1.8
+    chance_p_all_bars: float | None = None  # the chance_p over all bars, dropped ones included (spec 5); None before 1.8
+    bass_on_stem: bool = False  # the bass-on-stem gate holds: the stem carries the bass line (spec 6); False before 1.8
+    low_mix_share_bass: float | None = None  # low-band share of the mix under the bass stem (spec 6); None before 1.8
+    low_mix_share_source: float | None = None  # low-band share of the mix under the source stem (spec 6); None before 1.8
+    low_own_share: float | None = None  # the stem's own low-band share (spec 6); None before 1.8
+    bass_stem_ratio: float | None = None  # the bass stem's energy over the stem's (spec 6); None before 1.8
 
 
 class PlannedSection(_Artifact):
@@ -351,6 +373,7 @@ class ScoreBar(_Artifact):
     grey: bool = False  # the bar is shown greyed out
     label: str = ""  # the chord-row label ("riff" or "riff heard") on the first bar of a riff member inside a merged section whose header does not say riff; empty otherwise and before 1.7
     rests: bool = False  # copied from the strums bar: the bar failed the rest rule; False before 1.7
+    pickup_slots: int | None = None  # the slot columns a pickup bar draws (spec 3.2); None for a full bar and before 1.8
 
 
 class ScoreSection(_Artifact):
@@ -385,3 +408,4 @@ class Score(_Artifact):
     alternative_diagrams: list[ChordDiagram] = []  # the no-capo shapes, only under a capo
     sections: list[ScoreSection]
     trailing_bars_dropped: int = 0  # bars after the last chord left off the sheet
+    provenance: str | None = None  # the uploader the sheet prints after "uploaded by" (spec 8.1); None before 1.8
