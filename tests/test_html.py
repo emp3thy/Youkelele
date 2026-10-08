@@ -112,8 +112,8 @@ def test_render_html_folds_identical_lines_and_prints_the_tab_legend_once():
 
 def test_v15_score_fixture_renders():
     html = render_html(load_model(FIXTURES / "v15_score.json", Score))
-    assert "<svg" in html  # bars with empty strokes draw their chords' slots as strokes, all ringing
-    assert 'class="arrow down"' in html and 'class="sustain"' in html
+    assert "<svg" in html  # bars with empty strokes draw their chords' slots as strokes
+    assert 'class="arrow down"' in html and 'class="sustain"' not in html
     # a 1.5 file has no state phrases: its section flags give them (intro, chorus 2, verse 3,
     # chorus 3 are uncertain in the fixture)
     assert html.count('<span class="strum-label">pattern uncertain</span>') == 4

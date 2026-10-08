@@ -1,9 +1,10 @@
 """The bar box: one inline SVG per bar (spec 3.1 to 3.4).
 
-Top to bottom: the chord row (each name over the slot it starts on), the tab block on a riff
-line (four string lines, A E C G from the top, a fret number where a note starts), the stroke
-row (down, up and muted arrows, a sustain line where a ringing stroke is held over empty slots,
-a faint dot on an empty slot), and, under the line's first bar only, the count row.
+Top to bottom: the chord row (each name over the slot it starts on, and a small grey label
+before the first name on a bar that carries one), the tab block on a riff line (four string
+lines, A E C G from the top, a fret number where a note starts), the stroke row (down, up and
+muted arrows, a faint dot on an empty slot; no sustain lines), and, under the line's first
+bar only, the count row.
 """
 
 from __future__ import annotations
@@ -111,29 +112,36 @@ def _count_label(index: int, per_beat: int) -> str:
     return _SUBDIVISIONS.get(per_beat, ("",) * per_beat)[sub]
 
 
-def _held_until(start: int, starts: set[int], n: int) -> int:
-    """The slot after the empty run following ``start``: the next start, or the bar end."""
-    end = start + 1
-    while end < n and end not in starts:
-        end += 1
-    return end
+def _label_text(x: float, label: str) -> str:
+    return (
+        f'<text x="{_n(x)}" y="13" font-size="{_CHORD_FONT}" font-weight="bold" '
+        f'fill="{_GREY}" class="chord label">{escape(label)}</text>'
+    )
 
 
-def _chord_row(chords: Sequence[ScoreChord], cols: _Cols, power_badge: bool, pickup: bool) -> list[str]:
+def _chord_row(
+    chords: Sequence[ScoreChord], cols: _Cols, power_badge: bool, pickup: bool, label: str = ""
+) -> list[str]:
     ordered = sorted(chords, key=lambda c: c.start_slot)
     n = cols.n
     parts: list[str] = []
     if not ordered or all(c.name == NC for c in ordered):
-        parts.append(
-            f'<text x="{_n(cols.ox + _CHORD_INSET)}" y="13" font-size="{_CHORD_FONT}" font-weight="bold" '
-            f'fill="{_GREY}" class="chord nc">{NC}</text>'
-        )
+        if label:  # nothing to name: the label stands where the N.C. mark would
+            parts.append(_label_text(cols.ox + _CHORD_INSET, label))
+        else:
+            parts.append(
+                f'<text x="{_n(cols.ox + _CHORD_INSET)}" y="13" font-size="{_CHORD_FONT}" font-weight="bold" '
+                f'fill="{_GREY}" class="chord nc">{NC}</text>'
+            )
     else:
         for k, chord in enumerate(ordered):
             start = min(max(chord.start_slot, 0), n - 1)
             nxt = ordered[k + 1].start_slot if k + 1 < len(ordered) else n
             # the first name keeps the frame inset; a later one starts over its slot
             x = (cols.ox if start == 0 else cols.left(start)) + _CHORD_INSET
+            if k == 0 and label:  # the label takes the first name's place; the name moves right of it
+                parts.append(_label_text(x, label))
+                x += _CHAR_PX * len(label) + 4
             room = cols.left(min(max(nxt, start + 1), n)) - x - 2
             nc = chord.name == NC
             badge = power_badge and chord.power and not nc
@@ -175,20 +183,12 @@ def _tab_block(bar: ScoreBar, cols: _Cols, top: float, labels: bool) -> list[str
                 f'class="string-label">{letter}</text>'
             )
     notes = [t for t in (bar.tab or []) if 0 <= t.slot < n]
-    starts = {t.slot for t in notes}
     for note in notes:
         row = 3 - note.string
         y = ys[row]
         x = cols.centre(note.slot)
         label = str(note.fret)
         half = 2.5 * len(label) + 1
-        if note.rings:
-            end = _held_until(note.slot, starts, n)
-            if end > note.slot + 1:
-                parts.append(
-                    f'<line x1="{_n(x + half)}" y1="{_n(y)}" x2="{_n(cols.left(end) - 2)}" '
-                    f'y2="{_n(y)}" stroke="{_INK}" stroke-width="2" class="sustain"/>'
-                )
         parts.append(
             f'<rect x="{_n(x - half)}" y="{_n(y - 4.5)}" width="{_n(2 * half)}" height="9" fill="#fff"/>'
         )
@@ -206,22 +206,11 @@ def _stroke_row(bar: ScoreBar, cols: _Cols, top: float, ink: str) -> list[str]:
     hw = min(5, (cols.pitch - 4) / 2)  # narrow slots keep a gap between neighbouring arrows
     cw = min(hw, max(2, (cols.pitch - 5) / 2))  # the muted cross: 2 to 2.5 px on narrow slots
     mid = top + _ARROW_TOP + 12
-    held: set[int] = set()
     parts: list[str] = []
     for slot in sorted(strokes):
-        stroke = strokes[slot]
-        x = cols.centre(slot)
-        parts.append(_ARROWS[stroke.kind](x, top + _ARROW_TOP, ink, hw, cw))
-        end = _held_until(slot, set(strokes), n)
-        # a muted strike is damped by definition: it never rings on, whatever its flag says
-        if stroke.rings and stroke.kind != "x" and end > slot + 1:
-            held.update(range(slot + 1, end))
-            parts.append(
-                f'<line x1="{_n(x + hw + 2)}" y1="{_n(mid)}" x2="{_n(cols.left(end) - 2)}" '
-                f'y2="{_n(mid)}" stroke="{ink}" stroke-width="1.5" class="sustain"/>'
-            )
-    for slot in range(n):  # a faint dot on each slot nothing is played or held on
-        if slot not in strokes and slot not in held:
+        parts.append(_ARROWS[strokes[slot].kind](cols.centre(slot), top + _ARROW_TOP, ink, hw, cw))
+    for slot in range(n):  # a faint dot on each slot nothing is played on
+        if slot not in strokes:
             parts.append(
                 f'<circle cx="{_n(cols.centre(slot))}" cy="{_n(mid)}" r="1.3" fill="{_FAINT}" class="rest"/>'
             )
@@ -258,8 +247,9 @@ def bar_svg(
 
     ``tab_rows`` draws the tab block (an empty one when the bar has no tab, so a line's bars
     stand level); ``first_in_line`` adds the string letters and the count row; ``grey`` draws
-    the arrows and sustain lines in grey, the chord names staying black; ``power_badge`` raises
-    a small 5 after a power chord's name (the full tier).
+    the arrows in grey, the chord names staying black; a non-empty ``bar.label`` prints in grey
+    in the chord row, before the first chord name; ``power_badge`` raises a small 5 after a
+    power chord's name (the full tier).
     """
     n = slots_per_bar
     ox = _LABEL_W if tab_rows and first_in_line else 0
@@ -274,7 +264,7 @@ def bar_svg(
         f'viewBox="0 0 {width} {height}" font-family="Arial, Helvetica, sans-serif">'
     ]
     cols = _Cols(ox=ox, n=n, box_w=box_w)
-    parts.extend(_chord_row(bar.chords, cols, power_badge, bar.pickup))
+    parts.extend(_chord_row(bar.chords, cols, power_badge, bar.pickup, bar.label))
     if tab_rows:
         parts.extend(_tab_block(bar, cols, _CHORD_H, labels=first_in_line))
     parts.extend(_stroke_row(bar, cols, stroke_top, ink))

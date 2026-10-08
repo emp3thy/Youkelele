@@ -1,12 +1,17 @@
 import numpy as np
 
+from youkelele.music.triads import to_triad
 from youkelele.music.riff import (
     RIFF_ENTROPY_MAX,
     RIFF_SINGLE_PC_MIN,
+    chord_roots,
     is_riff,
+    named_share,
     onset_chroma,
     riff_features,
+    root_share,
 )
+from youkelele.schemas import ChordEvent
 
 SR = 22050
 ONSETS = [0.5 * k for k in range(8)]
@@ -78,3 +83,23 @@ def test_chroma_is_driven_at_the_signals_own_sample_rate():
 def test_thresholds_are_the_spec_values():
     assert (RIFF_ENTROPY_MAX, RIFF_SINGLE_PC_MIN) == (0.82, 0.45)
     assert is_riff(0.82, 0.45) and not is_riff(0.83, 0.45) and not is_riff(0.82, 0.44)
+
+
+def _event(start: float, end: float, label: str) -> ChordEvent:
+    return ChordEvent(
+        bar=0, beat=0, start=start, end=end, label=label, triad=to_triad(label), confidence=0.9
+    )
+
+
+def test_chord_roots_follow_the_event_under_each_onset():
+    events = [_event(0.0, 2.0, "C:maj"), _event(2.0, 4.0, "N"), _event(4.0, 6.0, "F#:min")]
+    assert chord_roots(events, [0.5, 2.5, 4.5, 9.0]) == [0, None, 6, None]
+
+
+def test_root_share_counts_named_pairs_only():
+    assert root_share([60, 62, None, 67], [0, 0, 0, None]) == 0.5
+    assert root_share([None], [0]) is None
+
+
+def test_named_share():
+    assert named_share([60, None, 64, None]) == 0.5 and named_share([]) is None

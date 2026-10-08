@@ -883,12 +883,21 @@ def test_riff_flag_needs_the_pitch_change_share(tmp_path, monkeypatch, real_pitc
     assert len(calls) == 1  # one pitch track for the whole song
 
 
-def test_pitch_is_not_tracked_when_no_member_passes_the_chroma_features(tmp_path, monkeypatch):
-    monkeypatch.setattr(strums_module, "track_pitch", lambda y, sr: pytest.fail("pitch tracked"))
+def test_pitch_is_tracked_once_even_when_no_member_passes_the_chroma_features(tmp_path, monkeypatch):
+    # 1.7 (spec 4.2, 7): every voiced member is named so its root and named shares are written;
+    # the flag still needs the chroma features, which a chord fails
+    calls: list[int] = []
+
+    def counting(y, sr):
+        calls.append(sr)
+        return PitchTrack(times=np.zeros(0), midi=np.zeros(0))
+
+    monkeypatch.setattr(strums_module, "track_pitch", counting)
     times = _island(8)
     g7 = [196.0, 246.9, 293.7, 349.2]
     s, _, _ = _run_notes(tmp_path, _grid([8]), _detector(times), other=_notes([g7] * len(times), times, 16.0), mix_amp=0.1)
-    assert not s.patterns[0].riff and s.patterns[0].pitch_change_share is None
+    assert len(calls) == 1
+    assert not s.patterns[0].riff and s.patterns[0].riff_rule is None
 
 
 def test_single_bar_and_all_rest_members_do_not_raise(tmp_path):
@@ -927,10 +936,16 @@ def test_unit_two_member_prints_alternating_bars(tmp_path):
 
 
 
+# every bar's (energy ratio, low share) passing the rest rule, for the `_bar_records` unit tests
+_HOLD_FIGURES = ([1.0] * 16, [1.0] * 16)
+
+
 def _member(position, start, end, vector, riff=False, rings=True, uncertain=False):
     from youkelele.music.vote import VoteResult
 
-    m = strums_module._Member(position=position, start=start, end=end, analysed_end=end, silent=False)
+    m = strums_module._Member(
+        position=position, start=start, end=end, analysed_end=end, silent=False, holding=list(range(start, end))
+    )
     m.vote = VoteResult(list(vector), "majority", 0.5, 0.5, 1)
     m.riff, m.rings, m.uncertain = riff, rings, uncertain
     return m
@@ -945,7 +960,7 @@ def test_a_riff_member_prints_its_own_pattern_even_when_it_agrees_with_the_secti
     assert strums_module._prints_section(riff, longest, 8) is False
     rendered = [["-"] * 8 for _ in range(12)]
     records = strums_module._bar_records(
-        riff, longest, 8, Meter(numerator=4, denominator=4), rendered, lambda b: [None] * 8, [],
+        riff, longest, 8, Meter(numerator=4, denominator=4), rendered, lambda b: [None] * 8, [], *_HOLD_FIGURES,
     )
     assert all(r.pattern == list("D-D-D-D-") and r.uncertain and r.riff for r in records)
 
@@ -954,7 +969,7 @@ def test_bar_records_carry_the_members_ring_flag_without_strokes():
     longest = _member(0, 0, 4, "S-S-S-SS", rings=False)
     rendered = [["-"] * 8 for _ in range(4)]
     records = strums_module._bar_records(
-        longest, longest, 8, Meter(numerator=4, denominator=4), rendered, lambda b: [None] * 8, [],
+        longest, longest, 8, Meter(numerator=4, denominator=4), rendered, lambda b: [None] * 8, [], *_HOLD_FIGURES,
     )
     assert all(r.strokes == [] and r.rings is False for r in records)
 
@@ -964,7 +979,10 @@ def test_a_two_bar_vote_is_tested_the_same_whichever_bar_the_member_starts_on():
     # bar 1 it is not; the whole unit vector is the representative, so both take the shuffle test
     classes = [list("SSSSSSSS"), list("S-S-S---")] * 5
     for start in (0, 1):
-        m = strums_module._Member(position=0, start=start, end=start + 8, analysed_end=start + 8, silent=False)
+        m = strums_module._Member(
+            position=0, start=start, end=start + 8, analysed_end=start + 8, silent=False,
+            holding=list(range(start, start + 8)),
+        )
         strums_module._vote_member(m, classes, 8, 0.45)
         assert m.vote.unit == 2 and m.chance_p is not None
 
@@ -986,3 +1004,170 @@ def test_a_member_playing_the_sections_two_bar_figure_from_its_second_bar_prints
     assert [r.pattern for r in s.bars[8:11]] == [s.bar_onsets[i] for i in range(8, 11)]  # what it plays
     assert all(r.member == 1 and r.unit == 2 for r in s.bars[8:11])
     assert any("member 8-11 aligns" in line for line in lines)
+
+
+# version 1.7: bars that rest, and the root, named and rule figures (spec 5 and 7)
+
+ISLAND_BAR = "S-SS-SSS"  # the ISLAND slots as a bar pattern
+ISLAND_TEXT = "D-DU-UDU"
+SILENT = "-" * 8  # zeros in the stem, no onset
+BELL = "bell"  # 2 kHz strikes on every eighth: loud, but nothing below 330 Hz
+RIFF_LINE = "riff"  # single notes on the ISLAND slots moving through MIDI 60, 62 and 63
+A, B = "S-S-S-S-", "SS-SS-SS"  # the two bars of a two-bar figure
+A_TEXT, B_TEXT = "D-D-D-D-", "DU-UD-DU"
+TWO_MEMBERS = [("verse", 4), ("verse", 4)]  # two four-bar verses on the same chords: the plan merges them
+G7 = (196.0, 246.9, 293.7, 349.2)  # a strummed chord: four pitch classes, so the chroma gate fails
+BELL_HZ, BELL_TAU = 2000.0, 0.05
+
+
+def _stem_bars(stem_bars: Sequence[str]) -> tuple[np.ndarray, list[float]]:
+    """A stem built bar by bar, and the onsets the detector reports on it.
+
+    A pattern bar is ringing G7 bursts on its `S` cells; `SILENT` is zeros; `BELL` is 2 kHz
+    strikes on every eighth; `RIFF_LINE` is single notes on the ISLAND slots, the pitch moving
+    burst by burst. Each burst is cut at the next or at the bar's end, so no bar rings into the next.
+    """
+    bar_n = int(round(BAR_SECONDS * SR))
+    y = np.zeros(len(stem_bars) * bar_n)
+    times: list[float] = []
+    line = [_midi_hz(m) for m in (60, 62, 63)]
+    notes = 0
+    for b, kind in enumerate(stem_bars):
+        if kind == BELL:
+            cells, tau = range(8), BELL_TAU
+        elif kind == RIFF_LINE:
+            cells, tau = ISLAND, RINGING_TAU
+        else:
+            cells, tau = [j for j, c in enumerate(kind) if c == "S"], RINGING_TAU
+        starts = [b * bar_n + int(round(j * bar_n / 8)) for j in cells]
+        for i, start in enumerate(starts):
+            stop = starts[i + 1] if i + 1 < len(starts) else (b + 1) * bar_n
+            t = np.arange(stop - start) / SR
+            if kind == BELL:
+                freqs: Sequence[float] = (BELL_HZ,)
+            elif kind == RIFF_LINE:
+                freqs, notes = (line[notes % len(line)],), notes + 1
+            else:
+                freqs = G7
+            wave = sum(np.sin(2 * np.pi * f * t) for f in freqs) / len(freqs)
+            y[start:stop] = 0.5 * np.exp(-t / tau) * wave
+        times.extend(_bar_times(b, cells))
+    return y, times
+
+
+def _run_stage(tmp_path, stem_bars: Sequence[str], sections=None, log=None) -> Strums:
+    """The stage on a per-bar stem (on the other stem, the mix a quiet steady tone), one C chord throughout."""
+    grid = _labelled_grid(sections) if sections else _grid([len(stem_bars)])
+    stem, times = _stem_bars(stem_bars)
+    strums, _, _ = _run(tmp_path, grid, _detector(times), other=stem, mix_amp=0.1, log=log)
+    assert strums.source == "other_stem"
+    return strums
+
+
+def test_silent_opening_bars_rest_and_leave_the_vote_to_the_bars_that_hold(tmp_path):
+    lines: list[str] = []
+    s = _run_stage(tmp_path, [SILENT, SILENT] + [ISLAND_BAR] * 6, log=lines.append)
+    assert [b.rests for b in s.bars[:3]] == [True, True, False]
+    assert s.bars[0].strokes == [] and s.bars[0].pattern == ["-"] * 8 and not s.bars[0].uncertain
+    assert s.bars[0].energy_ratio == pytest.approx(0.0) and s.bars[2].energy_ratio > 0.05
+    assert s.bars[2].low_share > 0.005
+    assert "".join(s.patterns[0].slots) == ISLAND_TEXT  # the vote is the six holding bars' vote
+    assert s.patterns[0].confidence == 1.0  # the resting bars are not counted against it
+    assert s.bar_onsets[0] == ["-"] * 8  # bar_onsets still written for every bar
+    assert any("member 0-8: 2 bars rest" in line for line in lines)
+
+
+def test_a_loud_high_register_bar_rests_but_keeps_its_bar_onsets(tmp_path):
+    s = _run_stage(tmp_path, [BELL] + [ISLAND_BAR] * 7)
+    assert s.bars[0].rests and s.bars[0].low_share < 0.005 and s.bars[0].energy_ratio > 0.05
+    assert s.bars[0].strokes == [] and s.bars[0].pattern == ["-"] * 8
+    assert any(c != "-" for c in s.bar_onsets[0])  # the detector saw the strikes; the record rests
+    assert not s.bars[1].rests and s.bars[1].pattern == list(ISLAND_TEXT)
+
+
+@pytest.mark.parametrize("resting", [SILENT, BELL], ids=["silent", "bell"])
+def test_a_member_whose_bars_all_rest_is_silent(tmp_path, resting):
+    # two members (grid sections 0-3 and 4-7, merged by the plan); every bar of the second rests.
+    # Zeros fail the section-level cut as well; the bell passes it, so only the empty holding
+    # list makes that member silent
+    s = _run_stage(tmp_path, [ISLAND_BAR] * 4 + [resting] * 4, sections=TWO_MEMBERS)
+    assert s.plan[0].members == [0, 1] and len(s.patterns) == 1
+    # the bell member rests bar by bar; the zeros member failed the section cut, so its flag is uniformly False
+    assert all(b.rests is (resting is BELL) and b.pattern == ["-"] * 8 and b.strokes == [] for b in s.bars[4:])
+    assert [b.member for b in s.bars] == [0] * 4 + [1] * 4
+    # the longest member (the first, on a tie) holds, so the header does not say no instrument
+    assert not s.patterns[0].no_instrument and "".join(s.patterns[0].slots) == ISLAND_TEXT
+
+
+def test_the_longest_member_resting_throughout_gives_the_section_no_instrument(tmp_path):
+    # the resting member (five bars) is the longest, so the header follows it; the three-bar member holds
+    s = _run_stage(tmp_path, [ISLAND_BAR] * 3 + [BELL] * 5, sections=[("verse", 3), ("verse", 5)])
+    assert s.plan[0].members == [0, 1] and len(s.patterns) == 1
+    assert s.patterns[0].no_instrument is True
+    holding, resting = s.bars[:3], s.bars[3:]
+    assert all(b.strokes and not b.rests for b in holding)
+    assert all(b.rests and b.strokes == [] and b.pattern == ["-"] * 8 and b.uncertain for b in resting)
+
+
+def test_a_member_silent_by_the_section_cut_carries_a_uniform_rest_flag():
+    meter = Meter(numerator=4, denominator=4)
+    rendered = [["-"] * 8 for _ in range(4)]
+    resting_figures = ([0.0] * 4, [0.0] * 4)
+    holding_figures = ([1.0] * 4, [1.0] * 4)
+    # silent because no bar holds: every bar rests
+    none_hold = _member(0, 0, 4, "S-S-S-SS")
+    none_hold.silent, none_hold.holding = True, []
+    records = strums_module._bar_records(
+        none_hold, none_hold, 8, meter, rendered, lambda b: [None] * 8, [], *resting_figures
+    )
+    assert all(r.rests for r in records)
+    # silent because the section-level cut failed: no bar rests, whatever its own figures
+    cut_failed = _member(0, 0, 4, "S-S-S-SS")
+    cut_failed.silent, cut_failed.section_cut_failed = True, True
+    for figures in (resting_figures, holding_figures):
+        records = strums_module._bar_records(
+            cut_failed, cut_failed, 8, meter, rendered, lambda b: [None] * 8, [], *figures
+        )
+        assert all(not r.rests and r.strokes == [] and r.uncertain for r in records)
+
+
+def test_two_bar_pattern_phase_starts_at_the_first_holding_bar(tmp_path):
+    # bar 0 silent; bars 1-8 alternate A, B, A, B ... (a two-bar vote); the record on bar 1 must be A
+    s = _run_stage(tmp_path, [SILENT] + [A, B] * 4)
+    assert s.bars[0].rests and not any(b.rests for b in s.bars[1:])
+    assert s.patterns[0].unit == 2 and s.bars[1].pattern == list(A_TEXT) and s.bars[2].pattern == list(B_TEXT)
+    assert [b.pattern for b in s.bars[1:]] == [s.bar_onsets[i] for i in range(1, 9)]  # what it plays
+
+
+def test_an_interior_resting_bar_keeps_the_printed_two_bar_phase_on_absolute_parity(tmp_path):
+    # A, B, A, B ... over twelve bars with bar 9 silent: the vote reads the holding bars as a
+    # compressed list (... A, B, A, A, B), so its pairs after the gap are in the opposite phase,
+    # but each bar prints its cell by absolute parity from the first holding bar. With eight
+    # bars and the gap at bar 3 the mixed-phase list defeats the two-bar rule (unit 1); twelve
+    # bars with the gap at bar 9 keep unit 2. The vote's confidence and certainty are not this
+    # test's concern
+    stem_bars = [A, B] * 6
+    stem_bars[9] = SILENT
+    s = _run_stage(tmp_path, stem_bars)
+    assert s.patterns[0].unit == 2
+    assert s.bars[9].rests and s.bars[9].strokes == [] and s.bars[9].pattern == ["-"] * 8
+    assert not any(b.rests for i, b in enumerate(s.bars) if i != 9)
+    even, odd = s.bars[0].pattern, s.bars[1].pattern
+    assert even != odd
+    assert all(s.bars[i].pattern == even for i in (2, 4, 6, 8, 10))  # bar 10, after the gap, as bar 0
+    assert all(s.bars[i].pattern == odd for i in (3, 5, 7, 11))  # bar 11, after the gap, as bar 1
+
+
+def test_root_and_named_shares_are_written_for_a_strummed_section(tmp_path, real_pitch):
+    s = _run_stage(tmp_path, [ISLAND_BAR] * 8)  # not a riff: a chord fails the chroma gate
+    p = s.patterns[0]
+    assert not is_riff(p.riff_entropy, p.riff_single_share)
+    assert p.named_share is not None and p.root_share is not None and p.riff_rule is None and not p.riff
+    assert p.pitch_change_share is not None
+
+
+def test_a_riff_member_carries_rule_a(tmp_path, real_pitch):
+    s = _run_stage(tmp_path, [RIFF_LINE] * 8)
+    p = s.patterns[0]
+    assert p.riff and p.riff_rule == "A" and p.pitch_change_share >= PITCH_CHANGE_MIN
+    assert p.named_share is not None and p.root_share is not None

@@ -109,8 +109,11 @@ class TonicDecision:
     decided_by: Literal["agreement", "pair rule", "mix", "score"]
 
 
-def _pitch_class(name: str) -> int:
+def pitch_class(name: str) -> int:
     return mir_eval.chord.pitch_class_to_semitone(name) % 12
+
+
+_pitch_class = pitch_class
 
 
 def _chords(events: Sequence[ChordEvent]) -> list[_Chord]:

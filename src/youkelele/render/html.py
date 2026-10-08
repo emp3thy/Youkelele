@@ -81,7 +81,8 @@ def octave_phrase(shift: int) -> str | None:
 
 
 def _derived_strokes(bar: ScoreBar) -> list[Stroke]:
-    """A 1.5 bar's strokes: each chord's slot letters from its start slot, all ringing."""
+    """A 1.5 bar's strokes: each chord's slot letters from its start slot, each flagged ``rings`` for the schema (the sheet draws no
+    sustain lines)."""
     return [
         Stroke(slot=chord.start_slot + j, kind=cell, rings=True)
         for chord in sorted(bar.chords, key=lambda c: c.start_slot)

@@ -7,6 +7,7 @@ from youkelele.evaluate import (
     Report,
     SectionDiag,
     _key_line,
+    _ranges,
     _section_diags,
     _section_line,
     compare_runs,
@@ -593,7 +594,7 @@ def test_section_line_prints_members_p_density_and_riff():
     )
     assert _section_line(d) == (
         "  2 Verse 2 (grid 4, 5, 6: verse, verse, verse) bars 55-110: D-DU-UDU, conf 0.55, strikes/bar 3.1, "
-        "explained 100.0%, rests 25.0%, p 0.003, density 0.58, riff 0.66/0.58 (8 onsets) riff, pcs n/a, rings n/a"
+        "explained 100.0%, rests 25.0%, p 0.003, density 0.58, riff 0.66/0.58 (8 onsets) riff, pcs n/a, root n/a, named n/a, rings n/a"
     )
     one = SectionDiag(**{**d.__dict__, "riff_onsets": 1, "riff": False})
     assert "riff 0.66/0.58 (1 onset), pcs" in _section_line(one)
@@ -609,7 +610,7 @@ def test_section_line_prints_na_for_a_1_4_section_and_no_group_for_one_member():
     )
     assert _section_line(d) == (
         "  0 Verse bars 0-2: D-U-, conf 0.40, strikes/bar 2.0, explained 100.0%, rests 50.0%, "
-        "p n/a, density n/a, riff n/a uncertain, pcs n/a, rings n/a"
+        "p n/a, density n/a, riff n/a uncertain, pcs n/a, root n/a, named n/a, rings n/a"
     )
 
 
@@ -775,7 +776,7 @@ def test_evaluate_prints_the_plan_section_line_and_the_votes(tmp_path):
     assert any(line.endswith("votes score C pair C mix G (agreement))") for line in lines)
     assert (
         "  0 Verse (grid 0, 1: verse, chorus) bars 0-4: D-U-, conf 0.80, strikes/bar 2.0, "
-        "explained 100.0%, rests 50.0%, p 0.020, density 0.50, riff 0.40/0.70 (12 onsets) riff, pcs n/a, rings n/a"
+        "explained 100.0%, rests 50.0%, p 0.020, density 0.50, riff 0.40/0.70 (12 onsets) riff, pcs n/a, root n/a, named n/a, rings n/a"
     ) in lines
 
 
@@ -828,16 +829,18 @@ def _wide_chords() -> Chords:
     return Chords(key=Key(tonic="C", mode="major", confidence=0.9), events=events)
 
 
-def _bar(index, member, slots, uncertain=False) -> BarStrums:
-    return BarStrums(index=index, member=member, strokes=[], pattern=slots, uncertain=uncertain)
+def _bar(index, member, slots, uncertain=False, rests=False) -> BarStrums:
+    return BarStrums(
+        index=index, member=member, strokes=[], pattern=slots, uncertain=uncertain, rests=rests
+    )
 
 
-def _wide_strums(candidate="medoid", changed=(), with_bars=True, **fields) -> Strums:
+def _wide_strums(candidate="medoid", changed=(), with_bars=True, rests=(), **fields) -> Strums:
     """One planned section over two members (bars 0-8 and 8-12); `changed` bars print their own."""
     pattern = _pattern(0, SECTION_SLOTS, candidate=candidate, **fields)
     bars = [
         _bar(i, 0 if i < 8 else 1, OWN_SLOTS if i in changed else SECTION_SLOTS,
-             uncertain=i in changed)
+             uncertain=i in changed, rests=i in rests)
         for i in range(12)
     ]
     return Strums(
@@ -923,3 +926,47 @@ def test_evaluate_tolerates_a_1_5_file_with_more_patterns_than_plan_entries(tmp_
     strums = strums.model_copy(update={"patterns": [strums.patterns[0], _pattern(1, SECTION_SLOTS)]})
     text = format_report(evaluate_run(_wide_run(tmp_path / "run", strums)))
     assert "  0 Verse" in text and "member" not in text
+
+
+def test_report_lists_resting_bars_as_ranges(tmp_path):
+    report = evaluate_run(_wide_run(tmp_path / "run", _wide_strums(rests={0, 1, 2, 3, 10, 11})))
+    assert report.resting_bars == [0, 1, 2, 3, 10, 11]
+    assert "6 bars rest: 0-3, 10, 11" in format_report(report)
+    assert report.sections[0].resting_bars == [0, 1, 2, 3, 10, 11]
+    quiet = evaluate_run(_wide_run(tmp_path / "quiet", _wide_strums()))
+    assert quiet.resting_bars == [] and "bars rest" not in format_report(quiet)
+
+
+def test_section_line_prints_the_rule_and_the_shares():
+    d = SectionDiag(
+        index=0, label="verse", strikes_per_bar=3.0, explained=1.0, rest_share=0.0,
+        uncertain=False, recall_boost=False, riff=True, riff_rule="A", root_share=0.25,
+        named_share=0.6,
+    )
+    line = _section_line(d)
+    assert "rule A" in line and "root 0.25" in line and "named 0.60" in line
+    plain = _section_line(SectionDiag(**{**d.__dict__, "riff_rule": None, "root_share": None, "named_share": None}))
+    assert "rule A" not in plain and "root n/a" in plain and "named n/a" in plain
+
+
+def test_section_diag_reads_the_rule_and_shares_from_the_pattern(tmp_path):
+    strums = _wide_strums(riff=True, riff_rule="A", root_share=0.3, named_share=0.7)
+    diag = evaluate_run(_wide_run(tmp_path / "run", strums)).sections[0]
+    assert (diag.riff_rule, diag.root_share, diag.named_share) == ("A", 0.3, 0.7)
+
+
+def test_compare_counts_rest_changes_and_names_the_rule(tmp_path):
+    a = _wide_run(tmp_path / "a", _wide_strums())
+    b = _wide_run(tmp_path / "b", _wide_strums(rests={0, 1}, riff=True, riff_rule="A"))
+    c = compare_runs(a, b)
+    text = format_comparison(c)
+    assert c.deltas[0].rest_changes == 2 and c.deltas[0].riff_rule_b == "A"
+    assert "rests changed in 2 bars" in text and "(rule A)" in text
+    assert c.deltas[0].changed
+    same = compare_runs(a, a)
+    assert same.deltas[0].rest_changes == 0 and "rests changed" not in format_comparison(same)
+
+
+def test_ranges():
+    assert _ranges([0, 1, 2, 3, 10, 11]) == "0-3, 10, 11" and _ranges([]) == ""
+    assert _ranges([5]) == "5" and _ranges([4, 5]) == "4, 5" and _ranges([4, 5, 6]) == "4-6"

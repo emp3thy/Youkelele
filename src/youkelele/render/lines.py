@@ -25,12 +25,12 @@ class Line:
 
 
 def line_width(bars: Sequence[ScoreBar], start: int, slots_per_bar: int, meter: Meter) -> int:
-    """Eight when the grid is eighths and the next eight bars hold at most one chord each and
-    no pickup, else four."""
+    """Eight when the grid is eighths and the next eight bars hold at most one chord each, no
+    pickup and no riff label, else four (an eight-bar box has no room for a label and a name)."""
     if not eighth_grid(slots_per_bar, meter):
         return NARROW
     window = bars[start : start + WIDE]
-    if any(len(b.chords) > 1 or b.pickup for b in window):
+    if any(len(b.chords) > 1 or b.pickup or b.label for b in window):
         return NARROW
     return WIDE
 
@@ -53,6 +53,7 @@ def _bar_key(bar: ScoreBar) -> tuple:
         tuple((c.name, c.start_slot) for c in bar.chords),
         tuple((s.slot, s.kind, s.rings) for s in bar.strokes),
         bar.grey,
+        bar.label,
         None if bar.tab is None else tuple(
             (t.slot, t.midi, t.string, t.fret, t.rings) for t in bar.tab
         ),
@@ -67,7 +68,7 @@ def fold_repeats(lines: list[Line]) -> list[Line]:
     """Collapse runs of consecutive identical lines into one carrying the count.
 
     Identical means the same chord names and start slots, strokes (slot, kind, rings), grey
-    flag and tab on every bar; keys include the bar count, so widths never mix.
+    flag, label and tab on every bar; keys include the bar count, so widths never mix.
     """
     folded: list[Line] = []
     last_key: tuple | None = None

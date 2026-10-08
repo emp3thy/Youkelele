@@ -42,34 +42,19 @@ def test_bar_svg_draws_chords_strokes_and_count():
     assert svg.startswith("<svg") and svg.endswith("</svg>")
     assert svg.count('class="arrow down"') == 4 and svg.count('class="arrow up"') == 1
     assert ">D<" in svg and ">G<" in svg and _labels(svg) == ["1", "&", "2", "&", "3", "&", "4", "&"]
-    # the brief wrote 4 here, but by its own rule (and spec 3.1) only the strokes on 0, 2 and 4
-    # are followed by an empty slot: 6 is followed by the up stroke on 7, and 7 ends the bar
-    assert svg.count('class="sustain"') == 3  # three strokes followed by an empty slot ring into it
+    assert 'class="sustain"' not in svg  # a ringing stroke draws no line over the empty slots after it
 
 
-def test_short_strokes_draw_no_sustain_and_grey_bars_use_grey_ink():
-    svg = bar_svg(_bar_with(rings=False), M44, 8, 28, first_in_line=False, grey=True, tab_rows=False)
+def test_grey_bars_use_grey_ink():
+    svg = bar_svg(_bar_with(rings=True), M44, 8, 28, first_in_line=False, grey=True, tab_rows=False)
     assert 'class="sustain"' not in svg and 'stroke="#999"' in svg and 'stroke="#111"' not in svg.split("chord")[0]
     # grey reaches every arrow and nothing else: the chord name stays black
     assert 'stroke="#111"' not in svg and re.search(r'fill="#111"[^>]*class="chord"', svg)
     assert _labels(svg) == []  # the count row prints under the line's first bar only
 
 
-def test_sustain_runs_to_the_next_stroke_or_the_bar_end():
-    bar = ScoreBar(
-        index=0, chords=[_chord("C", 0, 8)],
-        strokes=[Stroke(slot=0, kind="D"), Stroke(slot=4, kind="x", rings=False), Stroke(slot=5, kind="U")],
-    )
-    svg = bar_svg(bar, M44, 8, 20, first_in_line=False, grey=False, tab_rows=False)
-    # slot 0 rings through 1 to 3; the muted 4 is short; 5 rings through 6 and 7 to the bar end
-    spans = [(float(a), float(b)) for a, b in re.findall(r'<line x1="([\d.]+)"[^>]*x2="([\d.]+)"[^>]*class="sustain"', svg)]
-    assert len(spans) == 2
-    assert spans[0][0] > 10 and 70 <= spans[0][1] <= 80  # from the first arrow to the end of slot 3
-    assert spans[1][0] > 110 and 150 <= spans[1][1] <= 160  # from the up arrow to the bar end
-    assert svg.count('class="arrow muted"') == 1
-    # a muted strike never rings on, even when its flag says it rings
-    chuck = ScoreBar(index=0, chords=[_chord("C", 0, 8)], strokes=[Stroke(slot=0, kind="x", rings=True)])
-    assert 'class="sustain"' not in bar_svg(chuck, M44, 8, 20, first_in_line=False, grey=False, tab_rows=False)
+def _strokes() -> list[Stroke]:
+    return [Stroke(slot=j, kind=k) for j, k in enumerate(ISLAND) if k != "-"]
 
 
 def _xs(svg: str) -> list[float]:
@@ -114,6 +99,26 @@ def test_tab_block_puts_frets_on_the_right_string_lines():
     assert re.findall(r'class="fret" data-string="C">([^<]*)<', svg) == ["0", "3"]
 
 
+def test_a_labelled_bar_prints_the_label_left_of_the_chord_in_grey():
+    bar = ScoreBar(index=8, chords=[_chord("C", 0, 8)], strokes=_strokes(), label="riff heard")
+    svg = bar_svg(bar, M44, 8, 28, first_in_line=False, grey=False, tab_rows=False)
+    label_x = float(re.search(r'<text x="([\d.]+)"[^>]*class="chord label">riff heard<', svg).group(1))
+    chord_x = float(re.search(r'<text x="([\d.]+)"[^>]*class="chord">C<', svg).group(1))
+    assert 'fill="#999" class="chord label"' in svg and chord_x > label_x + 8 * len("riff heard")
+
+
+def test_a_labelled_bar_with_no_chord_prints_the_label_in_place_of_nc():
+    bar = ScoreBar(index=8, chords=[_chord("N.C.", 0, 8)], strokes=[], label="riff")
+    svg = bar_svg(bar, M44, 8, 28, first_in_line=False, grey=False, tab_rows=False)
+    assert ">riff<" in svg and ">N.C.<" not in svg
+
+
+def test_a_resting_bar_draws_a_chord_and_an_empty_black_row():
+    bar = ScoreBar(index=0, chords=[_chord("G", 0, 8)], strokes=[], rests=True)
+    svg = bar_svg(bar, M44, 8, 28, first_in_line=False, grey=False, tab_rows=False)
+    assert 'class="arrow' not in svg and svg.count('class="rest"') == 8 and 'stroke="#999"' not in svg
+
+
 def test_tab_notes_ring_on_their_string_and_an_empty_tab_still_draws_the_block():
     bar = ScoreBar(
         index=0, chords=[_chord("F", 0, 8)], strokes=[Stroke(slot=0, kind="D")],
@@ -121,7 +126,7 @@ def test_tab_notes_ring_on_their_string_and_an_empty_tab_still_draws_the_block()
     )
     svg = bar_svg(bar, M44, 8, 20, first_in_line=False, grey=False, tab_rows=True)
     assert 'data-string="A"' in svg
-    assert svg.count('class="sustain"') == 2  # the ringing note over slot 1, the stroke over 1 to 7
+    assert 'class="sustain"' not in svg and svg.count('class="fret"') == 2 and svg.count('class="string"') == 4
     empty = ScoreBar(index=1, chords=[_chord("F", 0, 8)], strokes=[], tab=[])
     blank = bar_svg(empty, M44, 8, 20, first_in_line=False, grey=False, tab_rows=True)
     assert blank.count('class="string"') == 4 and 'class="fret"' not in blank

@@ -1,7 +1,7 @@
 import librosa
 import numpy as np
 
-from youkelele.music.pitch import name_notes, pitch_change_share, track_pitch
+from youkelele.music.pitch import PITCH_CHANGE_MIN, name_notes, pitch_change_share, track_pitch
 
 
 def _tone_sequence(sr, midis, seconds_each):
@@ -33,3 +33,7 @@ def test_pitch_change_share_counts_named_pairs_only():
     assert pitch_change_share([60, 60, 62, None, 62, 63]) == 2 / 3
     assert pitch_change_share([60]) is None and pitch_change_share([None, None]) is None
     assert pitch_change_share([43] * 8) == 0.0
+
+
+def test_pitch_change_floor_is_0_26():
+    assert PITCH_CHANGE_MIN == 0.26
