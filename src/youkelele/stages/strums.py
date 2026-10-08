@@ -491,8 +491,8 @@ class StrumsStage(Stage):
         # the rest rule (1.7 spec 5): every bar measured once on the source stem; a bar holds when
         # it is loud enough against the mix and has power below 330 Hz, else it rests
         y_rests = resample_for_rests(y, sr)
-        energy = [bar_energy_ratio(y, mix, sr, bar) for bar in bars]
-        low = [bar_low_share(y_rests, bar) for bar in bars]
+        energy = [bar_energy_ratio(y, mix, sr, bar, slots) for bar in bars]
+        low = [bar_low_share(y_rests, bar, slots) for bar in bars]
 
         def new_member(position: int, start: int, end: int) -> _Member:
             trimmed = end - (drop if end == last_sec.end_bar else 0)
