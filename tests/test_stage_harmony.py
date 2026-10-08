@@ -158,7 +158,9 @@ def test_harmony_stage_key_from_chords_and_notes(tmp_path):
     logged: list[str] = []
     stage = HarmonyStage(
         recogniser=_recogniser(spans),
-        chroma=lambda wav: np.eye(12)[0] + 0.1,  # the mix estimate points away from D
+        # the mix estimate points away from D, to a related key (A major, D's dominant): an
+        # unrelated one on a clear margin would not be named (spec 1.8, 7.3)
+        chroma=lambda wav: np.eye(12)[9] + 0.1,
     )
 
     def guitar(stem_path):
@@ -188,7 +190,9 @@ def test_harmony_stage_key_from_chords_and_notes(tmp_path):
     votes = key.tonic_votes
     assert (votes.score, votes.pair, votes.decided_by) == ("D", "D", "agreement")
     assert key.pair_tonic == "D"
-    assert ctx.notes["tonic_votes"] == f"score D, pair D, mix {key.mix.tonic}, decided by agreement"
+    assert ctx.notes["tonic_votes"] == (
+        f"score D, pair D, mix {key.mix.tonic}, decided by agreement, set D (1.000 vs 1.000)"
+    )
     key_lines = [line for line in logged if "chords+stems" in line]
     assert len(key_lines) == 1 and key_lines[0].endswith(", decided by agreement)")
 
@@ -324,3 +328,5 @@ def test_key_log_names_whose_margin_it_prints():
     by_pair = TonicDecision("A", 0.031, "C", "pair rule", "A", 0.031, "C", "pair rule")
     assert "(chords+stems, score margin 0.031 by score, decided by score)" in _key_log(key, by_score)
     assert "(chords+stems, pair margin 0.031 by pair rule, decided by pair rule)" in _key_log(key, by_pair)
+    by_set = TonicDecision("A", 0.031, None, "score", "C", 0.1, "D", "set")
+    assert "(chords+stems, set margin 0.031 by score, decided by set)" in _key_log(key, by_set)

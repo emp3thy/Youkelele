@@ -6,12 +6,15 @@ is kept as the fallback for songs with too few chords and for comparison.
 
 1.5: when the score and the pair rule disagree on a clear score margin, the mix estimate's
 tonic decides between them (`decide_tonic`), and the losing chord rule is hedged (`_hedge`).
+
+1.8: the best major set of the song's chords may veto the decided tonic, hedged with its
+relative key, and a hedge names a related key or nothing (`relation`).
 """
 
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Literal
 
@@ -69,6 +72,9 @@ KEY_HEDGE_MARGIN = 0.05
 MODE_TIE_MARGIN = 0.05
 # With fewer chord events than this the mix estimate stands.
 MIN_CHORD_EVENTS = 4
+# The best major set must beat the decided tonic's pair share by this much to replace it
+# (spec 1.8, section 7.1): Badge 0.238, Fame 0.008, every other run 0.000.
+SET_VETO_MARGIN = 0.10
 
 _NO_CHORD = ("N", "X")
 # The diatonic triads of a major key by semitones above its tonic.
@@ -106,7 +112,7 @@ class TonicDecision:
     pair_tonic: str  # the pair rule's winner, computed whether or not it decided
     pair_margin: float
     score_tonic: str  # the score's winner, before any override
-    decided_by: Literal["agreement", "pair rule", "mix", "score"]
+    decided_by: Literal["agreement", "pair rule", "mix", "score", "set"]
 
 
 def pitch_class(name: str) -> int:
@@ -231,6 +237,19 @@ def pair_shares(events: Sequence[ChordEvent], candidates: Sequence[str]) -> dict
             _set_share(chords, tonic, total), _set_share(chords, (tonic + 3) % 12, total)
         )
     return shares
+
+
+def best_major_set(events: Sequence[ChordEvent]) -> tuple[str, float]:
+    """The tonic and share of the major set holding the most chord time, ties to the lower
+    pitch class; `("C", 0.0)` without chord time.
+
+    Named explicitly, not as `_winner(pair_shares(...))`: a relative pair scores alike there
+    (Badge's E and G both 0.995) and the pitch-class tie-break would name the minor's tonic."""
+    chords = _chords(events)
+    total = sum(c.duration for c in chords)
+    shares = [_set_share(chords, pc, total) for pc in range(12)]
+    best = max(range(12), key=lambda pc: (shares[pc], -pc))
+    return _TONICS[best], shares[best]
 
 
 def _profile_fit(tonic: str, chroma_mean: np.ndarray) -> float:
@@ -376,19 +395,36 @@ def key_and_decision(
     decision = decide_tonic(events, bars, sections, chroma_mean, mix_key.tonic)
     if decision is None:
         return mix_key, None
+    # the set veto (spec 1.8, section 7.1): against the decided tonic's pair share, never its
+    # own major set's, or a minor key would be vetoed to its relative's dominant
+    decided = pair_shares(events, _TONICS)[decision.tonic]
+    set_tonic, set_share = best_major_set(events)
+    if set_share - decided >= SET_VETO_MARGIN:
+        decision = replace(
+            decision, tonic=set_tonic, margin=set_share - decided, runner_up=None,
+            decided_by="set",
+        )
     mode, mode_margin = _mode_of(decision.tonic, chroma_mean, events)
     votes = TonicVotes(
         score=decision.score_tonic, pair=decision.pair_tonic, mix=mix_key.tonic,
-        decided_by=decision.decided_by,
+        decided_by=decision.decided_by, set_tonic=set_tonic, set_share_best=set_share,
+        set_share_decided=decided,
     )
     key = Key(
         tonic=decision.tonic, mode=mode, confidence=mode_margin, method="chords_stems",
         margin=decision.margin, mode_margin=mode_margin, runner_up=decision.runner_up,
         mix=mix_key, pair_tonic=decision.pair_tonic, tonic_votes=votes,
     )
-    other = hedge_tonic(key)
-    if other is not None:  # the other tonic the sheet names carries its own mode
-        key = key.model_copy(update={"hedge_mode": _mode_of(other, chroma_mean, events)[0]})
+    rung = _hedge_rung(key)
+    if rung is not None:  # the other tonic the sheet names carries its own mode
+        other, source = rung
+        hedge_mode = (
+            relative_key(key.tonic, key.mode)[1] if source == "set"
+            else _mode_of(other, chroma_mean, events)[0]
+        )
+        key = key.model_copy(update={"hedge_mode": hedge_mode})
+        if _hedge(key) is None:  # an unrelated tonic on a clear margin is not named
+            key = key.model_copy(update={"hedge_mode": None})
     return key, decision
 
 
@@ -496,10 +532,39 @@ def hedged(key: Key) -> bool:
     return _close(key) or _hedge(key) is not None
 
 
-def _hedge(key: Key) -> tuple[str, Literal["runner_up", "chord rule", "mix"]] | None:
-    """The other tonic and where it comes from, by three rungs in order: a close margin names
-    the runner-up; a chord rule that lost names its tonic; a mix estimate that differs names
-    its tonic."""
+Relation = Literal["same", "fifth", "relative", "parallel", "other"]
+HedgeSource = Literal["set", "runner_up", "chord rule", "mix"]
+
+
+def relation(tonic_a: str, mode_a: str, tonic_b: str, mode_b: str) -> Relation:
+    """How two keys relate, by mir_eval's categories: a fifth is the same mode a perfect fifth
+    apart (either way round, where mir_eval counts only the estimate a fifth above); the
+    relative pair is a major key and the minor key three semitones below; the parallel pair
+    shares a tonic in the other mode."""
+    step = (_pitch_class(tonic_b) - _pitch_class(tonic_a)) % 12
+    if mode_a == mode_b:
+        return "same" if step == 0 else "fifth" if step in (5, 7) else "other"
+    if step == 0:
+        return "parallel"
+    major_to_minor = step if mode_a == "major" else -step % 12
+    return "relative" if major_to_minor == 9 else "other"
+
+
+def relative_key(tonic: str, mode: str) -> tuple[str, Literal["major", "minor"]]:
+    """The relative minor of a major key (the tonic three semitones down) or the relative
+    major of a minor key."""
+    if mode == "major":
+        return _TONICS[(_pitch_class(tonic) - 3) % 12], "minor"
+    return _TONICS[(_pitch_class(tonic) + 3) % 12], "major"
+
+
+def _hedge_rung(key: Key) -> tuple[str, HedgeSource] | None:
+    """The other tonic and where it comes from, by four rungs in order: a tonic the chord set
+    replaced names its relative key, the one key the set cannot tell it from (spec 1.8, 7.2);
+    a close margin names the runner-up; a chord rule that lost names its tonic; a mix estimate
+    that differs names its tonic."""
+    if key.tonic_votes is not None and key.tonic_votes.decided_by == "set":
+        return relative_key(key.tonic, key.mode)[0], "set"
     if _close(key) and key.runner_up is not None:
         return key.runner_up, "runner_up"
     loser = _losing_chord_rule(key)
@@ -510,10 +575,36 @@ def _hedge(key: Key) -> tuple[str, Literal["runner_up", "chord rule", "mix"]] | 
     return None
 
 
+def _hedge_mode(key: Key, source: HedgeSource) -> str:
+    """The hedge's mode as stored at harmony time (`Key.hedge_mode`). A file written before it
+    was stored falls back to the mix estimate's mode for a mix hedge and to the key's own
+    mode for a runner-up; such a file has no votes, so it never reaches the set or chord-rule
+    rungs."""
+    if key.hedge_mode is not None:
+        return key.hedge_mode
+    if source == "set":
+        return relative_key(key.tonic, key.mode)[1]
+    return key.mix.mode if source == "mix" and key.mix is not None else key.mode
+
+
+def _hedge(key: Key) -> tuple[str, HedgeSource] | None:
+    """`_hedge_rung`, except that a tonic unrelated to the key ("other" by `relation`) is not
+    named when the margin clears `KEY_HEDGE_MARGIN` (spec 1.8, 7.3): a hedge names a related
+    key or nothing. Only the chord-rule and mix rungs can be dropped: the set's relative is
+    related by construction and the runner-up rung needs a close margin."""
+    rung = _hedge_rung(key)
+    if rung is None:
+        return None
+    other, source = rung
+    unrelated = relation(key.tonic, key.mode, other, _hedge_mode(key, source)) == "other"
+    return None if unrelated and not _close(key) else rung
+
+
 def hedge_tonic(key: Key) -> str | None:
-    """The other tonic a hedged key names: the runner-up when the margin is close, else the
-    losing chord rule's tonic when the mix or the score settled a disagreement, else the
-    mix's tonic when the mix disagrees."""
+    """The other tonic a hedged key names: the relative key's when the chord set replaced the
+    tonic, else the runner-up when the margin is close, else the losing chord rule's tonic
+    when the mix or the score settled a disagreement, else the mix's tonic when the mix
+    disagrees; on a clear margin, never a tonic unrelated to the key."""
     hedge = _hedge(key)
     return hedge[0] if hedge is not None else None
 
@@ -521,17 +612,13 @@ def hedge_tonic(key: Key) -> str | None:
 def hedge_text(key: Key) -> str | None:
     """The other key a hedged key names, `C major`, with its own mode; None when not hedged.
 
-    The mode is the one stored at harmony time (`Key.hedge_mode`). A file written before it
-    was stored falls back to the mix estimate's mode for a mix hedge and to the key's own
-    mode for a runner-up; such a file has no votes, so it never reaches the chord-rule rung."""
+    The mode is `_hedge_mode`'s: the one stored at harmony time, or for an older file the
+    mix estimate's or the key's own."""
     hedge = _hedge(key)
     if hedge is None:
         return None
     other, source = hedge
-    mode = key.hedge_mode
-    if mode is None:
-        mode = key.mix.mode if source == "mix" and key.mix is not None else key.mode
-    return f"{other} {mode}"
+    return f"{other} {_hedge_mode(key, source)}"
 
 
 def key_text(key: Key) -> str:
@@ -552,13 +639,24 @@ def pair_rule_note(decision: TonicDecision | None) -> str:
 
 
 def tonic_votes_note(key: Key) -> str:
-    """The three tonic votes, for the manifest: `score C, pair F, mix F, decided by mix`; a
-    missing vote prints `none`, and a key without votes (the mix's own, or a file before
-    1.5) is `none`."""
+    """The three tonic votes, for the manifest: `score C, pair F, mix F, decided by mix`, then
+    `, set F (1.000 vs 1.000)` (the best major set's share against the decided tonic's pair
+    share) when the set was weighed (1.8); a missing vote prints `none`, and a key without
+    votes (the mix's own, or a file before 1.5) is `none`."""
     votes = key.tonic_votes
     if votes is None:
         return "none"
-    return (
+    note = (
         f"score {votes.score or 'none'}, pair {votes.pair or 'none'}, "
         f"mix {votes.mix or 'none'}, decided by {votes.decided_by or 'none'}"
     )
+    if votes.set_tonic is not None:
+        note += (
+            f", set {votes.set_tonic} "
+            f"({_num3(votes.set_share_best)} vs {_num3(votes.set_share_decided)})"
+        )
+    return note
+
+
+def _num3(value: float | None) -> str:
+    return "none" if value is None else f"{value:.3f}"

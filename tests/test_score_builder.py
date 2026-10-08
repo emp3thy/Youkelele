@@ -153,9 +153,9 @@ def test_score_carries_key_hedge_from_chords_key():
                   mode_margin=0.3, runner_up="C", hedge_mode="major")
     assert (build(a_minor).key, build(a_minor).key_hedge) == ("A minor", "C major")
     mix = a_minor.model_copy(
-        update={"margin": 0.2, "hedge_mode": None, "mix": Key(tonic="F", mode="major", confidence=0.1)}
+        update={"margin": 0.2, "hedge_mode": None, "mix": Key(tonic="C", mode="major", confidence=0.1)}
     )
-    assert build(mix).key_hedge == "F major"  # a file from before the stored mode: the mix's own
+    assert build(mix).key_hedge == "C major"  # a file from before the stored mode: the mix's own
 
 
 def test_score_copies_explained():

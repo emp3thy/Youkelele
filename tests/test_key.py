@@ -1,3 +1,4 @@
+import mir_eval.key
 import numpy as np
 import pytest
 
@@ -12,6 +13,8 @@ from youkelele.music.key import (
     POWER_MIN_SHARE,
     POWER_MODE_MARGIN,
     SECTION_END_WEIGHT,
+    SET_VETO_MARGIN,
+    best_major_set,
     decide_tonic,
     estimate_key,
     hedge_text,
@@ -24,6 +27,8 @@ from youkelele.music.key import (
     pair_rule_note,
     pair_shares,
     power_chord_events,
+    relation,
+    relative_key,
     tonic_chord_mode,
     tonic_scores,
     tonic_votes_note,
@@ -239,11 +244,12 @@ def test_pair_tie_break_weighs_only_candidates_close_on_score():
     assert shares["G"] == pytest.approx(1.0)
     assert shares["D"] == pytest.approx(7.5 / 9) and shares["A"] == pytest.approx(7.5 / 9)
     chroma = _triad_chroma((2, 6, 9))
-    key = key_from_chords(events, bars, sections, chroma, MIX)
-    assert (key.tonic, key.runner_up) == ("D", "A")  # the D/A pair tie goes to the chroma
     decision = decide_tonic(events, bars, sections, chroma)
+    assert (decision.tonic, decision.runner_up) == ("D", "A")  # the D/A pair tie goes to the chroma
     assert decision.rule == "pair rule"
     assert decision.pair_tonic == "G"  # the record over every candidate still names G
+    # the G major set then beats D's pair share by 0.167: the set veto names G (spec 1.8, 7.1)
+    assert key_from_chords(events, bars, sections, chroma, MIX).tonic == "G"
 
 
 def test_minor_key_candidate_is_scored_by_its_minor_pair():
@@ -381,10 +387,10 @@ def test_hedge_mode_tie_is_decided_by_the_hedge_tonics_own_chords():
     chroma = np.roll(KRUMHANSL_MAJOR, 5) + 1.2 * np.roll(KRUMHANSL_MINOR, 5)
     mode, margin = mode_at("F", chroma)
     assert mode == "minor" and margin < MODE_TIE_MARGIN
-    labels = ["G:maj", "C:maj", "D:maj", "G:maj"] * 3 + ["F:maj"]
-    events, bars, sections = _events(labels), _bars(len(labels)), _sections([4, 4, 5])
+    labels = ["C:maj", "F:maj", "G:maj", "C:maj"] * 3
+    events, bars, sections = _events(labels), _bars(len(labels)), _sections([4, 4, 4])
     key = key_from_chords(events, bars, sections, chroma, Key(tonic="F", mode="minor", confidence=0.1))
-    assert key.tonic == "G" and hedge_tonic(key) == "F"
+    assert key.tonic == "C" and hedge_tonic(key) == "F"
     assert key.hedge_mode == "major" and hedge_text(key) == "F major"
 
 
@@ -394,12 +400,14 @@ def test_hedge_text_for_files_written_before_the_hedge_mode():
                 mode_margin=0.3, runner_up="C", mix=Key(tonic="A", mode="minor", confidence=0.1))
     assert close.hedge_mode is None and hedge_text(close) == "C minor"
     mix_only = close.model_copy(
-        update={"margin": 0.2, "mix": Key(tonic="F", mode="major", confidence=0.1)}
+        update={"margin": 0.2, "mix": Key(tonic="C", mode="major", confidence=0.1)}
     )
-    assert hedge_text(mix_only) == "F major" and key_text(mix_only) == "A minor (or F major)"
+    assert hedge_text(mix_only) == "C major" and key_text(mix_only) == "A minor (or C major)"
     # a stored mode wins over the mix's own
-    stored = mix_only.model_copy(update={"hedge_mode": "minor"})
-    assert hedge_text(stored) == "F minor"
+    stored = mix_only.model_copy(
+        update={"mix": Key(tonic="C", mode="minor", confidence=0.1), "hedge_mode": "major"}
+    )
+    assert hedge_text(stored) == "C major"
     assert hedge_text(close.model_copy(update={"margin": 0.2})) is None
 
 
@@ -428,10 +436,10 @@ def test_pair_rule_note_names_a_chroma_tie_as_a_tie():
 bars = _bars(12)
 sections = _sections([12])
 # shaped like Need You Tonight: C holds half the chord time and ends the song, so the score
-# names C by a wide margin; A# major and G minor are diatonic to F major, not to C major, so
-# the pair rule names F (1.0 against 10.5 / 12)
+# names C by a wide margin; A# major is diatonic to F major, not to C major, so the pair rule
+# names F (1.0 against 11 / 12), within SET_VETO_MARGIN, so the set vetoes neither
 events_score_c_pair_f = _events(
-    ["C:maj", "F:maj", "C:maj", "A#:maj", "C:maj", "F:maj", "C:maj", "G:min", "F:maj", "C:maj",
+    ["C:maj", "F:maj", "C:maj", "A#:maj", "C:maj", "F:maj", "C:maj", "D:min", "F:maj", "C:maj",
      "F:maj", "C:maj"]
 )
 # every chord diatonic to G major, G holding half the time: the score and the pair rule agree
@@ -459,7 +467,10 @@ def test_two_of_three_mix_decides_when_the_chord_rules_disagree():
     decision = decide_tonic(events_score_c_pair_f, bars, sections, chroma_f, mix_tonic="F")
     assert (decision.tonic, decision.score_tonic, decision.pair_tonic) == ("F", "C", "F")
     key, _ = key_and_decision(events_score_c_pair_f, bars, sections, chroma_f, mix_key_f)
-    assert key.tonic_votes == TonicVotes(score="C", pair="F", mix="F", decided_by="mix")
+    assert key.tonic_votes == TonicVotes(
+        score="C", pair="F", mix="F", decided_by="mix", set_tonic="F", set_share_best=1.0,
+        set_share_decided=1.0,
+    )
     assert key_text(key) == "F major (or C major)"
 
 
@@ -496,7 +507,9 @@ def test_mix_siding_with_the_score_still_hedges_the_pair_rule():
     mix_key_c = Key(tonic="C", mode="major", confidence=0.2)
     key, _ = key_and_decision(events_score_c_pair_f, bars, sections, chroma_f, mix_key_c)
     assert key.pair_tonic == "F"
-    assert key.tonic_votes == TonicVotes(score="C", pair="F", mix="C", decided_by="mix")
+    votes = key.tonic_votes
+    assert (votes.score, votes.pair, votes.mix, votes.decided_by) == ("C", "F", "C", "mix")
+    assert votes.set_tonic == "F" and votes.set_share_decided == pytest.approx(11 / 12)
     # the score margin is clear and the mix agrees: only the losing chord rule hedges
     assert hedged(key) and hedge_tonic(key) == "F" and key_text(key) == "C major (or F major)"
 
@@ -514,9 +527,9 @@ def test_decision_records_the_score_tonic_and_who_decided():
 
 
 def test_hedge_rungs_in_order():
-    votes = TonicVotes(score="C", pair="F", mix="G", decided_by="mix")
+    votes = TonicVotes(score="C", pair="F", mix="A#", decided_by="mix")
     key = Key(tonic="F", mode="major", confidence=0.3, method="chords_stems", margin=0.2,
-              mode_margin=0.3, runner_up="C", mix=Key(tonic="G", mode="major", confidence=0.1),
+              mode_margin=0.3, runner_up="C", mix=Key(tonic="A#", mode="major", confidence=0.1),
               pair_tonic="F", tonic_votes=votes, hedge_mode="major")
     # rung 2 before rung 3: the losing chord rule, not the mix
     assert hedged(key) and hedge_tonic(key) == "C" and key_text(key) == "F major (or C major)"
@@ -528,7 +541,7 @@ def test_hedge_rungs_in_order():
         settled = key.model_copy(
             update={"tonic_votes": votes.model_copy(update={"decided_by": decided_by})}
         )
-        assert hedge_tonic(settled) == "G"  # the mix differs: rung 3
+        assert hedge_tonic(settled) == "A#"  # the mix differs: rung 3
         same_mix = settled.model_copy(update={"mix": Key(tonic="F", mode="major", confidence=0.1)})
         assert not hedged(same_mix) and hedge_tonic(same_mix) is None
     # the score led: the pair rule's tonic
@@ -540,9 +553,130 @@ def test_hedge_rungs_in_order():
 
 def test_tonic_votes_note_prints_none_for_a_missing_vote():
     key, _ = key_and_decision(events_score_c_pair_f, bars, sections, chroma_f, mix_key_f)
-    assert tonic_votes_note(key) == "score C, pair F, mix F, decided by mix"
+    assert tonic_votes_note(key) == "score C, pair F, mix F, decided by mix, set F (1.000 vs 1.000)"
     no_mix = key.model_copy(
-        update={"tonic_votes": key.tonic_votes.model_copy(update={"mix": None})}
-    )
+        update={"tonic_votes": TonicVotes(score="C", pair="F", decided_by="mix")}
+    )  # a file before 1.8 has no set vote either
     assert tonic_votes_note(no_mix) == "score C, pair F, mix none, decided by mix"
     assert tonic_votes_note(MIX) == "none"  # a mix key, or a file before 1.5, has no votes
+
+
+# --- the diatonic-set veto, the relative-key hedge and the key relation (spec 1.8, section 7) ---
+
+# shaped like Badge: D holds the most chord time, but every chord fits the G major set; A is
+# minor (ii of G), which D major's own set credits at half
+BADGE_SHARES = {"D:maj": 34, "A:min": 21, "E:min": 17, "C:maj": 13, "G:maj": 11, "B:min": 4}
+events_badge = _events([label for label, n in BADGE_SHARES.items() for _ in range(n)])
+bars_badge, sections_badge = _bars(100), _sections([100])
+
+
+def test_best_major_set_names_the_set_that_holds_the_whole_stream():
+    events = _events(["A:min", "D:maj", "E:min", "C:maj", "G:maj", "B:min"])
+    tonic, share = best_major_set(events)
+    assert tonic == "G" and share == pytest.approx(1.0)
+    # the relative pair ties in pair_shares; the major set is named explicitly
+    shares = pair_shares(events, ["E", "G"])
+    assert shares["E"] == pytest.approx(shares["G"])
+
+
+def test_set_veto_replaces_a_dominant_heavy_tonic_with_the_sets_major_tonic():
+    assert SET_VETO_MARGIN == 0.10
+    decision = decide_tonic(events_badge, bars_badge, sections_badge, chroma_g, mix_tonic="D")
+    assert decision.tonic == "D"  # the three votes alone name D
+    key, vetoed = key_and_decision(events_badge, bars_badge, sections_badge, chroma_g, mix_key_d)
+    assert (key.tonic, key.mode) == ("G", "major")
+    votes = key.tonic_votes
+    assert votes.decided_by == "set" and vetoed.decided_by == "set"
+    assert votes.set_tonic == "G"
+    assert votes.set_share_best - votes.set_share_decided >= SET_VETO_MARGIN
+    assert votes.set_share_best == pytest.approx(1.0)
+    assert votes.set_share_decided == pytest.approx(pair_shares(events_badge, ["D"])["D"])
+    assert key.margin == pytest.approx(votes.set_share_best - votes.set_share_decided)
+    assert key.runner_up is None and vetoed.runner_up is None and vetoed.tonic == "G"
+    # the hedge is the relative key by construction
+    assert key.hedge_mode == "minor" and hedge_text(key) == "E minor"
+    assert key_text(key) == "G major (or E minor)"
+
+
+def test_set_veto_compares_pair_shares_not_the_tonics_own_major_set():
+    # C# minor: its own major set holds only the half-credited C#m, but its pair (E major's
+    # set) holds every chord, so the best set (E) does not beat it
+    events = _events(["E:maj"] * 2 + ["A:maj"] * 2 + ["B:maj"] * 2 + ["C#:min"] * 4)
+    decision = decide_tonic(events, _bars(10), _sections([10]), MINOR_STEMS, MIX.tonic)
+    key, after = key_and_decision(events, _bars(10), _sections([10]), MINOR_STEMS, MIX)
+    assert key.tonic == "C#" and after.decided_by == decision.decided_by != "set"
+    assert key.tonic_votes.decided_by == decision.decided_by
+    assert key.tonic_votes.set_tonic == "E"
+    assert key.tonic_votes.set_share_best == pytest.approx(1.0)
+    assert key.tonic_votes.set_share_decided == pytest.approx(1.0)
+
+
+def test_set_veto_does_not_fire_within_the_margin():
+    # A minor is ii of G, half-credited in D major's set: the best set (G) beats D's pair
+    # share by 0.05
+    labels = ["A:min"] * 2 + ["E:min"] * 4 + ["G:maj"] * 4 + ["B:min"] * 2 + ["D:maj"] * 8
+    events = _events(labels)
+    key, decision = key_and_decision(events, _bars(20), _sections([20]), chroma_d, MIX)
+    assert key.tonic == "D" and decision.decided_by != "set"
+    votes = key.tonic_votes
+    assert votes.decided_by != "set" and votes.set_tonic == "G"
+    assert votes.set_share_best == pytest.approx(1.0)
+    assert votes.set_share_best - votes.set_share_decided == pytest.approx(0.05)
+
+
+def test_set_veto_with_no_chord_time_or_too_few_events_leaves_the_mix_key():
+    events = _events(["N"] * 4 + ["G:maj", "C:maj", "D:maj"])
+    key, decision = key_and_decision(events, _bars(7), _sections([7]), chroma_g, MIX)
+    assert key == MIX and decision is None
+    assert best_major_set(_events(["N"] * 4)) == ("C", 0.0)
+    assert best_major_set([]) == ("C", 0.0)
+
+
+def test_relation_matches_mir_eval_categories():
+    weights = {"same": 1.0, "fifth": 0.5, "relative": 0.3, "parallel": 0.2, "other": 0.0}
+    for a, b, expect in [
+        (("G", "major"), ("D", "major"), "fifth"),
+        (("G", "major"), ("E", "minor"), "relative"),
+        (("G", "major"), ("G", "minor"), "parallel"),
+        (("G", "major"), ("A", "major"), "other"),
+        (("G", "major"), ("G", "major"), "same"),
+    ]:
+        assert relation(*a, *b) == expect
+        assert mir_eval.key.weighted_score(f"{a[0]} {a[1]}", f"{b[0]} {b[1]}") == weights[expect]
+    # a fifth either way, and the relative pair either way round
+    assert relation("D", "major", "G", "major") == "fifth"
+    assert relation("E", "minor", "G", "major") == "relative"
+    assert relation("G", "minor", "E", "major") == "other"
+
+
+def test_relative_key_both_ways():
+    assert relative_key("G", "major") == ("E", "minor") and relative_key("E", "minor") == ("G", "major")
+    assert relative_key("C", "major") == ("A", "minor") and relative_key("C#", "minor") == ("E", "major")
+
+
+def test_an_unrelated_hedge_is_dropped_but_a_fifth_hedge_stays():
+    base = Key(tonic="G", mode="major", confidence=0.3, method="chords_stems", margin=0.2,
+               mode_margin=0.3, runner_up="C", hedge_mode="major")
+    second = base.model_copy(update={"mix": Key(tonic="A", mode="major", confidence=0.1)})
+    assert hedge_tonic(second) is None and hedge_text(second) is None
+    assert not hedged(second) and key_text(second) == "G major"
+    fifth = base.model_copy(update={"mix": Key(tonic="D", mode="major", confidence=0.1)})
+    assert hedge_tonic(fifth) == "D" and key_text(fifth) == "G major (or D major)"
+    # on a close margin an unrelated hedge stays
+    close = second.model_copy(update={"margin": 0.01, "runner_up": None})
+    assert hedge_tonic(close) == "A"
+    # end to end: the mix names A major against a clear G; nothing is hedged or stored
+    key, _ = key_and_decision(events_clear_g, bars, sections, chroma_g,
+                              Key(tonic="A", mode="major", confidence=0.2))
+    assert key.tonic == "G" and key.margin >= KEY_HEDGE_MARGIN
+    assert key_text(key) == "G major" and key.hedge_mode is None
+
+
+def test_tonic_votes_note_prints_the_set():
+    key, _ = key_and_decision(events_badge, bars_badge, sections_badge, chroma_g, mix_key_d)
+    votes = key.tonic_votes
+    assert tonic_votes_note(key) == (
+        f"score D, pair A, mix D, decided by set, "
+        f"set G ({votes.set_share_best:.3f} vs {votes.set_share_decided:.3f})"
+    )
+    assert tonic_votes_note(key).endswith("set G (1.000 vs 0.765)")
