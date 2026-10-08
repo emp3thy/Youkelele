@@ -12,8 +12,8 @@ from pathlib import Path
 
 from youkelele.jsonio import ArtifactError
 from youkelele.manifest import Manifest, load_manifest
-from youkelele.models.ytdl import fetch_metadata
-from youkelele.titles import clean_title
+from youkelele.models.ytdl import METADATA_FIELDS, fetch_metadata
+from youkelele.titles import resolve_credits
 
 DEFAULT_RUNS_DIR = "runs"
 # The video details fetched to name a new run folder; ingest reuses them. Not a stage artefact.
@@ -175,19 +175,16 @@ def _free_folder(runs_dir: Path, base: str, source: str, video_id: str | None) -
     return candidate
 
 
-_METADATA_FIELDS = ("id", "title", "uploader", "artist", "duration")
-
-
 def resolve_run_dir(
     runs_dir: Path, source: str, fetch: Callable[[str], dict] = fetch_metadata
 ) -> tuple[Path, dict | None]:
     """The run folder for a source, and the video details when they had to be fetched.
 
     A saved run for the source is found by scanning manifests, with no network. A local
-    file is named after its stem; a URL after its cleaned title, read by `fetch` without
-    downloading, or its video id when the title leaves nothing. A name already used by
-    another source gets -2, -3. Fetched details are saved beside the manifest as
-    source_meta.json for ingest to reuse."""
+    file is named after its stem; a URL after the title `resolve_credits` gives its details,
+    read by `fetch` without downloading, or its video id when the title leaves nothing. A
+    name already used by another source gets -2, -3. Fetched details are saved beside the
+    manifest as source_meta.json for ingest to reuse."""
     runs_dir = Path(runs_dir)
     found = find_run_dir(runs_dir, source)
     if found is not None:
@@ -196,9 +193,8 @@ def resolve_run_dir(
         base = title_slug(_stem(source)) or slug_for(source)
         return _free_folder(runs_dir, base, source, None), None
     fetched = fetch(source)
-    meta = {field: fetched.get(field) for field in _METADATA_FIELDS}
-    raw_artist = meta["artist"] or meta["uploader"]
-    base = title_slug(clean_title(meta["title"] or "", raw_artist))
+    meta = {field: fetched.get(field) for field in METADATA_FIELDS}
+    base = title_slug(resolve_credits(meta).title)
     if not base:
         video_id = video_id_for(source)
         base = video_id.lower() if video_id else title_slug(str(meta["id"] or "")) or slug_for(source)

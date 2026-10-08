@@ -13,6 +13,7 @@ from youkelele.layout import SOURCE_META_NAME, RunLayout
 from youkelele.models import ytdl
 from youkelele.models.ffmpeg import to_wav
 from youkelele.models.ytdl import (
+    METADATA_FIELDS,
     DownloadError,
     DownloadResult,
     MetadataError,
@@ -52,6 +53,7 @@ def test_ingest_local_file_writes_wav_and_source(tmp_path):
     assert info.title == "My Song" and info.raw_title == "My Song"
     assert info.path == str(src)
     assert info.url is None and info.artist is None and info.video_id is None
+    assert (info.title_source, info.artist_source, info.provenance) == ("file", "file", None)
     assert (info.duration, info.sample_rate, info.channels) == (12.5, 44100, 2)
 
 
@@ -62,7 +64,7 @@ def test_ingest_url_uses_downloader_and_info(tmp_path):
         calls.append(url)
         audio = out_dir / "source.webm"
         audio.write_bytes(b"x")
-        return DownloadResult(audio, {"id": "abc", "title": "T", "artist": "A"})
+        return DownloadResult(audio, {"id": "abc", "title": "T", "uploader": "A"})
 
     stage = IngestStage(downloader=downloader, converter=_copy, prober=lambda _p: 3.0)
     ctx = _ctx(tmp_path, "https://youtu.be/abc", stage)
@@ -71,6 +73,7 @@ def test_ingest_url_uses_downloader_and_info(tmp_path):
     assert sorted(p.name for p in ctx.out_dir.iterdir()) == ["audio.wav", "source.json"]
     info = load_model(ctx.out_dir / "source.json", SourceInfo)
     assert (info.video_id, info.title, info.artist) == ("abc", "T", "A")
+    assert (info.title_source, info.artist_source, info.uploader) == ("title", "uploader", "A")
     assert info.url == "https://youtu.be/abc" and info.path is None
 
 
@@ -159,6 +162,50 @@ def test_ingest_accepts_saved_details_matching_the_url_id(tmp_path):
     assert (info.video_id, info.title) == ("eFjjO_lhf9c", "All Fired Up")
 
 
+def _run_with_fetched(tmp_path, fetched, downloaded):
+    def downloader(url, out_dir):
+        audio = out_dir / "source.webm"
+        audio.write_bytes(b"x")
+        return DownloadResult(audio, downloaded)
+
+    stage = IngestStage(downloader=downloader, converter=_copy, prober=lambda _p: 3.0)
+    tmp_path.mkdir()
+    ctx = _ctx(tmp_path, "https://youtu.be/xyz", stage)
+    ctx.layout.run_dir.mkdir()
+    (ctx.layout.run_dir / SOURCE_META_NAME).write_text(json.dumps(fetched), encoding="utf-8")
+    stage.run(ctx)
+    return load_model(ctx.out_dir / "source.json", SourceInfo)
+
+
+def test_ingest_merges_fetched_details_over_the_download_info_and_records_sources(tmp_path):
+    fetched = {
+        "id": "xyz",
+        "title": "The Beatles - Day Tripper (Official Video)",
+        "uploader": None,  # absent from the fetch: the download's value stays
+        "uploader_id": "@goldsongs7948",
+        "channel": "Natan Santos",
+        "track": None,
+        "artists": None,
+    }
+    downloaded = {"id": "xyz", "title": "Other - Thing", "uploader": "Natan Santos"}
+    info = _run_with_fetched(tmp_path / "blind", fetched, downloaded)
+    assert (info.title, info.artist, info.raw_title) == ("Day Tripper", "The Beatles", fetched["title"])
+    assert (info.uploader, info.channel) == ("Natan Santos", "Natan Santos")
+    assert (info.title_source, info.artist_source) == ("title", "title")
+    assert (info.credited_artist, info.credited_track) == (None, None)
+    assert info.provenance == "Natan Santos"
+    # the artist's own channel: the same disagreement prints no provenance line
+    own = {**fetched, "uploader_id": "@TheBeatlesVEVO", "channel": "The Beatles VEVO"}
+    info = _run_with_fetched(tmp_path / "own", own, downloaded)
+    assert (info.artist, info.artist_source, info.provenance) == ("The Beatles", "title", None)
+    # credited track and artists decide both, and are recorded
+    credited = {**fetched, "track": "Day Tripper", "artists": ["The Beatles"]}
+    info = _run_with_fetched(tmp_path / "credited", credited, downloaded)
+    assert (info.title, info.artist) == ("Day Tripper", "The Beatles")
+    assert (info.title_source, info.artist_source) == ("credited", "credited")
+    assert (info.credited_artist, info.credited_track) == ("The Beatles", "Day Tripper")
+
+
 def test_fetch_metadata_reads_details_without_downloading(monkeypatch):
     seen = {}
 
@@ -174,11 +221,19 @@ def test_fetch_metadata_reads_details_without_downloading(monkeypatch):
 
         def extract_info(self, url, download=True):
             seen["download"] = download
-            return {"id": "abc", "title": "T", "uploader": "U", "duration": 9.0, "formats": []}
+            return {
+                "id": "abc", "title": "T", "uploader": "U", "uploader_id": "@u", "channel": "U",
+                "artists": ["A", "B"], "track": "T", "duration": 9.0, "formats": [],
+            }
 
     monkeypatch.setattr(ytdl.yt_dlp, "YoutubeDL", FakeYDL)
     meta = fetch_metadata("https://youtu.be/abc")
-    assert meta == {"id": "abc", "title": "T", "uploader": "U", "artist": None, "duration": 9.0}
+    assert tuple(meta) == METADATA_FIELDS
+    assert meta == {
+        "id": "abc", "title": "T", "uploader": "U", "uploader_id": "@u", "channel": "U",
+        "channel_id": None, "artist": None, "artists": ["A", "B"], "track": "T", "album": None,
+        "release_year": None, "duration": 9.0,
+    }
     assert seen["download"] is False and seen["opts"]["skip_download"] is True
 
 
