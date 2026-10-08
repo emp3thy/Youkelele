@@ -104,3 +104,13 @@ def test_line_width_and_a_short_tail():
     assert line_width(bars, 0, 8, M44) == 8
     assert [len(l.bars) for l in pack_lines(_section(bars), 8, M44)] == [8, 3]
     assert all(l.repeat == 1 for l in pack_lines(_section(bars), 8, M44))
+
+
+def test_a_partial_pickup_never_folds_into_a_full_bar():
+    # spec 3.2: a partial bar draws fewer columns, so a line holding one is not the full line
+    full = pack_lines(_section(_cycle("C", 4)), 16, M44)
+    partial = pack_lines(_section(_cycle("C", 4)), 16, M44)
+    partial[0].bars[0] = partial[0].bars[0].model_copy(update={"pickup_slots": 2})
+    folded = fold_repeats(partial + full)
+    assert [l.repeat for l in folded] == [1, 1] and folded[0].bars[0].pickup_slots == 2
+    assert len(fold_repeats(partial + partial)) == 1

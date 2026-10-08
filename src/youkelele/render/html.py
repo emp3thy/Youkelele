@@ -29,6 +29,9 @@ POWER_LEGEND = "{name} is a power chord on the record"
 POWER_LEGEND_EASY = "{name} is a power chord (root and fifth) on the record; this sheet prints the triad."
 FILLED_NOTE = "Italic chords were inferred where the recording had no clear chord"
 TAB_LEGEND = "Tab: A E C G top to bottom; numbers are frets. Re-entrant tuning: G is the high string."
+# the two editorial legend lines every sheet prints (1.8 spec 3.1), verbatim
+STROKE_LEGEND = "Stroke length is not measured: hold or damp each stroke as the record does."
+DIRECTION_LEGEND = "Arrows follow the hand: down on the beat, up between. Direction is not read from the recording."
 _OCTAVES = {1: "an octave", 2: "two octaves", 3: "three octaves"}
 
 
@@ -130,7 +133,8 @@ def _section_lines(section: ScoreSection, score: Score, power_badge: bool) -> li
 
     A line's slot width follows how many bars its kind of line holds (four or eight), so a
     short last line keeps its section's bar size; a line with any tab bar draws the tab block
-    on all its bars, so they stand level.
+    on all its bars, so they stand level. The count row goes under the line's first full bar,
+    so a line that starts with a partial pickup still counts from "1" (1.8 spec 3.2).
     """
     spb, meter = score.slots_per_bar, score.meter
     lines = pack_lines(section, spb, meter)
@@ -143,11 +147,12 @@ def _section_lines(section: ScoreSection, score: Score, power_badge: bool) -> li
     for line in fold_repeats(lines):
         per_slot = slot_px(spb, widths[id(line.bars)])
         tab_rows = any(bar.tab is not None for bar in line.bars)
+        count_index = next((i for i, bar in enumerate(line.bars) if bar.pickup_slots is None), 0)
         svgs = [
             Markup(
                 bar_svg(
-                    bar, meter, spb, per_slot, first_in_line=i == 0, grey=bar.grey,
-                    tab_rows=tab_rows, power_badge=power_badge,
+                    bar, meter, spb, per_slot, first_in_line=i == count_index, grey=bar.grey,
+                    tab_rows=tab_rows, power_badge=power_badge, pickup_slots=bar.pickup_slots,
                 )
             )
             for i, bar in enumerate(line.bars)
@@ -212,5 +217,6 @@ def render_html(score: Score) -> str:
         power_badge=power_badge,
         power_lines=power_lines,
         tab_legend=TAB_LEGEND if any_tab else None,
+        editorial_legend=[STROKE_LEGEND, DIRECTION_LEGEND],  # on every sheet (1.8 spec 3.1)
         sections=sections,
     )

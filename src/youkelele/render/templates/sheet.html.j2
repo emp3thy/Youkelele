@@ -12,6 +12,7 @@
   header.sheet-head { border-bottom: 2px solid var(--ink); padding-bottom: 4mm; margin-bottom: 4mm; }
   header h1 { font-size: 22pt; margin: 0 0 2px 0; }
   header .artist { font-size: 13pt; color: var(--muted); margin: 0 0 6px 0; }
+  header .provenance { font-size: 10pt; margin-top: -4px; }
   .facts { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 10pt; }
   .facts b { font-weight: 600; }
   .note { color: var(--note); font-size: 9.5pt; margin-top: 4px; }
@@ -45,6 +46,7 @@
   <header class="sheet-head">
     <h1>{{ score.title }}</h1>
     {% if score.artist %}<p class="artist">{{ score.artist }}</p>{% endif %}
+    {% if score.provenance %}<p class="artist provenance">uploaded by {{ score.provenance }}</p>{% endif %}
     <div class="facts">
       <span><b>Key</b> {{ key_fact }}</span>
       <span><b>Capo</b> {{ capo }}</span>
@@ -76,6 +78,9 @@
   {% if tab_legend is not none %}
   <p class="tab-legend">{{ tab_legend }}</p>
   {% endif %}
+  {% for line in editorial_legend %}
+  <p class="tab-legend editorial">{{ line }}</p>
+  {% endfor %}
 
   <div class="sections">
   {% for section in sections %}
