@@ -25,6 +25,11 @@ UNCERTAIN_BELOW_SIXTEENTH = 0.53
 # (spec 4.5). No code reads it any more: it is kept so that what `inherited_from` meant in a
 # 1.5 file stays documented.
 MIN_SECTION_BARS = 4
+# A slot prints only when at least this many bars strike it: at two bars "more than a third"
+# is one strike, so a slot struck once would print as the union (spec 5.2). Band 2 to 3.
+MIN_SLOT_SUPPORT = 2
+# A section with fewer bars than this is not voted; the stage applies it (spec 5.4).
+MIN_VOTE_BARS = MIN_SECTION_BARS
 STAGE_UNCERTAIN_GRID_FIT = 0.6  # the whole stage is uncertain below this grid fit
 STRIKE_SHARE = 1 / 3  # a slot struck in more than this share of a section's bars is kept
 DENSITY_FLOOR = 0.6  # the pattern keeps at least this share of the median strikes per bar
@@ -69,7 +74,7 @@ def majority_vector(
     for j in range(len(bars[0])):
         strikes = sum(1 for bar in bars if bar[j] != "-")
         mutes = sum(1 for bar in bars if bar[j] == "x")
-        if strikes > threshold * n:
+        if strikes > threshold * n and strikes >= MIN_SLOT_SUPPORT:
             out.append("x" if mutes > strikes / 2 else "S")
         else:
             out.append("-")

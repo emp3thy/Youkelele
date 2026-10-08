@@ -9,7 +9,7 @@ voted over two-bar units instead.
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Literal, TypeVar
 
 import numpy as np
@@ -22,6 +22,9 @@ T = TypeVar("T")
 HYBRID_DELTA = 0.04  # the medoid must beat the majority by at least this mean agreement
 MEDOID_MIN_STROKES = 2  # a medoid needs at least this many `S` cells (mutes do not count)
 PERIOD2_MARGIN = 0.10  # the two-bar medoid must beat the one-bar medoid by at least this
+# A two-bar vote needs this many pairs: with two, the "majority" is the union of the bars
+# (spec 5.1). Band 3 to 4; ear-passed two-bar members have four to eight pairs.
+PERIOD2_MIN_PAIRS = 3
 PERIOD2_MIN_STRIKES = 2  # each bar of the best pair needs this many non-rest cells
 
 
@@ -32,6 +35,10 @@ class VoteResult:
     score_majority: float
     score_medoid: float
     unit: int
+    # Positions into the `bars` argument: the bars the vote counted and the bars it left out
+    # (an odd bar before or after the pairs of a unit-2 vote; spec 5.4).
+    voted: list[int] = field(default_factory=list)
+    dropped: list[int] = field(default_factory=list)
 
 
 def medoid(bars: Sequence[Sequence[StrikeClass]]) -> tuple[list[StrikeClass], float]:
@@ -97,6 +104,8 @@ def unit_and_phase(bars: Sequence[Sequence[StrikeClass]]) -> tuple[int, int]:
     unit 1), so the vote pairs bars in the same phase as the pair the floor tested."""
     if period_margin(bars) < PERIOD2_MARGIN:
         return 1, 0
+    if len(_pairs(bars, best_pair(bars)[0] % 2)) < PERIOD2_MIN_PAIRS:  # spec 5.1
+        return 1, 0
     start, _ = best_pair(bars)
     for bar in bars[start : start + 2]:
         if sum(1 for c in bar if c != "-") < PERIOD2_MIN_STRIKES:
@@ -127,12 +136,16 @@ def choose_pattern(bars: Sequence[Sequence[StrikeClass]]) -> VoteResult:
     """
     unit, phase = unit_and_phase(bars)
     voted = _pairs(bars, phase) if unit == 2 else [list(b) for b in bars]
+    # Which bars the vote counted and which it left out (spec 5.4).
+    n_voted = len(voted) * unit
+    voted_pos = list(range(phase, phase + n_voted))
+    dropped_pos = [i for i in range(len(bars)) if i not in set(voted_pos)]
     med, score_medoid = medoid(voted)
     score_majority = majority_loo_score(voted)
     if (
         score_medoid - score_majority >= HYBRID_DELTA
         and sum(1 for c in med if c == "S") >= MEDOID_MIN_STROKES
     ):
-        return VoteResult(align_to_first_bar(med, unit, phase), "medoid", score_majority, score_medoid, unit)
+        return VoteResult(align_to_first_bar(med, unit, phase), "medoid", score_majority, score_medoid, unit, voted_pos, dropped_pos)
     vote = _topped_vote(voted)
-    return VoteResult(align_to_first_bar(vote, unit, phase), "majority", score_majority, score_medoid, unit)
+    return VoteResult(align_to_first_bar(vote, unit, phase), "majority", score_majority, score_medoid, unit, voted_pos, dropped_pos)
