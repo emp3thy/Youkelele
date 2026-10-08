@@ -121,6 +121,12 @@ def test_channel_is_artist_cases():
     assert channel_is_artist("@PatBenatarVEVO", None, "Pat Benatar") and channel_is_artist("@bryanadams", None, "Bryan Adams")
     assert channel_is_artist("@acdc", None, "AC/DC") and channel_is_artist(None, "Oasis - Topic", "Oasis")
     assert not channel_is_artist("@rhino", "RHINO", "The Cars") and not channel_is_artist("@goldsongs7948", "Natan Santos", "The Beatles")
+    assert channel_is_artist("@TheFratellisVEVO", None, "The Fratellis")
+
+
+def test_channel_is_artist_ignores_stopwords():
+    # "the" sits inside "southern": a stopword must not make the channel the artist's
+    assert not channel_is_artist("@southernrockhits", "Southern Rock Hits", "The Cars")
 
 
 def test_resolve_credits_rungs_and_provenance():
@@ -131,4 +137,4 @@ def test_resolve_credits_rungs_and_provenance():
     credited = resolve_credits({"title": "Fame (2016 Remaster)", "uploader": "David Bowie", "track": "Fame", "artists": ["David Bowie"]})
     assert (credited.title, credited.artist, credited.title_source) == ("Fame", "David Bowie", "credited")
     plain = resolve_credits({"title": "Song", "uploader": "Someone", "uploader_id": "@someone"})
-    assert (plain.artist, plain.artist_source, plain.provenance) == ("Someone", "uploader", None)
+    assert (plain.artist, plain.artist_source, plain.provenance) == ("Someone", "channel", None)

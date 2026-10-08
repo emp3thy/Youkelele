@@ -49,6 +49,9 @@ _SEPARATORS = (" - ", " – ", ": ")
 _MAX_PREFIX_WORDS = 4
 _MIN_SHARED_LETTERS = 3
 _TOPIC_SUFFIX = " - Topic"
+# Words of an artist's name too common to identify a channel: "the" sits inside "southern"
+# (spec 8.3).
+_STOPWORDS = frozenset({"the", "and", "of"})
 
 
 def _long_words(text: str) -> set[str]:
@@ -83,13 +86,14 @@ def channel_is_artist(uploader_id: str | None, channel: str | None, artist: str)
     """Whether the channel that uploaded the video is the artist's own (spec 8.3).
 
     True when the handle (`uploader_id`) or the channel name, casefolded with its
-    non-letters removed, contains a word of three or more letters from the artist's name,
-    or the whole name run together ("AC/DC" as "acdc", which no three-letter word can
-    pass), or when either ends in " - Topic", YouTube's auto-generated artist channel."""
+    non-letters removed, contains a word of three or more letters from the artist's name
+    other than a stopword ("the", "and", "of"), or the whole name run together ("AC/DC" as
+    "acdc", which no three-letter word can pass), or when either ends in " - Topic",
+    YouTube's auto-generated artist channel."""
     handles = [h for h in (uploader_id, channel) if h]
     if any(h.endswith(_TOPIC_SUFFIX) for h in handles):
         return True
-    words = _long_words(artist)
+    words = _long_words(artist) - _STOPWORDS
     whole = _letters(artist)
     for handle in map(_letters, handles):
         if any(word in handle for word in words):
@@ -194,12 +198,11 @@ def _comparable(name: str) -> str:
 def _channel_vouches(info: Mapping[str, object], uploader: str | None) -> bool:
     """Rung 3 of spec 8.2: the uploader is the artist when the channel passes spec 8.3.
 
-    A video whose details name no channel has no channel to vouch for the uploader, so the
-    rung is absent and the uploader rung decides."""
-    channel = _text(info.get("channel"))
-    if uploader is None or channel is None:
+    Either handle may pass (`uploader_id` or `channel`); with no uploader there is no
+    name for the rung to give, so it is absent."""
+    if uploader is None:
         return False
-    return channel_is_artist(_text(info.get("uploader_id")), channel, uploader)
+    return channel_is_artist(_text(info.get("uploader_id")), _text(info.get("channel")), uploader)
 
 
 def resolve_credits(info: Mapping[str, object]) -> Credits:
