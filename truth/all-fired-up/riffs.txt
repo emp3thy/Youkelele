@@ -1,7 +1,5 @@
 # Pat Benatar "All Fired Up": riff or strum per labelled section. Grid bars, 0-based, end exclusive.
 33 49 strum    # riff review C non-riff; 1.6 A8: an ear-confirmed riff-test false positive (pitch change 0.08)
 55 61 strum    # riff review C non-riff; 1.7 A1: the highest unflagged chroma passer (0.238), the strum below the band
-# 61 90 omitted, disputed: the 1.6 record (A8, improvement item 3) has the owner's ear calling it a riff ("the d D D DUD riff");
-#   1.7 sources: "All Fired Up 61-90" (songsterr s233897) has one rhythm guitar of chords and power-chord dyads, with the
-#   alignment uncertain (the tab's tempo puts these bars 20 s early); riff review C counts it "ear yes, source no", disputed.
+61 90 mixed    # disputed, both records kept: the 1.6 record (A8, improvement item 3; the 1.5 pass's clip 7) has the owner's ear calling it a riff ("the d D D DUD riff"); the 1.7 sources table, "All Fired Up 61-90" (songsterr s233897), says chords and power-chord dyads, alignment uncertain; riff review C: "ear yes, source no"
 97 104 riff    # 1.7 sources: "All Fired Up 97-104, riff member" agrees (continuous single-note sixteenth riff, songsterr s233897); riff review C

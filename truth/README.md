@@ -14,7 +14,7 @@ A tracked folder `truth/<run folder name>/` per song (run folders themselves are
 
 ## Conventions used in these files
 
-- Fields are separated by whitespace. `#` starts a comment anywhere on a line; blank and comment-only lines carry no record.
+- Fields are separated by whitespace. `#` starts a comment at the start of a line or after whitespace, so `C# minor` is a key; blank and comment-only lines carry no record, and a file with no record line counts as absent.
 - Bars are the grid's 0-based indices (`02_grid/grid.json`), as the validation records use them. Every range is end exclusive: `55 61` covers bars 55 to 60. The records write some ranges with an inclusive end (the 1.7 record's "bars 26-32" lists, the clip tables' "Bars" column); those are converted here and the comment says so where it matters.
 - A two-bar figure is two whitespace-separated bar strings, the first being the row the range's first bar should print. Strokes use the printed alphabet: `D` down, `U` up, `x` muted, `-` empty slot.
 - A figure is given only where the owner said the clicks fit (verdict YES): the figure is then the printed row the clip clicked, read from the run's `07_score/score.json`. The owner's prose descriptions of a wrong pattern are not turned into figures.
