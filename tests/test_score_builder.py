@@ -1246,7 +1246,9 @@ def test_score_maps_a_pickup_bars_strokes_and_chord_onto_its_columns():
     grid.bars[0] = grid.bars[0].model_copy(update={"beats": [0], "pickup": True})
     plan = [PlannedSection(start_bar=0, end_bar=4, label="Verse", members=[0])]
     bars = _bars((4, "D----D--", 0, False, False, False))
-    strums = _strums_with_plan(plan, [_pattern()]).model_copy(update={"bars": bars})
+    # the pickup's own row strikes at its first and fifth cells, spread over its one beat
+    onsets = [list("D---D---")] + [list("D----D--")] * 3
+    strums = _strums_with_plan(plan, [_pattern()]).model_copy(update={"bars": bars, "bar_onsets": onsets})
     score = build_score(_source(), grid, _C_CHORDS, strums, _C_ARRANGEMENT, Riffs(), UKULELE_TUNING, "Ukulele")
     pickup, full = score.sections[0].bars[0], score.sections[0].bars[1]
     assert pickup.pickup_slots == 2 and [k.slot for k in pickup.strokes] == [6, 7]
@@ -1256,19 +1258,43 @@ def test_score_maps_a_pickup_bars_strokes_and_chord_onto_its_columns():
     assert [c.start_slot for c in full.chords] == [0]
 
 
-def _pickup_score(cells: str):
+def _pickup_score(row: str, pattern: str = "D-D-D-D-", rests: bool = False):
+    """A two-bar song whose first bar is a one-beat pickup; ``row`` is the pickup's own quantised
+    onsets and ``pattern`` its member's voted pattern."""
     grid = _grid(2)
     grid.bars[0] = grid.bars[0].model_copy(update={"beats": [0], "pickup": True})
     plan = [PlannedSection(start_bar=0, end_bar=2, label="Verse", members=[0])]
-    strums = _strums_with_plan(plan, [_pattern()]).model_copy(update={"bars": _bars((2, cells, 0, False, False, False))})
+    bars = _bars((1, pattern, 0, False, False, False, rests), (1, pattern, 0, False, False, False))
+    onsets = [list(row), list(pattern)]
+    strums = _strums_with_plan(plan, [_pattern()]).model_copy(update={"bars": bars, "bar_onsets": onsets})
     return build_score(_source(), grid, _C_CHORDS, strums, _C_ARRANGEMENT, Riffs(), UKULELE_TUNING, "Ukulele")
 
 
 def test_pickup_strokes_take_their_direction_from_their_column_on_eighths():
-    # D---D---: the full bar's beats 1 and 3 land on the pickup's beat (column 6) and its "&" (column 7)
+    # D---D---: the pickup's own row strikes on its beat (column 6) and its "&" (column 7)
     pickup = _pickup_score("D---D---").sections[0].bars[0]
     assert [(k.slot, k.kind) for k in pickup.strokes] == [(6, "D"), (7, "U")]
     assert [(k.slot, k.kind) for k in _pickup_score("D-D-D-D-").sections[0].bars[0].strokes] == [(6, "D"), (7, "U")]
+
+
+def test_a_pickup_prints_its_own_onsets_not_its_members_pattern():
+    # one strike at the pickup's first cell; the member's D-DU-UDU would have squeezed to D U
+    pickup = _pickup_score("D-------", pattern=_ISLAND_CELLS).sections[0].bars[0]
+    assert [(k.slot, k.kind) for k in pickup.strokes] == [(6, "D")]
+    assert pickup.struck
+
+
+def test_a_pickup_whose_own_row_is_empty_prints_no_strokes_though_its_pattern_is_full():
+    score = _pickup_score("--------", pattern=_ISLAND_CELLS)
+    pickup, full = score.sections[0].bars[0], score.sections[0].bars[1]
+    assert pickup.strokes == [] and not pickup.struck
+    assert [c.start_slot for c in pickup.chords] == [6]  # the chord still starts on its column
+    assert [k.slot for k in full.strokes] == [0, 2, 3, 5, 6, 7]  # a full bar prints its pattern
+
+
+def test_a_resting_pickup_prints_nothing_even_with_onsets_in_its_row():
+    pickup = _pickup_score("D---D---", rests=True).sections[0].bars[0]
+    assert pickup.strokes == [] and pickup.rests
 
 
 def test_pickup_strokes_take_their_direction_from_their_column_on_sixteenths_and_muted_stays_muted():
