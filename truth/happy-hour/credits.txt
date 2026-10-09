@@ -1,0 +1,3 @@
+# The Housemartins "Happy Hour" (1.8 blind song): expected printed title, then artist.
+Happy Hour         # en.wikipedia.org/wiki/Happy_Hour_(The_Housemartins_song); songsterr.com/a/wsa/housemartins-happy-hour-tab-s197972
+The Housemartins   # same two sources

@@ -1,0 +1,4 @@
+# The Housemartins "Happy Hour" (1.8 blind song): per-bar activity on the guitar stem. Grid bars, 0-based, end exclusive.
+1 74 play   # Songsterr s197972: the rhythm guitar has notes in every tab bar from 1 to 112 (single held strokes in the stops and the last five bars)
+# Bar 0 (a two-beat pickup the chain rests at ratio 0.0008) omitted: under the time alignment it is tab bar 1, where
+# the rhythm guitar plays, but the alignment at the song's first beat is the least certain point; ear clip 20 decides.

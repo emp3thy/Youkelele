@@ -1,0 +1,2 @@
+# The Housemartins "Happy Hour" (1.8 blind song): key from published sources.
+Bb major songsterr-s197972   # the tab's bass track cycles Bb, D, Eb, F and opens and closes on Bb, and the guitar tracks' pitch classes are those of Bb major; chordu.com (automatic chord recognition, a weaker source) also names Bb major
