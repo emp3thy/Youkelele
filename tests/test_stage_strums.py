@@ -1297,5 +1297,7 @@ def test_an_odd_phase_two_bar_vote_is_not_its_own_rival(tmp_path):
     s = _run_stage(tmp_path, ["S-------"] + [A, B] * 4)
     p = s.patterns[0]
     assert p.unit == 2 and p.voted_bars == list(range(1, 9)) and p.dropped_bars == [0]
-    rotated = list(B + A)  # the printed two-bar figure in pair order
-    assert p.runner_up_vector != rotated and p.top2_margin > 0
+    # B + A is the printed figure in first-bar order (bar 0 takes the B cell), A + B the same
+    # figure in pair order; neither rotation may come back as the rival
+    assert s.bars[0].pattern == list(B_TEXT) and s.bars[1].pattern == list(A_TEXT)
+    assert p.runner_up_vector not in (list(A + B), list(B + A)) and p.top2_margin > 0

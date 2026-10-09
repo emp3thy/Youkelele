@@ -5,10 +5,16 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import numpy as np
 import pytest
 
+from tests.test_stage_strums import A, B, SILENT, _run_stage
+from tests.test_stage_strums import _chords as _stage_chords
+from tests.test_stage_strums import _grid as _stage_grid
 from youkelele.jsonio import save_model
 from youkelele.music import as_played, rests
+from youkelele.music.pitch import PitchTrack
+import youkelele.stages.strums as strums_module
 from youkelele.schemas import (
     Bar,
     BarStrums,
@@ -141,6 +147,29 @@ def test_sweep_restores_the_constant_after_running(tmp_path, monkeypatch):
     with pytest.raises(RuntimeError, match="scorer failed"):
         band_sweep.sweep("REST_RATIO_MIN", VALUES, runs, truths)
     assert rests.REST_RATIO_MIN == 0.05
+
+
+@pytest.mark.parametrize(
+    "stem_bars",
+    [
+        ["S-------"] + [A, B] * 4,  # a downbeat bar, then a two-bar figure whose pairs start at bar 1
+        [SILENT] + [A, B] * 4,  # the first bar rests: the two-bar phase starts at bar 1
+        [A, B] * 4 + [A, SILENT, A, B],  # an interior resting bar (9), the figure carrying on after it
+    ],
+    ids=["odd-phase", "odd-phase-after-a-rest", "interior-rest"],
+)
+def test_revote_reproduces_the_strums_stage(tmp_path, monkeypatch, stem_bars):
+    """`revote` claims to vote every member as the stage does; at the stage's own constants it
+    must give back the stage's printed patterns, certainty and every bar's printed row."""
+    monkeypatch.setattr(strums_module, "track_pitch", lambda y, sr: PitchTrack(times=np.zeros(0), midi=np.zeros(0)))
+    strums = _run_stage(tmp_path, stem_bars)
+    grid = _stage_grid([len(stem_bars)])
+    again = band_sweep.revote(strums, grid, _stage_chords(grid))
+    assert strums.patterns[0].unit == 2  # the cases exercise the two-bar phase
+    assert [p.slots for p in again.patterns] == [p.slots for p in strums.patterns]
+    assert [p.uncertain for p in again.patterns] == [p.uncertain for p in strums.patterns]
+    assert [b.pattern for b in again.bars] == [b.pattern for b in strums.bars]
+    assert [b.rests for b in again.bars] == [b.rests for b in strums.bars]
 
 
 def test_sweep_unknown_constant_is_a_clear_error(tmp_path, capsys):
