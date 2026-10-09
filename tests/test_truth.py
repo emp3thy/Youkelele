@@ -160,6 +160,28 @@ def test_score_patterns_reports_jaccard_swap_and_false_certain():
     assert score.printed == ["D-D-UUDU", "D-DU-UDU"] and score.jaccard == 1.0 and score.swap == 0
 
 
+def test_score_patterns_reads_a_range_from_its_first_bar_that_holds():
+    # a resting bar prints an empty black row and judges nothing (1.8 validation, Pour Some
+    # Sugar On Me 80-84): the range reads its printed row and certainty from its first
+    # holding bar, so a range whose strokes print grey is not a false certain
+    rested = _strums([_bar(0, REST, rests=True), _bar(1, WRONG, uncertain=True),
+                      _bar(2, WRONG, uncertain=True), _bar(3, REST, rests=True)])
+    (no,) = score_patterns([PatternTruth(0, 3, "NO", None)], rested, _grid())
+    assert no.printed == ["D-D-D-DU"] and no.certain is False
+    assert false_certain([no]) == 0
+
+    # a two-bar figure moved by an odd number of bars swaps its two bar strings, so it is
+    # compared in the printed rows' phase
+    phased = _strums([_bar(0, REST, rests=True), _bar(1, HEARD), _bar(2, OTHER), _bar(3, REST)])
+    (yes,) = score_patterns([PatternTruth(0, 4, "YES", ["D-D-UUDU", "D-DU-UDU"])], phased, _grid())
+    assert yes.printed == ["D-DU-UDU", "D-D-UUDU"] and yes.figure == ["D-DU-UDU", "D-D-UUDU"]
+    assert (yes.jaccard, yes.swap, yes.certain) == (1.0, 0, True)
+
+    # a range whose bars all rest reads its first bar, as before
+    (silent,) = score_patterns([PatternTruth(0, 1, "NO", None)], rested, _grid())
+    assert silent.printed == ["--------"] and silent.certain is True
+
+
 def test_score_flags_counts_mixed_as_a_hit_and_prints_both_baselines():
     truth = [RangeLabel(0, 2, "mixed"), RangeLabel(2, 3, "strum"), RangeLabel(3, 4, "bleed")]
     member_riff = _strums([_bar(0, HEARD, riff=True), _bar(1, HEARD, riff=True), _bar(2, HEARD),

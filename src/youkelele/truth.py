@@ -204,13 +204,27 @@ def _strikes(bars: Sequence[str]) -> list[str]:
     return [_STRIKE[c] for bar in bars for c in bar]
 
 
+def _first_holding(t: PatternTruth, records: dict[int, BarStrums]) -> int:
+    """The range's first bar that holds: a resting bar prints an empty black row and judges
+    nothing. A range whose recorded bars all rest reads its first bar."""
+    for i in range(t.start, t.end):
+        if i in records and not records[i].rests:
+            return i
+    return t.start
+
+
 def score_patterns(truth: list[PatternTruth], strums: Strums, grid: Grid) -> list[PatternScore]:
-    """Each judged range against the printed row of its first bar (two bars for a two-bar figure)."""
+    """Each judged range against the printed row of its first bar that holds (two bars for a
+    two-bar figure, whose bar strings are swapped when that bar sits an odd number of bars
+    after the range's start, so the figure is read in the printed rows' phase)."""
     records = _bars(strums, grid)
     scores = []
     for t in truth:
+        first = _first_holding(t, records)
+        if t.figure and len(t.figure) == 2 and (first - t.start) % 2:
+            t = PatternTruth(t.start, t.end, t.verdict, [t.figure[1], t.figure[0]])
         length = len(t.figure) if t.figure else 1
-        rows = [records[i] for i in range(t.start, t.start + length) if i in records]
+        rows = [records[i] for i in range(first, first + length) if i in records]
         printed = ["".join(r.pattern) for r in rows]
         comparable = t.figure is not None and len(printed) == len(t.figure) and all(
             len(p) == len(f) for p, f in zip(printed, t.figure)
