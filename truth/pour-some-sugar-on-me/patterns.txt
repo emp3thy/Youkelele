@@ -1,6 +1,7 @@
 # Def Leppard "Pour Some Sugar On Me": judged strum-pattern ranges. Grid bars, 0-based, end exclusive.
 # 1.6 clip 6 (held_verse_77) judged ring length, not the pattern: no line.
-1 7 NO         # 1.7 clip 11 changed_pssom_intro_1-7 (bars 1-6): "the clicks do not fit"
+1 6 YES DUDUDUDUDUD-D-DU   # 1.8 clip 17 changed_pssom_intro_1-8: "The first 14 seconds are absolutely correct" (bars 1-5 run 0.5 to 14.6 s in the clip); figure is the 1.8 printed row the clip clicked. The later verdict; 1.7 clip 11 judged the 1.7 row -UDUDUDUDUD-D-D- on bars 1-6 "the clicks do not fit"
+6 8 NO         # 1.8 clip 17: "at 16 seconds it keeps on clicking when it goes silent. The rhythm changes at 14 seconds and it keeps the same clicks even though the rhythm has changed." (bar 6 from 14.6 s, bar 7 from 17.5 s)
 19 27 MOSTLY   # 1.7 clip 12 changed_pssom_verse1_19-27 (bars 19-26): "the clicks almost fit; the only place it does not fit is at the very start of the repeated riff" (the record: "nearly right")
 55 63 NO       # 1.6 clip 19 changed_chorus_55-63: "wrong"
 # 67 77 omitted: 1.7 clip 8 flag_pssom_instrumental_67-77: "the clicks match the riff but you are also clicking over power chords";

@@ -1,4 +1,9 @@
 # Cream "Badge": riff or strum per labelled section. Grid bars, 0-based, end exclusive.
-4 28 bleed     # 1.7 clip 15: bass bleed on the guitar stem carries the melody and the riff flag follows it; 1.7 Badge: the source has a chord guitar here; riff review C
+# `bleed`: the guitar stem holds the bass as well as a guitar part (the separator left the bass stem empty from bar 4).
+# The 1.8 stem-alone clips (7 to 11) hear both on the stem in every gated section, the guitar high and the bass low.
+4 28 bleed     # 1.7 clip 15: bass bleed on the guitar stem carries the melody and the riff flag follows it; 1.7 Badge: the source has a chord guitar here; riff review C; 1.8 clip 10: "both, just as you describe. Bass carrying the melody and guitars cut-off single notes."
 28 34 riff     # 1.7 Badge: Instrumental 1 falls on the bridge's single-note arpeggio figure (Songsterr s4135) and its "riff heard" agrees with the source; riff review C
-61 70 bleed    # 1.7 clip 16: "the clicks do not fit", the same bass bleed as Verse 1; riff review C
+34 50 bleed    # 1.8 clip 7 gated_badge_chorus1_34-42_stem (bars 34-41): "both - guitar playing the main riff and bass in background (guitar high notes, bass quite low)."
+50 56 bleed    # 1.8 clip 8 gated_badge_instrumental2_50-56_stem: "both. Same thing - guitar high, bass low."
+56 61 bleed    # 1.8 clip 9 gated_badge_chorus2_56-61_stem: "both"
+61 70 bleed    # 1.7 clip 16: "the clicks do not fit", the same bass bleed as Verse 1; riff review C; 1.8 clip 11: "both - with the added complication that there is a lead guitar playing a solo and a rhythm guitar playing short, cut-off notes (solo is higher notes, cut off notes are lower)."

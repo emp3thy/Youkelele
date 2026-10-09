@@ -2,3 +2,4 @@
 0 11 dyad      # 1.7 sources: "The Cars 0-11, new riff flag": palm-muted eighth-note two-note power-chord dyads (songsterr s5011), agrees with the owner ("those are power chords"); riff review C: the dyad hook
 11 19 strum    # 1.6 A8: an ear-confirmed riff-test false positive (pitch change 0.15); riff review C non-riff
 52 68 riff     # 1.6 clip 33: Verse 3, "a riff by ear"; 1.7 sources: "The Cars 52-68, riff (1.6)" agrees (a staccato single-note lead riff, songsterr s5011); riff review C
+72 76 mixed    # 1.8 clip 18 changed_cars_instrumental_72-76: "You've got two guitars playing - a guitar solo (higher notes) and a rhythm guitar in the background."

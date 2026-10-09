@@ -63,6 +63,8 @@ A bar flagged `pickup` in `grid.json` (one with fewer beats than the meter) draw
 
 The state phrase list of 1.6 spec 3.2 gains one phrase: "guitar not separated here", printed when the longest member of a section fails the gate of section 6. The section's strokes print grey (they are the bass line's rhythm, which may still help a strummer), the chord row stays black, and no riff phrase or label prints for that member. The README's limitations say what it means.
 
+**Amended after validation (2026-10-09).** The strokes follow whatever the stem holds: the bass, a guitar, or both mixed. The listening pass on Badge's five gated sections (validation clips 7 to 16) heard a guitar part high and the bass low on the stem in every one, and the grey clicks followed the guitar riff on Chorus 1 and a mix, or neither part, on the other four; "the bass line's rhythm" above is not what prints. The phrase stays honest (the guitar is not separated there); the README limitation line says the strokes follow whatever the stem holds.
+
 ### 3.4 Title, artist and provenance
 
 The header prints the title and artist that section 8 resolves. When a lower rung disagreed with the chosen one, a line in the smaller face follows the artist: "uploaded by <uploader>". On a video whose uploader is the artist's own channel the names coincide and nothing extra prints.
