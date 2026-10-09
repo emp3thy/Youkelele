@@ -142,7 +142,7 @@ The gate: a section's longest member is `bass_on_stem` when `bass_stem_ratio <= 
 
 When the gate fires for a member: `_riff_test` returns False for it, `uncertain` is True, the rest rule's low-share test is skipped for its bars (the energy floor still applies), and the score builder prints the section phrase of 3.3 when that member is the longest. Nothing is subtracted from the stem. The figures are written on every member whether or not the gate fires, so the next blind song's band is measurable.
 
-**Amended after validation (2026-10-09).** The gate runs on the member's whole analysed span (the span the section-level cut reads), before the rest rule, so the gate does not depend on which bars rest; a gated member's bars then rest by the energy floor alone, the low-share test being skipped. `strums.json` writes the four figures on each planned section's pattern, which is its longest member's; a shorter member's figures and gate are computed by the stage but not written.
+**Amended after validation (2026-10-09).** The gate runs on the member's whole analysed span (the span the section-level cut reads), before the rest rule, so the gate does not depend on which bars rest; a gated member's bars then rest by the energy floor alone, the low-share test being skipped.
 
 Not done: part assignment on a polyphonic note list (two-parts review B2), repetition as the riff-versus-solo cue (B3), any other separator (B4). Fame, AC/DC and Day Tripper have clean bass stems and are untouched by this section.
 
