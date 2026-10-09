@@ -258,17 +258,21 @@ def score_flags(
     truth: list[RangeLabel], strums: Strums, grid: Grid
 ) -> tuple[float | None, float | None, float, float]:
     """(precision, recall, baseline_not_riff, baseline_riff) of the riff flag over the labelled
-    ranges. A range is flagged when its planned section's pattern is a riff or any of its bar
-    records is; riff and mixed are riffs, strum, dyad and bleed are not. The baselines are
-    the accuracy of calling every range not a riff, and every range a riff."""
+    ranges. A range is flagged when any of its own bar records is a riff (each bar carries
+    its member's flag; a pre-1.6 file's backfilled records carry the section's); a range the
+    run records no bar of falls back to its planned section's pattern, which is the longest
+    member's flag. Riff and mixed are riffs, strum, dyad and bleed are not. The baselines
+    are the accuracy of calling every range not a riff, and every range a riff."""
     records = _bars(strums, grid)
     flagged_hits = flagged = hits = 0
     labelled = [t for t in truth if t.label in RIFF_LABELS]
     for t in labelled:
-        pattern = _pattern_at(strums, grid, t.start)
-        is_flagged = (pattern is not None and pattern.riff) or any(
-            records[i].riff for i in range(t.start, t.end) if i in records
-        )
+        rows = [records[i] for i in range(t.start, t.end) if i in records]
+        if rows:
+            is_flagged = any(r.riff for r in rows)
+        else:
+            pattern = _pattern_at(strums, grid, t.start)
+            is_flagged = pattern is not None and pattern.riff
         is_hit = t.label in RIFF_HITS
         flagged += is_flagged
         hits += is_hit

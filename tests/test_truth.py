@@ -167,10 +167,23 @@ def test_score_flags_counts_mixed_as_a_hit_and_prints_both_baselines():
     precision, recall, not_riff, riff = score_flags(truth, member_riff, _grid())
     assert (precision, recall) == (1.0, 1.0)  # the mixed range flagged by its bar records
     assert abs(not_riff - 2 / 3) < 1e-9 and abs(riff - 1 / 3) < 1e-9
-    # the planned section's riff flag flags every range: the strum and the bleed are false
-    section_riff = _strums([_bar(i, HEARD) for i in range(4)], riff=True)
-    precision, recall, _, _ = score_flags(truth, section_riff, _grid())
+    # every bar a riff (as the stage writes a riff section's members): the strum and the bleed
+    # are false flags
+    all_riff = _strums([_bar(i, HEARD, riff=True) for i in range(4)], riff=True)
+    precision, recall, _, _ = score_flags(truth, all_riff, _grid())
     assert abs(precision - 1 / 3) < 1e-9 and recall == 1.0
+    # the section is a riff (its longest member's flag) but the strum's and the bleed's own
+    # bars are not: those ranges are not flagged
+    member_strum = _strums([_bar(0, HEARD, riff=True), _bar(1, HEARD, riff=True), _bar(2, HEARD),
+                            _bar(3, HEARD)], riff=True)
+    assert score_flags(truth, member_strum, _grid())[:2] == (1.0, 1.0)
+    assert score_flags([RangeLabel(2, 3, "strum")], member_strum, _grid())[:2] == (None, None)
+    # a range the run records no bar of falls back to its planned section's pattern
+    no_records = _strums([_bar(0, HEARD), _bar(1, HEARD)], riff=True)
+    no_records = no_records.model_copy(update={
+        "plan": [PlannedSection(start_bar=0, end_bar=4, label="verse", members=[0])],
+    })
+    assert score_flags([RangeLabel(2, 4, "riff")], no_records, _grid())[:2] == (1.0, 1.0)
     # the example's one strum range: nothing flagged, no riff to find
     example = read_labels(EXAMPLE / "riffs.txt")
     assert score_flags(example, _strums([_bar(i, HEARD) for i in range(4)]), _grid()) == (
