@@ -1,0 +1,9 @@
+# Pat Benatar "All Fired Up": judged strum-pattern ranges. Grid bars, 0-based, end exclusive.
+# 1.6 clip 1 (held_outro_132) judged ring length, not the pattern: no line.
+33 49 YES      # pattern review C regression set (ear-passed); no clip in the 1.6 or 1.7 passes
+55 61 MOSTLY   # 1.6 clip 26 member_verse2_55-61: "mostly fits"; also in the pattern review C regression set
+61 90 YES      # pattern review C regression set (ear-passed); no clip in the 1.6 or 1.7 passes
+90 97 NO       # 1.6 clip 27 member_verse2_90-97: "completely, hilariously, wrong"
+97 104 NO      # 1.6 clip 28 member_verse2_97-104: "clicks are completely wrong"
+104 110 NO     # 1.6 clip 29 member_verse2_104-110: "this is a damped note, a pause, and then 8th notes"; the 1.5 pass said the end fit, the later 1.6 record rejects it
+128 132 YES    # pattern review C regression set (ear-passed); no clip in the 1.6 or 1.7 passes

@@ -1,0 +1,3 @@
+# AC/DC "You Shook Me All Night Long": per-bar activity on the guitar stem. Grid bars, 0-based, end exclusive.
+# 1.7 rests finds no resting bar on AC/DC; the one-beat pickup is the only bar a clip settles.
+0 1 play       # 1.8 clip 6 pickup_acdc_0-2_stem: "one" (one stroke in the pickup)

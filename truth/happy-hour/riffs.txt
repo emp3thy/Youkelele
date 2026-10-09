@@ -1,0 +1,9 @@
+# The Housemartins "Happy Hour" (1.8 blind song): riff or strum per labelled section. Grid bars, 0-based, end exclusive.
+# Source: Songsterr s197972 (rhythm guitar, lead guitar, bass, drums), read for structure only. The tab is written at
+# 192 bpm in 112 bars (1.25 s each); the chain's bars do not match the tab's bar length, so ranges are aligned by time,
+# at section scale only. Clip 21 puts the music's start, and so tab bar 1, at about bar 2 (18.2 s), not bar 0 (14.4 s).
+0 5 mixed    # the lead guitar plays a single-note figure in tab bars 1-8 (about 18 to 28 s, bars 2-5) over the rhythm guitar's chords
+6 17 strum   # tab bars about 9-29: the rhythm guitar strums chords; the lead guitar is silent from tab bar 9 to 64 (from about 28.2 s, bar 6's start)
+17 24 strum  # tab bars about 29-39: as above
+# 5 omitted: it holds the lead's last intro bar and the start of the chorus. 24-40, 40-44 and 44-74 omitted: the lead
+# guitar re-enters in tab bars 65-72, 80-86 and 103-107, and the time alignment cannot place it at bar level.

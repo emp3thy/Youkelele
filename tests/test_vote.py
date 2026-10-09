@@ -86,6 +86,25 @@ def test_unit_two_pairs_from_the_best_pairs_phase_and_prints_aligned_to_the_firs
 
 
 def test_single_bar_and_all_rest_sections_do_not_raise():
-    assert choose_pattern([list("S-S-----")]).vector == _topped_vote([list("S-S-----")])
+    # one bar: the support floor leaves the majority empty, so the medoid (the bar itself) wins
+    assert choose_pattern([list("S-S-----")]).vector == list("S-S-----")
     r = choose_pattern([list("--------")] * 3)
     assert r.candidate == "majority" and r.vector == list("--------")
+
+
+def test_two_pairs_are_not_a_two_bar_vote():  # four alternating bars, margin clears, pairs 2
+    bars = [list("S-S-S-S-"), list("SSSSSSSS")] * 2
+    assert unit_and_phase(bars) == (1, 0)
+
+
+def test_three_pairs_are_a_two_bar_vote():
+    bars = [list("S-S-S-S-"), list("SSSSSSSS")] * 3
+    assert unit_and_phase(bars) == (2, 0)
+
+
+def test_vote_result_records_voted_and_dropped_positions():
+    bars = [list("S-S-S-S-"), list("SSSSSSSS")] * 3 + [list("S-S-S-S-")]
+    r = choose_pattern(bars)
+    assert r.unit == 2 and r.voted == [0, 1, 2, 3, 4, 5] and r.dropped == [6]
+    r1 = choose_pattern(bars[:5])
+    assert r1.unit == 1 and r1.voted == [0, 1, 2, 3, 4] and r1.dropped == []

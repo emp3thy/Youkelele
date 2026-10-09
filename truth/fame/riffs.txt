@@ -1,0 +1,4 @@
+# David Bowie "Fame": riff or strum per labelled section. Grid bars, 0-based, end exclusive.
+# 1.7 sources: "Fame, nine riff sections (1.6)": TrueFire's four guitar parts and Carlos Alomar's riff, consistent but not decisive.
+1 17 riff      # riff review C (riff by ear or source); the range is given only there
+29 35 riff     # riff review C; 1.6 riff gate table: Instrumental 1 29-35 is "the verified wrong figure" (a riff whose reduced figure was wrong)

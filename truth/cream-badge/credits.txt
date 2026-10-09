@@ -1,0 +1,3 @@
+# Cream "Badge": expected printed title, then artist.
+Badge   # key review C, Metadata: "Badge" by "Cream" (1.7 printed "Cream - Badge" by the uploader)
+Cream   # key review C, Metadata

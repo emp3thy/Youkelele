@@ -1,0 +1,3 @@
+# The Fratellis "Chelsea Dagger": expected printed title, then artist.
+Chelsea Dagger   # key review C, Metadata: one of the eight known songs, title unchanged from the 1.7 sheet
+The Fratellis    # key review C, Metadata: present artist kept, as the 1.7 sheet prints it

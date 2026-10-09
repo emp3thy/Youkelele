@@ -1,0 +1,2 @@
+# Cream "Badge": per-bar activity on the guitar stem. Grid bars, 0-based, end exclusive.
+# No records: 1.7 Badge finds no resting bar, and no clip or source table row settles a bar's activity.

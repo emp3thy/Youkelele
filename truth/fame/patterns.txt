@@ -1,0 +1,5 @@
+# David Bowie "Fame": judged strum-pattern ranges. Grid bars, 0-based, end exclusive.
+# 1.6 clip 10 (short_instrumental_47) judged damping only. 1.6 clip 11 (short_chorus_61) also says pattern NO ("too many clicks"),
+#   but its bars are not named; the same chorus is judged by clip 21 below.
+61 69 NO   # 1.6 clip 21 changed_chorus_61-69: "too many clicks" (two guitars in one stem)
+71 79 NO   # 1.6 clip 22 changed_verse_71-79: "too many clicks" (two guitars in one stem)

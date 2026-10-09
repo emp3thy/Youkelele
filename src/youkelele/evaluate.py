@@ -18,18 +18,35 @@ from youkelele.music.relabel import default_plan, longest_member
 from youkelele.music.sections import runs_text, vocal_flags, vocal_runs
 from youkelele.music.trailing import trailing_silent_bars
 from youkelele.render.html import display_names
-from youkelele.schemas import ChordEvent, Chords, Grid, Key, Riffs, SectionPattern, Strums
+from youkelele.schemas import (
+    ChordEvent,
+    Chords,
+    Grid,
+    Key,
+    Riffs,
+    SectionPattern,
+    SourceInfo,
+    Strums,
+)
+from youkelele.truth import (
+    PatternScore,
+    TruthFormatError,  # re-exported: the CLI and older callers import it from here
+    discontinuity,
+    false_certain,
+    false_grey,
+    read_credits,
+    read_key,
+    read_labels,
+    read_patterns,
+    score_credits,
+    score_flags,
+    score_key,
+    score_patterns,
+    score_rests,
+)
 
 BAR_START_TOLERANCE = 0.06  # a chord change this close to a bar start counts as on the bar
 MOSTLY_RESTS = 0.75  # a printed-as-certain pattern with at least this share of rests
-
-
-class TruthFormatError(Exception):
-    def __init__(self, path: Path, line_number: int, detail: str) -> None:
-        super().__init__(f"{path}:{line_number}: {detail}")
-        self.path = path
-        self.line_number = line_number
-        self.detail = detail
 
 
 @dataclass
@@ -70,6 +87,19 @@ class SectionDiag:
     root_share: float | None = None  # share of named onset pitches on the chord root
     named_share: float | None = None  # share of the section's onsets the pitch tracker named
     resting_bars: list[int] = field(default_factory=list)  # bars in the planned span whose record rests
+    # the vote's figures (spec 1.8, section 5), copied from the pattern; empty or None before 1.8
+    voted_bars: list[int] = field(default_factory=list)
+    dropped_bars: list[int] = field(default_factory=list)
+    top2_margin: float | None = None
+    runner_up_vector: list[str] | None = None
+    confidence_all_bars: float | None = None
+    chance_p_all_bars: float | None = None
+    # the bass-on-stem gate and its four figures (spec 1.8, section 6); off and None before 1.8
+    bass_on_stem: bool = False
+    low_own_share: float | None = None
+    bass_stem_ratio: float | None = None
+    low_mix_share_bass: float | None = None
+    low_mix_share_source: float | None = None
 
 
 def _label_text(d: SectionDiag) -> str:
@@ -106,6 +136,17 @@ class Report:
     sections: list[SectionDiag] = field(default_factory=list)
     resting_bars: list[int] = field(default_factory=list)  # every bar whose record rests, in index order
     truth_given: bool = False  # a truth directory was supplied: print the truth lines (n/a if absent)
+    # scores against the 1.8 truth files (spec 9.2); each None without its file (or with a
+    # file that holds no record line) and when the run lacks the artefact it scores
+    pattern_scores: list[PatternScore] | None = None
+    false_certain: int | None = None
+    false_grey: int | None = None
+    discontinuity: float | None = None
+    riff_scores: tuple[float | None, float | None, float, float] | None = None
+    rest_scores: tuple[float | None, float | None, int, int, float | None] | None = None
+    key_score: tuple[float, str, bool | None] | None = None
+    credits_match: tuple[bool, bool] | None = None
+    credits_rungs: tuple[str | None, str | None] = (None, None)  # the rung that decided each
 
 
 @dataclass
@@ -121,13 +162,18 @@ class SectionDelta:
     candidate_changed: bool = False  # the vote kept a different candidate
     rest_changes: int = 0  # bars in the paired span whose `rests` differs (grids that match only)
     riff_rule_b: str | None = None  # the right side's riff rule
+    voted_bars_changed: bool = False  # the bars that voted differ between the runs
+    bass_gate_changed: bool = False  # the bass-on-stem gate fired in one run only
+    certainty_readings: tuple[bool | None, bool | None] = (None, None)  # A and B printed certain
 
     @property
     def changed(self) -> bool:
-        """Any figure moved, or the riff flag or the certainty flipped."""
+        """Any figure moved, or the riff flag, the certainty, the voters or the bass gate changed."""
         return bool(
             self.riff_changed
             or self.certainty_changed
+            or self.voted_bars_changed
+            or self.bass_gate_changed
             or self.pattern_changes
             or self.candidate_changed
             or self.rest_changes
@@ -343,6 +389,19 @@ def _section_diags(
                 root_share=pattern.root_share,
                 named_share=pattern.named_share,
                 resting_bars=resting,
+                voted_bars=list(pattern.voted_bars),
+                dropped_bars=list(pattern.dropped_bars),
+                top2_margin=pattern.top2_margin,
+                runner_up_vector=(
+                    list(pattern.runner_up_vector) if pattern.runner_up_vector is not None else None
+                ),
+                confidence_all_bars=pattern.confidence_all_bars,
+                chance_p_all_bars=pattern.chance_p_all_bars,
+                bass_on_stem=pattern.bass_on_stem,
+                low_own_share=pattern.low_own_share,
+                bass_stem_ratio=pattern.bass_stem_ratio,
+                low_mix_share_bass=pattern.low_mix_share_bass,
+                low_mix_share_source=pattern.low_mix_share_source,
             )
         )
     return diags
@@ -385,7 +444,7 @@ def _diagnose(run_dir: Path) -> tuple[Report, Strums | None]:
 def evaluate_run(run_dir: Path, truth_dir: Path | None = None) -> Report:
     """Report a run's truth-free diagnostics; the truth fields are filled when truth is given."""
     run_dir = Path(run_dir)
-    report, _ = _diagnose(run_dir)
+    report, strums = _diagnose(run_dir)
     if truth_dir is None:
         return report
     truth_dir = Path(truth_dir)
@@ -413,7 +472,48 @@ def evaluate_run(run_dir: Path, truth_dir: Path | None = None) -> Report:
         )
     report.beat_f, report.downbeat_f = beat_f, downbeat_f
     report.chord_root, report.chord_majmin, report.chord_triads = root, majmin, triads
+    _score_truth_files(report, run_dir, truth_dir, grid, chords, strums)
     return report
+
+
+def _read_truth(path: Path, reader):
+    """The records of a truth file; None when it is missing or holds no record line."""
+    if not path.is_file():
+        return None
+    return reader(path) or None
+
+
+def _load_source(run_dir: Path) -> SourceInfo | None:
+    path = run_dir / "00_ingest" / "source.json"
+    return load_model(path, SourceInfo) if path.is_file() else None
+
+
+def _score_truth_files(
+    report: Report, run_dir: Path, truth_dir: Path, grid: Grid, chords: Chords, strums: Strums | None
+) -> None:
+    """Fill the report's scores against the five truth kinds of spec 9.1."""
+    patterns = _read_truth(truth_dir / "patterns.txt", read_patterns)
+    riffs = _read_truth(truth_dir / "riffs.txt", read_labels)
+    rests = _read_truth(truth_dir / "rests.txt", read_labels)
+    key = _read_truth(truth_dir / "key.txt", read_key)
+    credits = _read_truth(truth_dir / "credits.txt", read_credits)
+    if strums is not None:
+        bars = _with_bars_or_self(strums, grid)
+        if patterns is not None:
+            report.pattern_scores = score_patterns(patterns, strums, grid)
+            report.false_certain = false_certain(report.pattern_scores)
+            report.false_grey = false_grey(report.pattern_scores)
+            report.discontinuity = discontinuity(bars)
+        if riffs is not None:
+            report.riff_scores = score_flags(riffs, strums, grid)
+        if rests is not None:
+            report.rest_scores = score_rests(rests, bars)
+    if key is not None:
+        report.key_score = score_key(key, chords.key)
+    source = _load_source(run_dir) if credits is not None else None
+    if source is not None:
+        report.credits_match = score_credits(credits, source)
+        report.credits_rungs = (source.title_source, source.artist_source)
 
 
 def _segmentation_scores(
@@ -561,6 +661,9 @@ def compare_runs(a: Path, b: Path) -> Comparison:
             candidate_changed=left.candidate != right.candidate,
             rest_changes=_rest_changes(left, right, rests_a, rests_b) if same_grid else 0,
             riff_rule_b=right.riff_rule,
+            voted_bars_changed=left.voted_bars != right.voted_bars,
+            bass_gate_changed=left.bass_on_stem != right.bass_on_stem,
+            certainty_readings=(not left.uncertain, not right.uncertain),
         )
         if left is not None and right is not None
         else None
@@ -627,7 +730,38 @@ def _vote_figures(d: SectionDiag) -> str:
         parts.append("rings n/a")
     else:
         parts.append(f"{'rings' if d.rings else 'short'} {d.ring_decay_db:.1f}dB")
+    parts.extend(_voter_figures(d))
+    parts.extend(_bass_gate_figures(d))
     return ", " + ", ".join(parts)
+
+
+def _voter_figures(d: SectionDiag) -> list[str]:
+    """`voted N (dropped M)`, `rival <vector> margin X`, `all-bars conf X p Y` (spec 1.8, 5);
+    each left out when the run did not write it (a run before 1.8)."""
+    parts = []
+    if d.voted_bars or d.dropped_bars:
+        parts.append(f"voted {len(d.voted_bars)} (dropped {len(d.dropped_bars)})")
+    if d.runner_up_vector is not None or d.top2_margin is not None:
+        rival = "".join(d.runner_up_vector) if d.runner_up_vector is not None else "n/a"
+        parts.append(f"rival {rival} margin {_num(d.top2_margin, '.2f')}")
+    if d.confidence_all_bars is not None or d.chance_p_all_bars is not None:
+        parts.append(
+            f"all-bars conf {_num(d.confidence_all_bars, '.2f')} p {_num(d.chance_p_all_bars, '.3f')}"
+        )
+    return parts
+
+
+def _bass_gate_figures(d: SectionDiag) -> list[str]:
+    """The bass gate's four figures (spec 1.8, 6), headed `bass-on-stem` when it fired; nothing
+    for a run before 1.8."""
+    figures = (d.low_mix_share_bass, d.low_mix_share_source, d.low_own_share, d.bass_stem_ratio)
+    if not d.bass_on_stem and all(f is None for f in figures):
+        return []
+    return [
+        f"{'bass-on-stem' if d.bass_on_stem else 'bass gate off'} "
+        f"mix-bass {_num(d.low_mix_share_bass, '.3f')} mix-source {_num(d.low_mix_share_source, '.3f')} "
+        f"own {_num(d.low_own_share, '.3f')} ratio {_num(d.bass_stem_ratio, '.4f')}"
+    ]
 
 
 def _member_lines(d: SectionDiag) -> list[str]:
@@ -653,7 +787,8 @@ def _key_line(key: Key | None) -> str:
 
     The margin is the score's unless the pair rule decided a close score, when it is the pair
     rule's (`pair margin`). The votes tail, `votes score X pair Y mix Z (decided by)`, is
-    printed when the key carries the three votes (1.5 files).
+    printed when the key carries the three votes (1.5 files); a 1.8 file adds the chord set's
+    vote before the decider, `set T best X decided Y`.
     """
     if key is None:
         return "Key: n/a"
@@ -666,9 +801,15 @@ def _key_line(key: Key | None) -> str:
         figures += f", mix {key.mix.tonic} {key.mix.mode}"
     if key.tonic_votes is not None:
         votes = key.tonic_votes
+        set_vote = (
+            f" set {votes.set_tonic or 'none'} best {_num(votes.set_share_best, '.2f')} "
+            f"decided {_num(votes.set_share_decided, '.2f')}"
+            if votes.set_tonic is not None or votes.set_share_best is not None
+            else ""
+        )
         figures += (
             f", votes score {votes.score or 'none'} pair {votes.pair or 'none'} "
-            f"mix {votes.mix or 'none'} ({votes.decided_by or 'none'})"
+            f"mix {votes.mix or 'none'}{set_vote} ({votes.decided_by or 'none'})"
         )
     return f"Key: {key.tonic} {key.mode} ({figures})"
 
@@ -699,7 +840,70 @@ def format_report(r: Report) -> str:
                 f"Chord triads: {_pct(r.chord_triads)}",
             ]
         )
+    if r.truth_given:
+        lines.extend(_pattern_block(r))
+        lines.append(_riff_line(r.riff_scores))
+        lines.append(_rest_line(r.rest_scores))
+        lines.append(_key_truth_line(r.key_score))
+        lines.append(_credits_line(r.credits_match, r.credits_rungs))
     return "\n".join(lines)
+
+
+def _pattern_block(r: Report) -> list[str]:
+    """Per judged range the printed and heard figures and their distances; then the totals."""
+    if r.pattern_scores is None:
+        return ["Patterns: n/a"]
+    lines = ["Patterns:"]
+    for s in r.pattern_scores:
+        lines.append(
+            f"  bars {s.start}-{s.end} {s.verdict}: printed {' '.join(s.printed) or 'n/a'}, "
+            f"heard {' '.join(s.figure) if s.figure else 'n/a'}, jaccard {_num(s.jaccard, '.2f')}, "
+            f"swap {_num(s.swap)}, voted {s.voted_bars}, margin {_num(s.top2_margin, '.2f')}, "
+            f"{'certain' if s.certain else 'grey'}"
+        )
+    lines.append(
+        f"  false certain {_num(r.false_certain)}, false grey {_num(r.false_grey)}, "
+        f"discontinuity {_num(r.discontinuity, '.2f')}"
+    )
+    return lines
+
+
+def _riff_line(scores: tuple[float | None, float | None, float, float] | None) -> str:
+    if scores is None:
+        return "Riffs: n/a"
+    precision, recall, not_riff, riff = scores
+    return (
+        f"Riffs: precision {_pct(precision)}, recall {_pct(recall)}; "
+        f"baseline not-riff {_pct(not_riff)}, riff {_pct(riff)}"
+    )
+
+
+def _rest_line(scores: tuple[float | None, float | None, int, int, float | None] | None) -> str:
+    if scores is None:
+        return "Rests: n/a"
+    precision, recall, deletions, insertions, event_f = scores
+    return (
+        f"Rests: precision {_pct(precision)}, recall {_pct(recall)}, false rests {deletions}, "
+        f"false holds {insertions}, event F {_pct(event_f)}"
+    )
+
+
+def _key_truth_line(score: tuple[float, str, bool | None] | None) -> str:
+    if score is None:
+        return "Key vs truth: n/a"
+    weighted, category, related = score
+    hedge = "none" if related is None else "related" if related else "unrelated"
+    return f"Key vs truth: {_pct(weighted)} ({category}), hedge {hedge}"
+
+
+def _credits_line(match: tuple[bool, bool] | None, rungs: tuple[str | None, str | None]) -> str:
+    if match is None:
+        return "Credits: n/a"
+    (title, artist), (title_rung, artist_rung) = match, rungs
+    return (
+        f"Credits: title {'yes' if title else 'no'} ({title_rung or 'n/a'}), "
+        f"artist {'yes' if artist else 'no'} ({artist_rung or 'n/a'})"
+    )
 
 
 def _cell(d: SectionDiag | None) -> str:
@@ -719,11 +923,21 @@ def _delta(d: SectionDelta | None) -> str:
             if d.riff_changed
             else ""
         )
-        + (" certainty changed" if d.certainty_changed else "")
+        + (f" certainty changed ({_readings(d.certainty_readings)})" if d.certainty_changed else "")
+        + (" voted bars changed" if d.voted_bars_changed else "")
         + (f" patterns changed in {d.pattern_changes} bars" if d.pattern_changes else "")
         + (f" rests changed in {d.rest_changes} bars" if d.rest_changes else "")
     )
     return f"{d.strikes_per_bar:+.1f}/{d.explained * 100:+.1f}pp/{d.rest_share * 100:+.1f}pp{marks}"
+
+
+def _readings(readings: tuple[bool | None, bool | None]) -> str:
+    """`certain -> grey`: the two runs' certainty, `n/a` for a reading not taken."""
+    return " -> ".join("n/a" if r is None else "certain" if r else "grey" for r in readings)
+
+
+def _gate(d: SectionDiag) -> str:
+    return "on" if d.bass_on_stem else "off"
 
 
 def format_comparison(c: Comparison) -> str:
@@ -742,6 +956,8 @@ def format_comparison(c: Comparison) -> str:
         vote = ""
         if delta is not None and delta.candidate_changed:
             vote = f"  vote: {left.candidate} -> {right.candidate}"
+        if delta is not None and delta.bass_gate_changed:
+            vote += f"  bass gate changed ({_gate(left)} -> {_gate(right)})"
         lines.append(
             f"  {side.index} {_label_text(side)}: A {_cell(left)}  B {_cell(right)}  B-A {_delta(delta)}{vote}"
         )

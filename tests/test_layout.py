@@ -14,6 +14,7 @@ from youkelele.layout import (
     video_id_for,
 )
 from youkelele.manifest import Manifest, save_manifest
+from youkelele.models.ytdl import METADATA_FIELDS
 from youkelele.options import RunOptions
 from youkelele.paths import cache_dir, package_data, vendor_dir
 from youkelele.stage import MissingArtifact, Stage, StageContext
@@ -225,7 +226,7 @@ def test_resolve_run_dir_names_new_folder_from_metadata(tmp_path):
     assert meta["title"] == "Summer Of '69 (Official Music Video)"
     saved = json.loads((run_dir / SOURCE_META_NAME).read_text(encoding="utf-8"))
     assert saved == meta
-    assert set(saved) == {"id", "title", "uploader", "artist", "duration"}
+    assert tuple(saved) == METADATA_FIELDS
     # the wider artist prefix keeps the artist out of the folder name
     fetch = _meta("Pat Benatar - All Fired Up (Official Music Video)", "Benatar Giraldo", "abcdefghijk")
     run_dir, _ = resolve_run_dir(tmp_path, "https://youtu.be/abcdefghijk", fetch=fetch)
@@ -234,6 +235,15 @@ def test_resolve_run_dir_names_new_folder_from_metadata(tmp_path):
     fetch = _meta("夜に駆ける", "YOASOBI", "x8VYWazR5mE")
     run_dir, _ = resolve_run_dir(tmp_path, "https://youtu.be/x8VYWazR5mE", fetch=fetch)
     assert run_dir == tmp_path / "x8vywazr5me"
+
+
+def test_run_folder_is_named_from_the_resolved_title(tmp_path):
+    def fetch(url):
+        return {"id": "x", "title": "The Beatles - Day Tripper", "uploader": "Natan Santos"}
+
+    run_dir, meta = resolve_run_dir(tmp_path, "https://youtu.be/abcdefghijk", fetch=fetch)
+    assert run_dir == tmp_path / "day-tripper"
+    assert meta["uploader_id"] is None and tuple(meta) == METADATA_FIELDS
 
 
 def test_resolve_run_dir_collision_gets_suffix(tmp_path):

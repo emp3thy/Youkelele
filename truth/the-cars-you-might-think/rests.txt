@@ -1,0 +1,6 @@
+# The Cars "You Might Think": per-bar activity on the guitar stem. Grid bars, 0-based, end exclusive.
+0 1 rest       # 1.8 clip 4 pickup_cars_0-2_stem: "no." (no guitar in the one-beat pickup); the assumption pass also called it silent
+11 19 play     # 1.7 rests: the rests spike's ear-verified section The Cars 11-19; rests review C
+62 63 rest     # 1.7 sources: "The Cars 52-68, riff (1.6) and bar 62 rests": tab bar 63 has no guitar note at all, agrees (songsterr s5011)
+63 64 rest     # 1.8 clip 3 rest_cars_bridge_62-65_stem: "yes. no guitar on bar 63."
+68 72 play     # 1.7 rests: the rests spike's ear-verified section The Cars 68-72; rests review C

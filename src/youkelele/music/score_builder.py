@@ -9,17 +9,20 @@ from youkelele.jsonio import ArtifactError
 from youkelele.music.compat import with_bars
 from youkelele.music.key import hedge_text
 from youkelele.music.members import member_spans
+from youkelele.music.onsets import direction_for_slot
 from youkelele.music.phrase import NO_CHORD, aligned_starts, bar_change_bars
 from youkelele.music.relabel import default_plan, longest_member, section_plan
 from youkelele.music.trailing import trailing_silent_bars
 from youkelele.schemas import (
     ArrangedChord,
     Arrangement,
+    Bar,
     BarStrums,
     ChordDiagram,
     Chords,
     Grid,
     Instrument,
+    Meter,
     PlannedSection,
     Riffs,
     Score,
@@ -45,6 +48,23 @@ STATE_NO_INSTRUMENT = "no strummed instrument detected"
 STATE_RIFF = "riff"
 STATE_RIFF_NOT_TRANSCRIBED = "riff heard, not transcribed"
 STATE_UNCERTAIN = "pattern uncertain"
+STATE_NOT_SEPARATED = "guitar not separated here"  # 1.8 spec 3.3: the stem carries the bass
+
+
+def pickup_slots(bar: Bar, slots_per_bar: int, meter: Meter) -> int | None:
+    """The slot columns a pickup bar draws (1.8 spec 3.2): the slots its beats cover, at least
+    one and fewer than a full bar; None for a full bar."""
+    if not (bar.pickup and len(bar.beats) < meter.numerator):
+        return None
+    per_beat = max(1, slots_per_bar // meter.numerator)
+    return max(1, min(slots_per_bar - 1, len(bar.beats) * per_beat))
+
+
+def pickup_column(j: int, n: int, k: int) -> int:
+    """The column full-bar cell ``j`` of ``n`` maps to when only the last ``k`` columns draw
+    (1.8 spec 3.2): the quantiser spreads a pickup's ``n`` slots over its short duration, so the
+    cells are squeezed onto the right-aligned ``k`` columns in order."""
+    return n - k + (j * k) // n
 
 
 def _plan(grid: Grid, strums: Strums, chords: Chords) -> list[PlannedSection]:
@@ -198,10 +218,47 @@ def _bar_strokes(record: BarStrums) -> list[Stroke]:
     return [Stroke(slot=j, kind=cell, rings=rings) for j, cell in enumerate(record.pattern) if cell != "-"]
 
 
+def _pickup_strokes(record: BarStrums, onsets: list[str]) -> list[Stroke]:
+    """The strokes a holding pickup bar prints before its columns are drawn (1.8 spec 3.2): its own
+    quantised row, not its member's pattern. The quantiser spreads the row's cells over the
+    pickup's short duration, which is what ``pickup_column`` assumes; the member's pattern is in
+    full-bar time, so squeezing it would print strokes the ear did not hear. A resting bar prints
+    nothing; the ring flag is the member's, as for any bar."""
+    if record.rests:
+        return []
+    return [Stroke(slot=j, kind=cell, rings=record.rings) for j, cell in enumerate(onsets) if cell != "-"]
+
+
+def _on_pickup_columns(
+    strokes: list[Stroke], chords: list[ScoreChord], n: int, k: int, meter: Meter
+) -> tuple[list[Stroke], list[ScoreChord]]:
+    """A pickup bar's strokes and chord starts moved onto its last ``k`` columns (1.8 spec 3.2).
+
+    ``strokes`` are the bar's own quantised row (``_pickup_strokes``), the cells ``pickup_column``
+    is time-correct for. The first stroke that lands on a column keeps it; its down or up is
+    re-read from the column, since the row's directions belong to its own slots and a pickup's strokes are as
+    for any bar (down on the beat, up between); a muted stroke stays muted. Of chords that land
+    on one column the later replaces the earlier, as for two events rounding to one slot. A
+    chord's ``slots`` list stays full length: the renderer reads ``start_slot`` only.
+    """
+    placed: dict[int, Stroke] = {}
+    for stroke in strokes:
+        column = pickup_column(stroke.slot, n, k)
+        kind = direction_for_slot(column, n, meter) if stroke.kind in ("D", "U") else stroke.kind
+        placed.setdefault(column, stroke.model_copy(update={"slot": column, "kind": kind}))
+    named: dict[int, ScoreChord] = {}
+    for chord in chords:
+        column = pickup_column(chord.start_slot, n, k)
+        named[column] = chord.model_copy(update={"start_slot": column})
+    return [placed[c] for c in sorted(placed)], [named[c] for c in sorted(named)]
+
+
 def _state(pattern: SectionPattern, bars: list[ScoreBar]) -> str:
     """The section header's state phrase (spec 3.2)."""
     if pattern.no_instrument:
         return STATE_NO_INSTRUMENT
+    if pattern.bass_on_stem:  # 1.8 spec 3.3: the longest member failed the bass-on-stem gate
+        return STATE_NOT_SEPARATED
     if any(b.tab is not None for b in bars):  # an empty list is a tab bar with no note starting in it
         return STATE_RIFF
     if pattern.riff:
@@ -322,15 +379,23 @@ def build_score(
                     ScoreChord(name="N.C.", diagram=-1, start_slot=0, slots=list(bar_pattern))
                 )
             tab = None if record.rests else tabs.get(bar_idx)
+            onsets = strums.bar_onsets[bar_idx] if bar_idx < len(strums.bar_onsets) else []
+            partial = pickup_slots(grid.bars[bar_idx], spb, grid.meter)
+            if partial is None:
+                strokes = _bar_strokes(record)
+            else:  # 1.8 spec 3.2: a pickup draws its own quantised onsets on the columns its beats cover
+                strokes, chord_list = _on_pickup_columns(
+                    _pickup_strokes(record, onsets), chord_list, spb, partial, grid.meter
+                )
             bars.append(
                 ScoreBar(
                     index=bar_idx, chords=chord_list, pickup=grid.bars[bar_idx].pickup,
-                    struck=bar_idx < len(strums.bar_onsets)
-                    and any(slot != "-" for slot in strums.bar_onsets[bar_idx]),
+                    struck=any(slot != "-" for slot in onsets),
                     # a tab bar's stroke row prints in full black (spec 3.4)
-                    strokes=_bar_strokes(record), tab=tab,
+                    strokes=strokes, tab=tab,
                     # a resting bar prints black, even in a member silent only through rests (spec 7)
                     grey=record.uncertain and not record.rests and tab is None, rests=record.rests,
+                    pickup_slots=partial,
                 )
             )
         state = _state(pattern, bars)
@@ -367,4 +432,5 @@ def build_score(
         alternative_diagrams=alternative,
         sections=sections,
         trailing_bars_dropped=dropped,
+        provenance=source.provenance,  # 1.8 spec 3.4: printed after "uploaded by" when set
     )

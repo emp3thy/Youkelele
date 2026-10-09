@@ -1,0 +1,3 @@
+# Example clip: 4 bars, 120 bpm, C G Am F. Synthetic truth for the tests.
+Example Song  # title
+The Example Band  # artist

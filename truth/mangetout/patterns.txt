@@ -1,0 +1,4 @@
+# Wet Leg "mangetout": judged strum-pattern ranges. Grid bars, 0-based, end exclusive.
+# 1.6 clip 4 (held_verse_18) judged ring length, not the pattern: no line.
+26 33 YES D-D-DUDU   # 1.7 clip 14 changed_wetleg_verse2_26-33 (bars 26-32): "the clicks fit"; figure is the printed row the clip clicked; pattern review C regression set (Wet Leg 26-32, bars inclusive)
+58 66 NO             # 1.6 clip 20 changed_verse_58-66 (riff member 58-65): "clicks do not fit the riff at all. it's playing a syncopated rhythm and it is 8th notes evenly spaced"

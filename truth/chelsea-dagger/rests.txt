@@ -1,0 +1,7 @@
+# The Fratellis "Chelsea Dagger": per-bar activity on the guitar stem. Grid bars, 0-based, end exclusive.
+0 7 rest       # 1.6 clip 31 shortsection_intro_0-8: "there is no music in that piece - that's a doorbell"; 1.7 sources: "Chelsea Dagger 0-6 rest" agrees (guitar from tab bar 9, chain bar 8; songsterr s55960)
+7 8 rest       # 1.7 clip 6 (bars 7-12): guitar heard only in bars 8 and 9, so bar 7 is silent although the chain holds it (ratio 0.050); rests review C, an ear-labelled false hold; also inside 1.6 clip 31
+8 10 play      # 1.7 clip 6: "guitar from the 2nd second until the 4th second", that is bars 8 and 9; rests review C holding neighbours
+10 12 rest     # 1.7 clip 6: the rests on 10 and 11 stand; 1.7 sources: "Chelsea Dagger 10-11 rest" contradicts, the ear sides with the chain
+12 13 rest     # 1.7 clip 6: bar 12 prints strokes the ear did not hear (ratio 0.062); rests review C, an ear-labelled false hold
+13 20 play     # 1.7 rests: the rests spike's ear-verified section Chelsea Dagger 13-20; 1.7 A6 held (real power chords)

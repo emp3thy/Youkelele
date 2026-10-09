@@ -12,12 +12,15 @@ import soundfile as sf
 from youkelele.jsonio import load_model, save_model
 from youkelele.music.as_played import (
     EXPLAINED_BELOW,
+    MIN_VOTE_BARS,
     STAGE_UNCERTAIN_GRID_FIT,
     UNCERTAIN_BELOW,
     UNCERTAIN_BELOW_SIXTEENTH,
     eighth_grid,
     structure_test,
 )
+from youkelele.music.bleed import BleedFigures, bass_on_stem, bleed_figures
+from youkelele.music.candidates import candidate_set, top2
 from youkelele.music.members import aligned_agreement, member_figures, member_spans, section_offset, vector_bar
 from youkelele.music.onsets import (
     Onsets,
@@ -34,11 +37,11 @@ from youkelele.music.onsets import (
 from youkelele.music.pitch import PITCH_CHANGE_MIN, PitchTrack, name_notes, pitch_change_share, track_pitch
 from youkelele.music.recall import HIGH_BAND_FMIN, gate_section
 from youkelele.music.relabel import ONE_LOOP_SHARE, longest_member, one_loop_share, section_plan
-from youkelele.music.rests import bar_energy_ratio, bar_holds, bar_low_share, resample_for_rests
+from youkelele.music.rests import REST_RATIO_MIN, bar_energy_ratio, bar_holds, bar_low_share, resample_for_rests
 from youkelele.music.riff import chord_roots, is_riff, named_share, onset_chroma, riff_features, root_share
 from youkelele.music.ring import section_rings, stroke_decay_db
 from youkelele.music.trailing import NO_CHORD, trailing_silent_bars
-from youkelele.music.vote import VoteResult, choose_pattern
+from youkelele.music.vote import VoteResult, align_to_first_bar, choose_pattern, unit_and_phase
 from youkelele.schemas import Bar, BarStrums, Chords, Grid, Meter, SectionPattern, Stroke, Strums
 from youkelele.stage import Stage, StageContext
 
@@ -89,6 +92,18 @@ class _Member:
     # the alignment (0 or 1 bars) of the section's vote that fits this member's own bars;
     # always 0 for a one-bar section vote and for the longest member itself
     section_offset: int = 0
+    # grid bar indices the vote counted and left out (1.8 spec 5.1 and 5.4)
+    voted_bars: list[int] = field(default_factory=list)
+    dropped_bars: list[int] = field(default_factory=list)
+    # the nearest rival, measured for the harness and deciding nothing (1.8 spec 5.5)
+    top2_margin: float | None = None
+    runner_up_vector: list[StrikeClass] | None = None
+    # the vote read over the member's whole analysed span, resting bars included (1.8 spec 4.4)
+    confidence_all_bars: float | None = None
+    chance_p_all_bars: float | None = None
+    # the bass-on-stem figures and gate over the member's analysed span (1.8 spec 6)
+    bleed: BleedFigures | None = None
+    bass_on_stem: bool = False
 
     @property
     def first_holding(self) -> int | None:
@@ -213,8 +228,31 @@ def _note_ends(times: np.ndarray, idx: np.ndarray, bars: Sequence[Bar]) -> list[
     return ends
 
 
+def _member_bar_holds(member: _Member, energy_ratio: float, low_share: float) -> bool:
+    """The rest rule (1.7 spec 5) for one bar of the member; a gated member's bars skip the
+    low-share test and keep the energy floor, so a silent bar still rests (1.8 spec 6)."""
+    if member.bass_on_stem:
+        return energy_ratio >= REST_RATIO_MIN
+    return bar_holds(energy_ratio, low_share)
+
+
+def _bleed_member(
+    member: _Member, source: np.ndarray, bass: np.ndarray, mix: np.ndarray, sr: int, bars: Sequence[Bar]
+) -> None:
+    """The four bleed figures and the bass-on-stem gate (1.8 spec 6) over the member's whole
+    analysed span, the span the section-level cut reads, so the two cuts see one signal."""
+    member.bleed = bleed_figures(
+        source, bass, mix, sr, bars[member.start].start, bars[member.analysed_end - 1].end
+    )
+    member.bass_on_stem = bass_on_stem(member.bleed)
+
+
 def _vote_member(member: _Member, classes: Sequence[Sequence[StrikeClass]], slots: int, floor: float) -> None:
-    """Rule 1: the member's own vote, figures, chance test and certainty, over the bars that hold."""
+    """Rule 1: the member's own vote, figures, chance test and certainty, over the bars that hold.
+
+    Certainty is earned on both readings (1.8 spec 4.4), on at least `MIN_VOTE_BARS` voted bars
+    (spec 5.4), and never on a stem that carries the bass (spec 6).
+    """
     bars = [classes[b] for b in member.holding]
     vote = choose_pattern(bars)
     # the whole unit vector is the vote's representative: a two-bar vote is a full vote only
@@ -223,8 +261,37 @@ def _vote_member(member: _Member, classes: Sequence[Sequence[StrikeClass]], slot
     confidence, repeat, explained = member_figures(bars, vote.vector, vote.unit, slots)
     member.vote, member.chance_p, member.density = vote, p, density
     member.confidence, member.repeat, member.explained = confidence, repeat, explained
-    # no length term: a short member prints its own vote, greyed when the test fails (spec 4.5)
-    member.uncertain = confidence < floor or explained < EXPLAINED_BELOW or not structured
+    # the vote's positions are into the holding bars; the record keeps grid indices (1.8 spec 5.4)
+    member.voted_bars = [member.holding[i] for i in vote.voted]
+    member.dropped_bars = [member.holding[i] for i in vote.dropped]
+    # 1.8 spec 4.4: the same vote read over the whole analysed span, as 1.6 read it. A two-bar
+    # vector is aligned to the first holding bar and the sheet prints by parity from there, so
+    # the span's first bar reads it shifted by the bars before that one
+    all_bars = [classes[b] for b in range(member.start, member.analysed_end)]
+    all_vector = align_to_first_bar(vote.vector, vote.unit, (member.first_holding - member.start) % 2)
+    member.confidence_all_bars, _, _ = member_figures(all_bars, all_vector, vote.unit, slots)
+    structured_all, member.chance_p_all_bars, _ = structure_test(all_bars, vote.vector, seed=member.start)
+    # 1.8 spec 5.5: the nearest rival, written for the harness. The candidates' two-bar vectors
+    # are in pair order, so the printed vector is compared in that order and the rival is
+    # returned to the printed vector's order
+    _, phase = unit_and_phase(bars)
+    margin, runner_up = top2(
+        align_to_first_bar(vote.vector, vote.unit, phase), candidate_set(bars, vote.unit == 2, phase)
+    )
+    if runner_up is not None and len(runner_up) == 2 * slots:
+        runner_up = align_to_first_bar(runner_up, 2, phase)
+    member.top2_margin, member.runner_up_vector = margin, runner_up
+    # a short member prints its own vote (1.6 spec 4.5), greyed when a test fails or when fewer
+    # than MIN_VOTE_BARS bars voted (1.8 spec 5.4)
+    member.uncertain = (
+        confidence < floor
+        or explained < EXPLAINED_BELOW
+        or not structured
+        or member.confidence_all_bars < floor  # 1.8 spec 4.4
+        or not structured_all  # 1.8 spec 4.4
+        or len(member.voted_bars) < MIN_VOTE_BARS  # 1.8 spec 5.4
+        or member.bass_on_stem  # 1.8 spec 6
+    )
 
 
 def _ring_member(member: _Member, onset_bar: np.ndarray, decays: Sequence[float | None], mix_source: bool) -> None:
@@ -278,6 +345,10 @@ def _riff_test(
         and member.pitch_change is not None
         and member.pitch_change >= PITCH_CHANGE_MIN
     )
+    if member.bass_on_stem:
+        # the line on the stem is the bass, not the instrument: never a riff, the shares still
+        # written so the next song's band is measurable (1.8 spec 6)
+        member.riff = False
 
 
 def _prints_section(member: _Member, longest: _Member, slots: int) -> bool:
@@ -315,6 +386,7 @@ def _section_pattern(k: int, longest: _Member, slots: int, meter: Meter, boosted
             uncertain=True, no_instrument=True, inherited_from=None,
         )
     vote = longest.vote
+    bleed = longest.bleed
     return SectionPattern(
         section=k, slots=render_directions(vote.vector[:slots], slots, meter),
         confidence=longest.confidence, bar_repeat=longest.repeat, uncertain=longest.uncertain,
@@ -327,6 +399,15 @@ def _section_pattern(k: int, longest: _Member, slots: int, meter: Meter, boosted
         rings=longest.rings, ring_decay_db=longest.ring_decay_db,
         root_share=longest.root_share, named_share=longest.named_share,
         riff_rule="A" if longest.riff else None,
+        # 1.8 spec 4.4, 5.4, 5.5 and 6
+        voted_bars=longest.voted_bars, dropped_bars=longest.dropped_bars,
+        top2_margin=longest.top2_margin, runner_up_vector=longest.runner_up_vector,
+        confidence_all_bars=longest.confidence_all_bars, chance_p_all_bars=longest.chance_p_all_bars,
+        bass_on_stem=longest.bass_on_stem,
+        low_mix_share_bass=bleed.low_mix_share_bass if bleed else None,
+        low_mix_share_source=bleed.low_mix_share_source if bleed else None,
+        low_own_share=bleed.low_own_share if bleed else None,
+        bass_stem_ratio=bleed.bass_stem_ratio if bleed else None,
     )
 
 
@@ -339,10 +420,11 @@ def _bar_records(
 
     Every record carries its bar's two rest figures; a bar that fails the rest rule (1.7
     spec 5) is marked `rests`. A resting bar of a voiced member prints an empty row and
-    is not uncertain: nothing was guessed (1.7 spec 3.3).
+    is not uncertain: nothing was guessed (1.7 spec 3.3). A gated member's bars rest by the
+    energy floor alone (1.8 spec 6).
     """
     def rests(b: int) -> bool:
-        return not bar_holds(energy[b], low[b])
+        return not _member_bar_holds(member, energy[b], low[b])
 
     if member.silent:
         return [
@@ -391,6 +473,7 @@ class StrumsStage(Stage):
     requires = (
         "separate/stems/guitar.wav",
         "separate/stems/other.wav",
+        "separate/stems/bass.wav",  # the bass-on-stem gate (1.8 spec 6)
         "ingest/audio.wav",
         "grid/grid.json",
         "harmony/chords.json",
@@ -404,13 +487,14 @@ class StrumsStage(Stage):
     def run(self, ctx: StageContext) -> None:
         guitar, sr_g = _read_mono(ctx.input("separate/stems/guitar.wav"))
         other, sr_o = _read_mono(ctx.input("separate/stems/other.wav"))
+        bass, sr_b = _read_mono(ctx.input("separate/stems/bass.wav"))
         mix, sr = _read_mono(ctx.input("ingest/audio.wav"))
-        if sr_g != sr or sr_o != sr:
-            raise ValueError(f"sample rates differ: guitar {sr_g}, other {sr_o}, mix {sr}")
+        if sr_g != sr or sr_o != sr or sr_b != sr:
+            raise ValueError(f"sample rates differ: guitar {sr_g}, other {sr_o}, bass {sr_b}, mix {sr}")
         grid = load_model(ctx.input("grid/grid.json"), Grid)
         chords = load_model(ctx.input("harmony/chords.json"), Chords)
-        n = min(len(guitar), len(other), len(mix))
-        guitar, other, mix = guitar[:n], other[:n], mix[:n]
+        n = min(len(guitar), len(other), len(bass), len(mix))
+        guitar, other, bass, mix = guitar[:n], other[:n], bass[:n], mix[:n]
 
         source, y, source_ratio = choose_source(guitar, other, mix)
         today = self._detect(y, sr)
@@ -491,21 +575,22 @@ class StrumsStage(Stage):
         # the rest rule (1.7 spec 5): every bar measured once on the source stem; a bar holds when
         # it is loud enough against the mix and has power below 330 Hz, else it rests
         y_rests = resample_for_rests(y, sr)
-        energy = [bar_energy_ratio(y, mix, sr, bar) for bar in bars]
-        low = [bar_low_share(y_rests, bar) for bar in bars]
+        energy = [bar_energy_ratio(y, mix, sr, bar, slots) for bar in bars]
+        low = [bar_low_share(y_rests, bar, slots) for bar in bars]
 
         def new_member(position: int, start: int, end: int) -> _Member:
             trimmed = end - (drop if end == last_sec.end_bar else 0)
             if trimmed <= start or (end == last_sec.end_bar and empty_outro):
                 return _Member(position, start, end, trimmed, silent=True)
             a, b = int(round(bars[start].start * sr)), int(round(bars[trimmed - 1].end * sr))
+            member = _Member(position, start, end, trimmed, silent=False)
+            # the bass-on-stem gate (1.8 spec 6) before the rest rule, which it changes
+            _bleed_member(member, y, bass, mix, sr, bars)
             # the section-level cut first, then the bars that hold inside it
-            holding = [i for i in range(start, trimmed) if bar_holds(energy[i], low[i])]
-            cut_failed = not section_has_instrument(y[a:b], mix[a:b])
-            return _Member(
-                position, start, end, trimmed, silent=cut_failed or not holding, holding=holding,
-                section_cut_failed=cut_failed,
-            )
+            member.holding = [i for i in range(start, trimmed) if _member_bar_holds(member, energy[i], low[i])]
+            member.section_cut_failed = not section_has_instrument(y[a:b], mix[a:b])
+            member.silent = member.section_cut_failed or not member.holding
+            return member
 
         # every planned section votes per member (spec 4.3); its own figures are its longest member's
         sections: list[list[_Member]] = []

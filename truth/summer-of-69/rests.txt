@@ -1,0 +1,6 @@
+# Bryan Adams "Summer of '69": per-bar activity on the guitar stem. Grid bars, 0-based, end exclusive.
+0 1 contested  # 1.7 clip 7 rest_summer_pickup_0-2: "guitar plays from the start" (the rest is wrong by ear); 1.7 sources: tab bar 1 empty, agrees with the rest; rests review A: the stem is silent inside the one-beat pickup (0.02 to 0.44 s)
+1 2 play       # 1.7 clip 7: the guitar plays from the start; rests review C holding neighbour
+75 83 play     # 1.7 rests: the rests spike's ear-verified section Summer of '69 75-83; rests review C
+# 120 omitted: trailing, not printed; 1.7 sources: "Summer of '69 0 (pickup) and 120 rest": tab bar 121 has rhythm chords and two
+#   single-note lines, contradicting the rest; no ear verdict.

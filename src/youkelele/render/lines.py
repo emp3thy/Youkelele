@@ -54,6 +54,7 @@ def _bar_key(bar: ScoreBar) -> tuple:
         tuple((s.slot, s.kind, s.rings) for s in bar.strokes),
         bar.grey,
         bar.label,
+        bar.pickup_slots,  # a partial pickup (1.8 spec 3.2) never folds into a full bar
         None if bar.tab is None else tuple(
             (t.slot, t.midi, t.string, t.fret, t.rings) for t in bar.tab
         ),
@@ -68,7 +69,8 @@ def fold_repeats(lines: list[Line]) -> list[Line]:
     """Collapse runs of consecutive identical lines into one carrying the count.
 
     Identical means the same chord names and start slots, strokes (slot, kind, rings), grey
-    flag, label and tab on every bar; keys include the bar count, so widths never mix.
+    flag, label, pickup columns and tab on every bar; keys include the bar count, so widths
+    never mix.
     """
     folded: list[Line] = []
     last_key: tuple | None = None

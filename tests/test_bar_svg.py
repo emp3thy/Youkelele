@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from html import unescape
 
-from youkelele.render.bar_svg import bar_svg, slot_px, string_label_rows
+from youkelele.render.bar_svg import _Cols, bar_svg, slot_px, string_label_rows
 from youkelele.schemas import Meter, ScoreBar, ScoreChord, Stroke, TabNote
 
 M44 = Meter(numerator=4, denominator=4)
@@ -156,3 +156,19 @@ def test_slot_px_fits_the_line_in_the_text_width():
     assert string_label_rows() == ["A", "E", "C", "G"]
     svg = bar_svg(ScoreBar(index=0, chords=[_chord("C", 0, 8)]), M44, 8, 21, first_in_line=False, grey=False, tab_rows=False)
     assert 'width="168"' in svg
+
+
+def test_a_partial_pickup_bar_draws_only_its_columns():
+    # spec 3.2: a one-beat pickup on an eighth grid draws its last two columns, right-aligned
+    bar = ScoreBar(index=0, pickup=True, chords=[_chord("C", 6, 8)], strokes=[], pickup_slots=2)
+    svg = bar_svg(bar, M44, 8, 28, first_in_line=True, grey=False, tab_rows=False, pickup_slots=2)
+    assert svg.count('class="rest"') == 2
+    frame_x = float(re.search(r'<rect x="([\d.]+)"[^>]*class="frame"', svg).group(1))
+    # the frame starts at cols.left(6) - 2.5, plus the half-pixel stroke inset every frame has
+    assert frame_x == _Cols(ox=0, n=8, box_w=8 * 28).left(6) - 2.5 + 0.5
+    assert _labels(svg) == ["4", "&"]
+    # the label stays, left of the narrow frame so it never runs into the chord name
+    label_x = float(re.search(r'<text x="([\d.]+)"[^>]*class="pickup-label">pickup<', svg).group(1))
+    assert svg.count('class="pickup-label"') == 1 and label_x < frame_x
+    full = bar_svg(ScoreBar(index=1, chords=[_chord("C", 0, 8)]), M44, 8, 28, first_in_line=False, grey=False, tab_rows=False)
+    assert re.search(r'<rect x="0.5"[^>]*class="frame"', full)  # a full bar's frame is unchanged

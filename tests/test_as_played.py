@@ -237,3 +237,16 @@ def test_section_summary_confidence_is_vote_confidence():
     bars = _random_bars(6, 8, seed=11)
     assert section_summary(bars, 8, m44)[1] == vote_confidence(bars)
     assert vote_confidence([]) == 0.0
+
+
+def test_a_slot_struck_once_never_prints_at_two_bars():
+    assert majority_vector([list("S-------"), list("--S-----")]) == list("--------")
+
+
+def test_a_slot_struck_twice_prints_at_two_bars():
+    assert majority_vector([list("S-S-----"), list("S-------")]) == list("S-------")
+
+
+def test_slot_support_does_not_bind_at_six_bars():  # six bars: >n/3 already needs three
+    bars = [list("S-S-S-S-")] * 4 + [list("S-------")] * 2
+    assert majority_vector(bars) == list("S-S-S-S-")

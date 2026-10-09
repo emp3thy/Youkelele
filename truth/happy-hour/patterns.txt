@@ -1,0 +1,10 @@
+# The Housemartins "Happy Hour" (1.8 blind song): judged strum-pattern ranges. Grid bars, 0-based, end exclusive.
+# Bar times in the clips are the 1.8 listing's notes; figures are the 1.8 printed rows the clips clicked.
+2 5 YES D-DUDUD-D--UD-DU   # 1.8 clip 21 blind_intro_0-5: "yes - that's right. the music doesn't start until 4 seconds in but the clicks are correct when the music starts." (bar 2 from 4.3 s; bars 0-1 are silent, see rests.txt)
+5 13 YES D-DU--D-D-DUDUD-  # 1.8 clip 22 blind_chorus1_5-13: "yes. something weird happens to the clicks at around 13 seconds for a half-second but it recovers after that, but overall exactly right." (13 s falls in bar 10, 12.7 to 14.2 s)
+17 21 NO                   # 1.8 clip 23 blind_verse_17-24: "up until 7 seconds in it's just randomly clicking very quickly." (bars 17-20 run 0.5 to 5.8 s)
+# 21 omitted: bar 21 runs 5.8 to 8.2 s in clip 23, across both halves of the verdict.
+22 24 YES D-DU--D-D-DUDUD- # 1.8 clip 23: "At around 8 seconds it starts to fit." (bar 22 from 8.2 s)
+24 32 YES D-DU--D-D-DUDUD- # 1.8 clip 24 blind_chorus2_24-32: "yes. coping with changes in beat as well. excellent."
+40 44 MOSTLY               # 1.8 clip 25 blind_instrumental_40-44: "mostly right - it plays that 3 times and then there's a long chord and then it resumes the pattern - it keeps on clicking over the long chord with the (now incorrect) rhythm but then it returns to the pattern and it gets it right."
+44 52 YES D---D-D-D-D-D--- # 1.8 clip 26 blind_outro_44-52: "the clicks fit." (printed grey, "pattern uncertain")

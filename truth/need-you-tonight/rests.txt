@@ -1,0 +1,6 @@
+# INXS "Need You Tonight": per-bar activity on the guitar stem. Grid bars, 0-based, end exclusive.
+0 3 rest       # 1.7 sources: "Need You Tonight 0-7 rest": tab bars 1-4 have no guitar, so the source supports the rests on bars 0-3 (songsterr s9844)
+3 8 rest       # 1.7 clip 1 rest_nyt_intro_3-8 (bars 3-7): "silent"; the tab's clean chord guitar on 4-7 (1.7 sources, contradicting) is not on the stem, and the later ear verdict stands
+13 24 play     # 1.7 rests: the rests spike's ear-verified section Need You Tonight 13-24; rests review C
+# 84 86 omitted: trailing bars, not printed; 1.7 sources: "Need You Tonight 84-85 rest" agrees only "as far as the tab goes"
+#   (the tab ends at 82 bars), and the outro clip (1.6 clip 24) clicked nothing on them; no ear verdict on these bars.

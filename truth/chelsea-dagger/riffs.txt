@@ -1,0 +1,2 @@
+# The Fratellis "Chelsea Dagger": riff or strum per labelled section. Grid bars, 0-based, end exclusive.
+13 20 strum    # 1.7 sources: "Chelsea Dagger 13-19" (bars 13 to 19): Songsterr staccato chord stabs, the owner: power chords, agrees (songsterr s55960); riff review C non-riff

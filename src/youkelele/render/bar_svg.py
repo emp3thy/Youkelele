@@ -55,11 +55,15 @@ def _n(value: float) -> str:
 @dataclass(frozen=True)
 class _Cols:
     """The bar's slot columns: ``n`` slots spread over the box less a ``_PAD`` inset each side,
-    so the first and last arrows stand clear of the frame. Every row uses the same columns."""
+    so the first and last arrows stand clear of the frame. Every row uses the same columns.
+
+    ``first`` is the first column drawn: 0 for a full bar, ``n - pickup_slots`` for a partial
+    pickup bar, whose columns stand right-aligned in the box (1.8 spec 3.2)."""
 
     ox: float
     n: int
     box_w: float
+    first: int = 0
 
     @property
     def pitch(self) -> float:
@@ -70,6 +74,11 @@ class _Cols:
 
     def centre(self, slot: int) -> float:
         return self.left(slot) + self.pitch / 2
+
+    @property
+    def edge(self) -> float:
+        """The frame's left edge: ``ox`` for a full bar, ``_PAD`` left of the first drawn column."""
+        return self.left(self.first) - _PAD
 
 
 # the arrows of the 1.5 strum box, moved here: drawn from ``top`` in ``ink``, ``hw`` either side;
@@ -125,20 +134,21 @@ def _chord_row(
     ordered = sorted(chords, key=lambda c: c.start_slot)
     n = cols.n
     parts: list[str] = []
+    # names stand inside the frame, which starts at the first drawn column (1.8 spec 3.2)
     if not ordered or all(c.name == NC for c in ordered):
         if label:  # nothing to name: the label stands where the N.C. mark would
-            parts.append(_label_text(cols.ox + _CHORD_INSET, label))
+            parts.append(_label_text(cols.edge + _CHORD_INSET, label))
         else:
             parts.append(
-                f'<text x="{_n(cols.ox + _CHORD_INSET)}" y="13" font-size="{_CHORD_FONT}" font-weight="bold" '
+                f'<text x="{_n(cols.edge + _CHORD_INSET)}" y="13" font-size="{_CHORD_FONT}" font-weight="bold" '
                 f'fill="{_GREY}" class="chord nc">{NC}</text>'
             )
     else:
         for k, chord in enumerate(ordered):
-            start = min(max(chord.start_slot, 0), n - 1)
+            start = min(max(chord.start_slot, cols.first), n - 1)
             nxt = ordered[k + 1].start_slot if k + 1 < len(ordered) else n
             # the first name keeps the frame inset; a later one starts over its slot
-            x = (cols.ox if start == 0 else cols.left(start)) + _CHORD_INSET
+            x = (cols.edge if start == cols.first else cols.left(start)) + _CHORD_INSET
             if k == 0 and label:  # the label takes the first name's place; the name moves right of it
                 parts.append(_label_text(x, label))
                 x += _CHAR_PX * len(label) + 4
@@ -160,8 +170,11 @@ def _chord_row(
                 f'fill="{fill}" class="chord{" nc" if nc else ""}">{text}</text>'
             )
     if pickup:
+        # a partial pickup's box is too narrow for a name and the label: the label stands in the
+        # cell's empty left part, against the frame (1.8 spec 3.2)
+        right = cols.ox + cols.box_w - 2 if cols.first == 0 else cols.edge - 3
         parts.append(
-            f'<text x="{_n(cols.ox + cols.box_w - 2)}" y="8" text-anchor="end" font-size="7" font-style="italic" '
+            f'<text x="{_n(right)}" y="8" text-anchor="end" font-size="7" font-style="italic" '
             f'fill="#666" class="pickup-label">pickup</text>'
         )
     return parts
@@ -174,7 +187,7 @@ def _tab_block(bar: ScoreBar, cols: _Cols, top: float, labels: bool) -> list[str
     parts = ['<g class="tab">']
     for letter, y in zip(letters, ys):
         parts.append(
-            f'<line x1="{_n(ox)}" y1="{_n(y)}" x2="{_n(ox + cols.box_w)}" y2="{_n(y)}" stroke="{_GREY}" '
+            f'<line x1="{_n(cols.edge)}" y1="{_n(y)}" x2="{_n(ox + cols.box_w)}" y2="{_n(y)}" stroke="{_GREY}" '
             'stroke-width="0.8" class="string"/>'
         )
         if labels:
@@ -209,7 +222,7 @@ def _stroke_row(bar: ScoreBar, cols: _Cols, top: float, ink: str) -> list[str]:
     parts: list[str] = []
     for slot in sorted(strokes):
         parts.append(_ARROWS[strokes[slot].kind](cols.centre(slot), top + _ARROW_TOP, ink, hw, cw))
-    for slot in range(n):  # a faint dot on each slot nothing is played on
+    for slot in range(cols.first, n):  # a faint dot on each drawn slot nothing is played on
         if slot not in strokes:
             parts.append(
                 f'<circle cx="{_n(cols.centre(slot))}" cy="{_n(mid)}" r="1.3" fill="{_FAINT}" class="rest"/>'
@@ -221,7 +234,7 @@ def _count_row(meter: Meter, cols: _Cols, top: float) -> list[str]:
     n = cols.n
     per_beat = max(1, n // meter.numerator)
     parts = []
-    for i in range(n):
+    for i in range(cols.first, n):  # a partial pickup labels only its own columns (1.8 spec 3.2)
         x = cols.centre(i)
         beat = i % per_beat == 0
         style = f'font-size="9" font-weight="bold" fill="{_INK}"' if beat else 'font-size="8" fill="#777"'
@@ -242,6 +255,7 @@ def bar_svg(
     tab_rows: bool,
     *,
     power_badge: bool = False,
+    pickup_slots: int | None = None,
 ) -> str:
     """One bar as an inline SVG.
 
@@ -249,7 +263,8 @@ def bar_svg(
     stand level); ``first_in_line`` adds the string letters and the count row; ``grey`` draws
     the arrows in grey, the chord names staying black; a non-empty ``bar.label`` prints in grey
     in the chord row, before the first chord name; ``power_badge`` raises a small 5 after a
-    power chord's name (the full tier).
+    power chord's name (the full tier); ``pickup_slots`` draws a partial pickup bar, only its
+    last ``pickup_slots`` columns inside a frame right-aligned in the box (1.8 spec 3.2).
     """
     n = slots_per_bar
     ox = _LABEL_W if tab_rows and first_in_line else 0
@@ -263,13 +278,15 @@ def bar_svg(
         f'<svg xmlns="http://www.w3.org/2000/svg" class="bar" width="{width}" height="{height}" '
         f'viewBox="0 0 {width} {height}" font-family="Arial, Helvetica, sans-serif">'
     ]
-    cols = _Cols(ox=ox, n=n, box_w=box_w)
+    cols = _Cols(ox=ox, n=n, box_w=box_w, first=n - pickup_slots if pickup_slots else 0)
     parts.extend(_chord_row(bar.chords, cols, power_badge, bar.pickup, bar.label))
     if tab_rows:
         parts.extend(_tab_block(bar, cols, _CHORD_H, labels=first_in_line))
     parts.extend(_stroke_row(bar, cols, stroke_top, ink))
+    # the frame encloses the drawn columns only; the half pixel keeps its 1 px line crisp
+    frame_w = ox + box_w - cols.edge
     parts.append(
-        f'<rect x="{_n(ox + 0.5)}" y="0.5" width="{box_w - 1}" height="{box_h - 1}" fill="none" '
+        f'<rect x="{_n(cols.edge + 0.5)}" y="0.5" width="{_n(frame_w - 1)}" height="{box_h - 1}" fill="none" '
         f'stroke="{_FRAME}" stroke-width="1" rx="2" class="frame"/>'
     )
     if first_in_line:

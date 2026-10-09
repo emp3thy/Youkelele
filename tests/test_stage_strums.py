@@ -9,7 +9,7 @@ import soundfile as sf
 
 from youkelele.jsonio import load_model, save_model
 from youkelele.layout import RunLayout
-from youkelele.music.as_played import CHANCE_ALPHA
+from youkelele.music.as_played import CHANCE_ALPHA, MIN_VOTE_BARS
 from youkelele.music.onsets import Onsets
 import youkelele.music.pitch as pitch_module
 from youkelele.music.pitch import PITCH_CHANGE_MIN, PitchTrack
@@ -17,8 +17,9 @@ from youkelele.music.recall import HIGH_BAND_FMIN
 from youkelele.music.riff import is_riff, riff_features
 from youkelele.music.ring import RING_SECTION_DB
 from youkelele.options import RunOptions
+from youkelele.runner import check_requirements
 from youkelele.schemas import Bar, ChordEvent, Chords, Grid, Key, Meter, Section, Strums
-from youkelele.stage import StageContext
+from youkelele.stage import MissingArtifact, StageContext
 import youkelele.stages.strums as strums_module
 from youkelele.stages.strums import StrumsStage
 
@@ -94,11 +95,13 @@ def _write(path: Path, mono: np.ndarray) -> None:
 
 def _ctx(
     tmp_path, stage, grid: Grid, guitar: np.ndarray, other: np.ndarray, mix: np.ndarray, options=None, log=None,
-    chords: Chords | None = None,
+    chords: Chords | None = None, bass: np.ndarray | None = None,
 ):
+    """The stage's inputs on disk; the bass stem is silent unless `bass` is given."""
     layout = RunLayout(tmp_path / "run", ["ingest", "separate", "grid", "harmony", "strums"])
     _write(layout.path("separate/stems/guitar.wav"), guitar)
     _write(layout.path("separate/stems/other.wav"), other)
+    _write(layout.path("separate/stems/bass.wav"), np.zeros(len(mix)) if bass is None else bass)
     _write(layout.path("ingest/audio.wav"), mix)
     grid_path = layout.path("grid/grid.json")
     grid_path.parent.mkdir(parents=True)
@@ -145,15 +148,26 @@ def _island(n_bars: int) -> list[float]:
     return [t for b in range(n_bars) for t in _bar_times(b, ISLAND)]
 
 
+BASS_HZ = 55.0  # the separated bass line `_run` writes on the bass stem
+
+
 def _run(
     tmp_path, grid, detector, guitar_amp=0.0, other_amp=0.3, mix_amp=0.5, other=None, options=None, log=None,
-    chords=None,
+    chords=None, bass_amp=0.1,
 ):
+    """The stage on tone stems; the bass stem carries a separated bass line unless `bass_amp` is 0.
+
+    The fixtures' tones and chords sit mostly below 250 Hz, so over an empty bass stem the
+    bass-on-stem gate (1.8 spec 6) would fire on them; a real song's bass is on its own stem.
+    """
     seconds = grid.bars[-1].end
     stage = StrumsStage(onset_detector=detector)
     other_wave = _tone(seconds, other_amp) if other is None else other
+    t = np.arange(int(seconds * SR)) / SR
+    bass = bass_amp * np.sin(2 * np.pi * BASS_HZ * t) if bass_amp else None
     ctx, out = _ctx(
-        tmp_path, stage, grid, _tone(seconds, guitar_amp), other_wave, _tone(seconds, mix_amp), options, log, chords
+        tmp_path, stage, grid, _tone(seconds, guitar_amp), other_wave, _tone(seconds, mix_amp), options, log, chords,
+        bass,
     )
     stage.run(ctx)
     return load_model(ctx.output("strums/strums.json"), Strums), ctx, out
@@ -236,14 +250,14 @@ def test_strums_stage_short_section_keeps_its_own_vote_and_is_uncertain(tmp_path
 
 
 def test_strums_stage_short_sections_use_their_own_vector_and_the_chance_test(tmp_path):
-    # spec 4.5 (1.6): no section inherits and length alone does not grey a pattern; the
-    # chance test decides (two identical island bars already pass it at p near 0.036)
+    # spec 4.5 (1.6): no section inherits; two identical island bars already pass the chance
+    # test at p near 0.036. Since 1.8 (spec 5.4) fewer than four voted bars print grey anyway
     strums, _, _ = _run(tmp_path, _grid([2, 3]), _detector(_island(5)))
     for p in strums.patterns:
         assert "".join(p.slots) == "D-DU-UDU"
         assert p.inherited_from is None
         assert p.chance_p is not None and p.chance_p <= CHANCE_ALPHA
-        assert not p.uncertain
+        assert len(p.voted_bars) < MIN_VOTE_BARS and p.uncertain
 
 
 def test_strums_stage_passes_grid_bpm_to_slot_choice(tmp_path):
@@ -506,8 +520,9 @@ def test_trimmed_last_section_under_four_bars_votes_on_its_analysed_bars(tmp_pat
     assert not outro.no_instrument
     assert outro.slots == verse.slots  # the trailing dense bars are not in its vote
     assert outro.strike_density == 0.75
-    # two identical island bars pass the chance test (p near 0.036), so the outro is certain
-    assert outro.chance_p <= CHANCE_ALPHA and not outro.uncertain
+    # two identical island bars pass the chance test (p near 0.036); since 1.8 (spec 5.4) two
+    # voted bars print grey all the same
+    assert outro.chance_p <= CHANCE_ALPHA and outro.voted_bars == [8, 9] and outro.uncertain
 
 
 def test_strums_stage_logs_nothing_about_trailing_bars_when_none_dropped(tmp_path):
@@ -1020,10 +1035,10 @@ G7 = (196.0, 246.9, 293.7, 349.2)  # a strummed chord: four pitch classes, so th
 BELL_HZ, BELL_TAU = 2000.0, 0.05
 
 
-def _stem_bars(stem_bars: Sequence[str]) -> tuple[np.ndarray, list[float]]:
+def _stem_bars(stem_bars: Sequence[str], chord: Sequence[float] = G7) -> tuple[np.ndarray, list[float]]:
     """A stem built bar by bar, and the onsets the detector reports on it.
 
-    A pattern bar is ringing G7 bursts on its `S` cells; `SILENT` is zeros; `BELL` is 2 kHz
+    A pattern bar is ringing `chord` bursts on its `S` cells; `SILENT` is zeros; `BELL` is 2 kHz
     strikes on every eighth; `RIFF_LINE` is single notes on the ISLAND slots, the pitch moving
     burst by burst. Each burst is cut at the next or at the bar's end, so no bar rings into the next.
     """
@@ -1048,18 +1063,26 @@ def _stem_bars(stem_bars: Sequence[str]) -> tuple[np.ndarray, list[float]]:
             elif kind == RIFF_LINE:
                 freqs, notes = (line[notes % len(line)],), notes + 1
             else:
-                freqs = G7
+                freqs = chord
             wave = sum(np.sin(2 * np.pi * f * t) for f in freqs) / len(freqs)
             y[start:stop] = 0.5 * np.exp(-t / tau) * wave
         times.extend(_bar_times(b, cells))
     return y, times
 
 
-def _run_stage(tmp_path, stem_bars: Sequence[str], sections=None, log=None) -> Strums:
-    """The stage on a per-bar stem (on the other stem, the mix a quiet steady tone), one C chord throughout."""
+def _run_stage(
+    tmp_path, stem_bars: Sequence[str], sections=None, log=None, chord: Sequence[float] = G7,
+    detector_times: Sequence[float] | None = None, bass_amp: float = 0.1,
+) -> Strums:
+    """The stage on a per-bar stem (on the other stem, the mix a quiet steady tone), one C chord throughout.
+
+    The detector reports the stem's own onsets unless `detector_times` is given; `bass_amp` 0
+    leaves the bass stem empty.
+    """
     grid = _labelled_grid(sections) if sections else _grid([len(stem_bars)])
-    stem, times = _stem_bars(stem_bars)
-    strums, _, _ = _run(tmp_path, grid, _detector(times), other=stem, mix_amp=0.1, log=log)
+    stem, times = _stem_bars(stem_bars, chord)
+    detector = _detector(times if detector_times is None else detector_times)
+    strums, _, _ = _run(tmp_path, grid, detector, other=stem, mix_amp=0.1, log=log, bass_amp=bass_amp)
     assert strums.source == "other_stem"
     return strums
 
@@ -1137,6 +1160,8 @@ def test_two_bar_pattern_phase_starts_at_the_first_holding_bar(tmp_path):
     assert s.bars[0].rests and not any(b.rests for b in s.bars[1:])
     assert s.patterns[0].unit == 2 and s.bars[1].pattern == list(A_TEXT) and s.bars[2].pattern == list(B_TEXT)
     assert [b.pattern for b in s.bars[1:]] == [s.bar_onsets[i] for i in range(1, 9)]  # what it plays
+    # the all-bars reading (1.8 spec 4.4) uses the same parity: only the empty bar 0 disagrees
+    assert s.patterns[0].confidence_all_bars == pytest.approx(8 / 9)
 
 
 def test_an_interior_resting_bar_keeps_the_printed_two_bar_phase_on_absolute_parity(tmp_path):
@@ -1171,3 +1196,108 @@ def test_a_riff_member_carries_rule_a(tmp_path, real_pitch):
     p = s.patterns[0]
     assert p.riff and p.riff_rule == "A" and p.pitch_change_share >= PITCH_CHANGE_MIN
     assert p.named_share is not None and p.root_share is not None
+
+
+# version 1.8: certainty on both readings and four voted bars, the bass-on-stem gate and the
+# rival figures (spec 4.4, 5.4, 5.5 and 6)
+
+BASS_LINE = (100.0,)  # a single low tone: the source stem's own energy lies below 250 Hz
+
+
+def test_stage_refuses_without_a_bass_stem(tmp_path):
+    grid = _grid([8])
+    seconds = grid.bars[-1].end
+    stage = StrumsStage(onset_detector=_detector(_island(8)))
+    ctx, _ = _ctx(tmp_path, stage, grid, _tone(seconds, 0.0), _tone(seconds, 0.3), _tone(seconds, 0.5))
+    ctx.layout.path("separate/stems/bass.wav").unlink()
+    missing = check_requirements([stage], ctx.layout, 0, 0)
+    assert [m.key for m in missing] == ["separate/stems/bass.wav"]
+    with pytest.raises(MissingArtifact) as exc:
+        stage.run(ctx)
+    assert exc.value.key == "separate/stems/bass.wav"
+
+
+def test_a_member_with_a_low_source_and_an_empty_bass_stem_is_gated(tmp_path, monkeypatch):
+    # the chroma and pitch-change tests are forced to pass, so only the gate keeps the riff flag off
+    monkeypatch.setattr(strums_module, "is_riff", lambda entropy, single: True)
+    monkeypatch.setattr(strums_module, "pitch_change_share", lambda notes: 1.0)
+    s = _run_stage(tmp_path, [ISLAND_BAR] * 8, chord=BASS_LINE, bass_amp=0.0)
+    p = s.patterns[0]
+    assert p.bass_on_stem is True and p.uncertain is True and p.riff is False
+    assert p.pitch_change_share == 1.0  # the shares are still measured
+    # every other reading is certain: the gate alone greys it
+    assert p.confidence == 1.0 and p.confidence_all_bars == 1.0 and p.chance_p <= CHANCE_ALPHA
+    assert p.voted_bars == list(range(8))
+    assert p.bass_stem_ratio == 0.0 and p.low_own_share > 0.9
+    assert p.low_mix_share_bass == 0.0 and p.low_mix_share_source > 0.0
+
+
+def test_a_gated_member_still_rests_its_silent_bars(tmp_path):
+    # bars 2 and 3 are zeros; bar 4 is a loud bell with nothing below 330 Hz, which the low-share
+    # test would rest, but the gate skips that test, so only the energy floor applies (spec 6)
+    lines: list[str] = []
+    stem_bars = [ISLAND_BAR] * 2 + [SILENT] * 2 + [BELL] + [ISLAND_BAR] * 3
+    s = _run_stage(tmp_path, stem_bars, chord=BASS_LINE, log=lines.append, bass_amp=0.0)
+    assert s.patterns[0].bass_on_stem is True
+    assert [b.rests for b in s.bars] == [False, False, True, True, False, False, False, False]
+    assert s.bars[2].strokes == [] and s.bars[2].pattern == ["-"] * 8
+    assert s.bars[4].low_share < 0.005 and s.bars[4].strokes  # holds by energy alone
+    assert s.patterns[0].voted_bars == [0, 1, 4, 5, 6, 7]
+    assert any("member 0-8: 2 bars rest" in line for line in lines)
+
+
+def test_certainty_needs_the_full_span_too(tmp_path):
+    # bars 4-7 are bells (resting by the low-share test) on which the detector fires off the
+    # pattern; the four holding bars vote certain, the eight analysed bars do not (spec 4.4)
+    stem_bars = [ISLAND_BAR] * 4 + [BELL] * 4
+    times = _island(4) + [t for b in range(4, 8) for t in _bar_times(b, (1, 4))]
+    s = _run_stage(tmp_path, stem_bars, detector_times=times)
+    p = s.patterns[0]
+    assert [b.rests for b in s.bars] == [False] * 4 + [True] * 4
+    assert p.voted_bars == [0, 1, 2, 3] and not p.bass_on_stem
+    assert p.confidence == 1.0 and p.explained == 1.0 and p.chance_p <= CHANCE_ALPHA  # the holding reading
+    assert p.confidence_all_bars < p.confidence and p.chance_p_all_bars > CHANCE_ALPHA  # the full reading
+    assert p.uncertain is True
+    assert all(b.uncertain for b in s.bars[:4])
+
+
+def test_fewer_than_four_voted_bars_prints_grey(tmp_path):
+    s = _run_stage(tmp_path, [ISLAND_BAR] * 3)
+    p = s.patterns[0]
+    assert "".join(p.slots) == ISLAND_TEXT
+    assert p.voted_bars == [0, 1, 2] and len(p.voted_bars) < MIN_VOTE_BARS
+    # both readings are certain and the gate does not fire: the support rule alone greys it (spec 5.4)
+    assert p.confidence == 1.0 and p.chance_p <= CHANCE_ALPHA
+    assert p.confidence_all_bars == 1.0 and p.chance_p_all_bars <= CHANCE_ALPHA and not p.bass_on_stem
+    assert p.uncertain is True
+
+
+def test_dropped_bars_are_recorded_for_a_two_bar_vote(tmp_path):
+    # bar 0 rests; bars 1-7 alternate A, B, ... A: three pairs vote and the seventh holding bar is
+    # left out. The indices are the grid's, not positions among the holding bars
+    s = _run_stage(tmp_path, [SILENT] + [A, B] * 3 + [A])
+    p = s.patterns[0]
+    assert p.unit == 2
+    assert p.voted_bars == [1, 2, 3, 4, 5, 6] and p.dropped_bars == [7]
+
+
+def test_top2_margin_and_runner_up_are_written(tmp_path):
+    push = "S-SSS-SS"  # the ISLAND bar with its fifth-slot strike pushed a slot early
+    s = _run_stage(tmp_path, [ISLAND_BAR] * 5 + [push])
+    p = s.patterns[0]
+    assert "".join(p.slots) == ISLAND_TEXT
+    assert isinstance(p.top2_margin, float) and p.top2_margin > 0
+    assert p.runner_up_vector == list(push) and p.runner_up_vector != list(ISLAND_BAR)
+
+
+def test_an_odd_phase_two_bar_vote_is_not_its_own_rival(tmp_path):
+    # a downbeat bar, then A, B four times: the pairs start at the second bar (phase 1). The
+    # printed vector is aligned to the first bar, the candidates are in pair order; compared
+    # unaligned, the printed figure itself would come back as the rival with a negative margin
+    s = _run_stage(tmp_path, ["S-------"] + [A, B] * 4)
+    p = s.patterns[0]
+    assert p.unit == 2 and p.voted_bars == list(range(1, 9)) and p.dropped_bars == [0]
+    # B + A is the printed figure in first-bar order (bar 0 takes the B cell), A + B the same
+    # figure in pair order; neither rotation may come back as the rival
+    assert s.bars[0].pattern == list(B_TEXT) and s.bars[1].pattern == list(A_TEXT)
+    assert p.runner_up_vector not in (list(A + B), list(B + A)) and p.top2_margin > 0

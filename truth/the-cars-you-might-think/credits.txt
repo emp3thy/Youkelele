@@ -1,0 +1,3 @@
+# The Cars "You Might Think": expected printed title, then artist.
+You Might Think   # key review C, Metadata: "You Might Think" by "The Cars" (1.7 printed "The Cars - You Might Think" by "RHINO")
+The Cars          # key review C, Metadata

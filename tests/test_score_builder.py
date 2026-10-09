@@ -8,7 +8,13 @@ import pytest
 from youkelele.jsonio import ArtifactError
 from youkelele.music import score_builder
 from youkelele.music.alphatex import score_to_alphatex
-from youkelele.music.score_builder import _labels, build_score, check_strums_match_grid
+from youkelele.music.score_builder import (
+    _labels,
+    build_score,
+    check_strums_match_grid,
+    pickup_column,
+    pickup_slots,
+)
 from youkelele.profiles.ukulele import UKULELE_TUNING
 from youkelele.schemas import (
     ArrangedChord,
@@ -147,9 +153,9 @@ def test_score_carries_key_hedge_from_chords_key():
                   mode_margin=0.3, runner_up="C", hedge_mode="major")
     assert (build(a_minor).key, build(a_minor).key_hedge) == ("A minor", "C major")
     mix = a_minor.model_copy(
-        update={"margin": 0.2, "hedge_mode": None, "mix": Key(tonic="F", mode="major", confidence=0.1)}
+        update={"margin": 0.2, "hedge_mode": None, "mix": Key(tonic="C", mode="major", confidence=0.1)}
     )
-    assert build(mix).key_hedge == "F major"  # a file from before the stored mode: the mix's own
+    assert build(mix).key_hedge == "C major"  # a file from before the stored mode: the mix's own
 
 
 def test_score_copies_explained():
@@ -1210,3 +1216,110 @@ def test_label_prints_under_an_uncertain_header():
         uncertain=True,
     )
     assert score.sections[0].state == "pattern uncertain" and score.sections[0].bars[8].label == "riff heard"
+
+
+# version 1.8: a partial pickup bar (spec 3.2), the guitar-not-separated phrase (spec 3.3), provenance (spec 3.4)
+
+
+def test_pickup_slots_for_one_beat_of_four_on_eighths_is_two():
+    bar = Bar(index=0, start=0, end=0.5, beats=[0], pickup=True)
+    assert pickup_slots(bar, 8, Meter(numerator=4, denominator=4)) == 2
+
+
+def test_pickup_slots_in_three_four_at_six_slots_with_two_beats_is_four():
+    bar = Bar(index=0, start=0, end=1, beats=[0, 1], pickup=True)
+    assert pickup_slots(bar, 6, Meter(numerator=3, denominator=4)) == 4
+
+
+def test_pickup_slots_is_none_for_a_full_bar_and_at_least_one_for_a_tiny_one():
+    m44 = Meter(numerator=4, denominator=4)
+    assert pickup_slots(Bar(index=1, start=0, end=2, beats=[0, 1, 2, 3]), 8, m44) is None
+    assert pickup_slots(Bar(index=0, start=0, end=0.1, beats=[0], pickup=True), 4, m44) == 1
+
+
+def test_pickup_column_maps_full_bar_cells_onto_the_last_columns():
+    assert [pickup_column(j, 8, 2) for j in range(8)] == [6, 6, 6, 6, 7, 7, 7, 7]
+
+
+def test_score_maps_a_pickup_bars_strokes_and_chord_onto_its_columns():
+    grid = _grid(4)
+    grid.bars[0] = grid.bars[0].model_copy(update={"beats": [0], "pickup": True})
+    plan = [PlannedSection(start_bar=0, end_bar=4, label="Verse", members=[0])]
+    bars = _bars((4, "D----D--", 0, False, False, False))
+    # the pickup's own row strikes at its first and fifth cells, spread over its one beat
+    onsets = [list("D---D---")] + [list("D----D--")] * 3
+    strums = _strums_with_plan(plan, [_pattern()]).model_copy(update={"bars": bars, "bar_onsets": onsets})
+    score = build_score(_source(), grid, _C_CHORDS, strums, _C_ARRANGEMENT, Riffs(), UKULELE_TUNING, "Ukulele")
+    pickup, full = score.sections[0].bars[0], score.sections[0].bars[1]
+    assert pickup.pickup_slots == 2 and [k.slot for k in pickup.strokes] == [6, 7]
+    assert [c.start_slot for c in pickup.chords] == [6] and pickup.chords[0].name == "C"
+    assert len(pickup.chords[0].slots) == 8  # the chord's slot list stays full length
+    assert full.pickup_slots is None and [k.slot for k in full.strokes] == [0, 5]
+    assert [c.start_slot for c in full.chords] == [0]
+
+
+def _pickup_score(row: str, pattern: str = "D-D-D-D-", rests: bool = False):
+    """A two-bar song whose first bar is a one-beat pickup; ``row`` is the pickup's own quantised
+    onsets and ``pattern`` its member's voted pattern."""
+    grid = _grid(2)
+    grid.bars[0] = grid.bars[0].model_copy(update={"beats": [0], "pickup": True})
+    plan = [PlannedSection(start_bar=0, end_bar=2, label="Verse", members=[0])]
+    bars = _bars((1, pattern, 0, False, False, False, rests), (1, pattern, 0, False, False, False))
+    onsets = [list(row), list(pattern)]
+    strums = _strums_with_plan(plan, [_pattern()]).model_copy(update={"bars": bars, "bar_onsets": onsets})
+    return build_score(_source(), grid, _C_CHORDS, strums, _C_ARRANGEMENT, Riffs(), UKULELE_TUNING, "Ukulele")
+
+
+def test_pickup_strokes_take_their_direction_from_their_column_on_eighths():
+    # D---D---: the pickup's own row strikes on its beat (column 6) and its "&" (column 7)
+    pickup = _pickup_score("D---D---").sections[0].bars[0]
+    assert [(k.slot, k.kind) for k in pickup.strokes] == [(6, "D"), (7, "U")]
+    assert [(k.slot, k.kind) for k in _pickup_score("D-D-D-D-").sections[0].bars[0].strokes] == [(6, "D"), (7, "U")]
+
+
+def test_a_pickup_prints_its_own_onsets_not_its_members_pattern():
+    # one strike at the pickup's first cell; the member's D-DU-UDU would have squeezed to D U
+    pickup = _pickup_score("D-------", pattern=_ISLAND_CELLS).sections[0].bars[0]
+    assert [(k.slot, k.kind) for k in pickup.strokes] == [(6, "D")]
+    assert pickup.struck
+
+
+def test_a_pickup_whose_own_row_is_empty_prints_no_strokes_though_its_pattern_is_full():
+    score = _pickup_score("--------", pattern=_ISLAND_CELLS)
+    pickup, full = score.sections[0].bars[0], score.sections[0].bars[1]
+    assert pickup.strokes == [] and not pickup.struck
+    assert [c.start_slot for c in pickup.chords] == [6]  # the chord still starts on its column
+    assert [k.slot for k in full.strokes] == [0, 2, 3, 5, 6, 7]  # a full bar prints its pattern
+
+
+def test_a_resting_pickup_prints_nothing_even_with_onsets_in_its_row():
+    pickup = _pickup_score("D---D---", rests=True).sections[0].bars[0]
+    assert pickup.strokes == [] and pickup.rests
+
+
+def test_pickup_strokes_take_their_direction_from_their_column_on_sixteenths_and_muted_stays_muted():
+    m44 = Meter(numerator=4, denominator=4)
+    strokes = [Stroke(slot=j, kind="D") for j in range(0, 16, 2)]
+    placed, _ = score_builder._on_pickup_columns(strokes, [], 16, 4, m44)
+    assert [(k.slot, k.kind) for k in placed] == [(12, "D"), (13, "U"), (14, "D"), (15, "U")]
+    muted, _ = score_builder._on_pickup_columns([Stroke(slot=4, kind="x")], [], 16, 4, m44)
+    assert [(k.slot, k.kind) for k in muted] == [(13, "x")]
+
+
+def test_state_phrase_for_a_gated_section():
+    plan = [PlannedSection(start_bar=0, end_bar=4, label="Verse", members=[0])]
+    gated = _pattern().model_copy(update={"uncertain": True, "bass_on_stem": True})
+    bars = _bars((4, _ISLAND_CELLS, 0, True, True, False))
+    strums = _strums_with_plan(plan, [gated]).model_copy(update={"bars": bars})
+    section = _riff_score(4, strums, Riffs()).sections[0]
+    assert section.state == "guitar not separated here"
+    assert all(b.label == "" for b in section.bars) and all(b.grey for b in section.bars)
+    assert all(b.strokes for b in section.bars)  # the bass line's rhythm still prints, grey
+
+
+def test_score_carries_provenance():
+    score = build_score(
+        _source().model_copy(update={"provenance": "Natan Santos"}), _grid(2), _CHORDS, _strums(),
+        _ARRANGEMENT, Riffs(), UKULELE_TUNING, "Ukulele",
+    )
+    assert score.provenance == "Natan Santos"

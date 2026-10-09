@@ -62,9 +62,12 @@ def read_stems(paths: list[Path]) -> tuple[list[np.ndarray], int]:
 def _key_log(key: Key, decision: TonicDecision | None) -> str:
     if decision is None:
         return f"key {key_text(key)} (mix)"
+    if decision.decided_by == "set":  # the margin is the set's over the votes' tonic
+        whose = "set"
+    else:
+        whose = "pair" if decision.rule == "pair rule" else "score"
     return (
-        f"key {key_text(key)} (chords+stems, {'pair' if decision.rule == 'pair rule' else 'score'} "
-        f"margin {key.margin:.3f} by {decision.rule}, "
+        f"key {key_text(key)} (chords+stems, {whose} margin {key.margin:.3f} by {decision.rule}, "
         f"decided by {decision.decided_by})"
     )
 

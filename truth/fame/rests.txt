@@ -1,0 +1,2 @@
+# David Bowie "Fame": per-bar activity on the guitar stem. Grid bars, 0-based, end exclusive.
+# No records: 1.7 rests finds no resting bar on Fame, and no clip or source table row settles a bar's activity.

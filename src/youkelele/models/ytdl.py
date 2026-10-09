@@ -100,13 +100,29 @@ class MetadataError(Exception):
         self.cause = cause
 
 
-_METADATA_FIELDS = ("id", "title", "uploader", "artist", "duration")
+# The video details kept from a fetch (spec 8.1): the credits and the channel evidence
+# `titles.resolve_credits` reads, saved by `layout.resolve_run_dir` as source_meta.json.
+METADATA_FIELDS = (
+    "id",
+    "title",
+    "uploader",
+    "uploader_id",
+    "channel",
+    "channel_id",
+    "artist",
+    "artists",
+    "track",
+    "album",
+    "release_year",
+    "duration",
+)
 
 
 def fetch_metadata(
     url: str, retries: int = 3, sleep: Callable[[float], None] = time.sleep
 ) -> dict:
-    """The video's id, title, uploader, artist and duration, without downloading anything."""
+    """The video's `METADATA_FIELDS`, without downloading anything; a field yt-dlp did
+    not report is None."""
 
     def attempt_once() -> object:
         with yt_dlp.YoutubeDL(_metadata_options()) as ydl:
@@ -118,4 +134,4 @@ def fetch_metadata(
         raise MetadataError(url, exc) from exc
     if not isinstance(info, dict):
         raise MetadataError(url, ValueError("no details returned"))
-    return {field: info.get(field) for field in _METADATA_FIELDS}
+    return {field: info.get(field) for field in METADATA_FIELDS}

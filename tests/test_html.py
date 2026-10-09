@@ -49,8 +49,9 @@ def _section(
     )
 
 
-def _score(sections, strum_source="other_stem", slots_per_bar=8, capo=0):
+def _score(sections, strum_source="other_stem", slots_per_bar=8, capo=0, provenance=None):
     return Score(
+        provenance=provenance,
         instrument=Instrument(name="Ukulele", strings=4, tuning=["G4", "C4", "E4", "A4"], capo=capo),
         title="Song & Dance",
         artist="Band",
@@ -519,3 +520,60 @@ def test_html_no_capo_line_in_fret_notation_with_barre_marks():
 def test_html_no_capo_line_absent_without_a_capo():
     assert "Without a capo" not in render_html(_alternative_score(0))
     assert "Without a capo" not in render_html(_two_sections(capo=3))
+
+
+# version 1.8: the editorial legend lines (spec 3.1), the partial pickup bar (spec 3.2), the
+# guitar-not-separated phrase (spec 3.3) and the provenance line (spec 3.4)
+
+STROKE_LINE = "Stroke length is not measured: hold or damp each stroke as the record does."
+DIRECTION_LINE = "Arrows follow the hand: down on the beat, up between. Direction is not read from the recording."
+
+
+def test_every_sheet_prints_the_two_editorial_legend_lines():
+    plain_section = _section("Verse", 4, 0)
+    html = render_html(_score([plain_section]))
+    assert html.count("Stroke length is not measured") == 1 and html.count("Arrows follow the hand") == 1
+    assert f'<p class="tab-legend editorial">{STROKE_LINE}</p>' in html
+    assert f'<p class="tab-legend editorial">{DIRECTION_LINE}</p>' in html
+    assert html.index("Stroke length") < html.index("Arrows follow") < html.index('class="sections"')
+    # with tab they follow the tab legend line
+    tabbed = render_html(_score([_section("verse", 4, 0, tab=True, state="riff")]))
+    assert tabbed.index("Tab: A E C G") < tabbed.index("Stroke length") < tabbed.index("Arrows follow")
+
+
+def test_provenance_line_prints_only_when_set():
+    plain_section = _section("Verse", 4, 0)
+    assert "uploaded by Natan Santos" in render_html(_score([plain_section], provenance="Natan Santos"))
+    assert "uploaded by" not in render_html(_score([plain_section]))
+    html = render_html(_score([plain_section], provenance="Natan Santos"))
+    head = html[html.index('<header class="sheet-head">'):html.index("</header>")]
+    assert head.index('<p class="artist">Band</p>') < head.index(
+        '<p class="artist provenance">uploaded by Natan Santos</p>'
+    ) < head.index('class="facts"')
+
+
+def test_count_row_sits_under_the_first_full_bar_when_the_line_starts_with_a_pickup():
+    pickup = ScoreBar(
+        index=0, pickup=True, pickup_slots=2,
+        chords=[ScoreChord(name="C", diagram=0, start_slot=6, slots=ISLAND)],
+        strokes=[Stroke(slot=6, kind="D"), Stroke(slot=7, kind="U")],
+    )
+    section = _plain_section("Intro", [pickup] + _bars(["C", "C"], start=1))
+    intro = _section_html(render_html(_score([section])), "Intro")
+    svgs = re.findall(r'<svg [^>]*class="bar".*?</svg>', intro)
+    assert len(svgs) == 3
+    assert [s.count('class="count beat"') for s in svgs] == [0, 4, 0]
+    assert svgs[0].count('class="rest"') == 0 and svgs[0].count('class="arrow') == 2
+    assert svgs[0].count('class="pickup-label"') == 1
+
+
+def test_gated_section_prints_its_phrase_and_grey_rows():
+    gated = _section("Chorus", 4, 4, state="guitar not separated here", grey=True)
+    html = render_html(_score([_section("Verse", 4, 0), gated]))
+    assert html.count("guitar not separated here") == 1
+    chorus = _section_html(html, "Chorus")
+    assert chorus.index("<h2>Chorus</h2>") < chorus.index(
+        '<span class="strum-label">guitar not separated here</span>'
+    )
+    assert 'stroke="#999"' in chorus and 'class="arrow down"' in chorus
+    assert re.search(r'fill="#111"[^>]*class="chord"', chorus)  # the chord row stays black

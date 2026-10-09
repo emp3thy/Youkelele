@@ -1,0 +1,3 @@
+# Example clip: 4 bars, 120 bpm, C G Am F. Synthetic truth for the tests.
+C major fixture  # C G Am F is diatonic to C major
+A minor fixture  # the relative minor, an alternative the chords allow

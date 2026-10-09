@@ -1,0 +1,3 @@
+# Wet Leg "mangetout": key.
+# No key line: key review C finds no published key ("none found"); the 1.4 validation accepted the chain's C major,
+#   which the review does not count as truth (score n/a).

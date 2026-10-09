@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import shutil
+from datetime import datetime, timezone
 from pathlib import Path
 
 from youkelele.cli import main
@@ -29,6 +31,7 @@ from youkelele.schemas import (
     RiffSection,
     Section,
     SectionPattern,
+    SourceInfo,
     Strums,
     TonicVotes,
 )
@@ -116,6 +119,11 @@ def test_cli_evaluate_prints_report(tmp_path, capsys):
         "Chord root: 100.0%",
         "Chord major/minor: 100.0%",
         "Chord triads: 100.0%",
+        "Patterns: n/a",  # the run has no strums.json to score
+        "Riffs: n/a",
+        "Rests: n/a",
+        "Key vs truth: 100.0% (same), hedge none",
+        "Credits: n/a",  # nor a source.json
     ]
 
 
@@ -483,12 +491,17 @@ def test_evaluate_with_empty_truth_dir_prints_na_truth_lines(tmp_path):
     report = evaluate_run(_run_with(tmp_path / "run"), truth)
     lines = format_report(report).splitlines()
     assert "Changes on bar: 100.0%" in lines
-    assert lines[-5:] == [
+    assert lines[-10:] == [
         "Beat F-measure: n/a",
         "Downbeat F-measure: n/a",
         "Chord root: n/a",
         "Chord major/minor: n/a",
         "Chord triads: n/a",
+        "Patterns: n/a",
+        "Riffs: n/a",
+        "Rests: n/a",
+        "Key vs truth: n/a",
+        "Credits: n/a",
     ]
 
 
@@ -695,6 +708,14 @@ def test_key_line_prints_the_votes():
                tonic_votes=TonicVotes(score="C", pair=None, mix="F", decided_by="score"))
     assert _key_line(none).endswith("votes score C pair none mix F (score))")
     assert "votes" not in _key_line(Key(tonic="F", mode="major", confidence=0.1))
+
+
+def test_key_line_prints_the_set_votes():
+    key = Key(tonic="G", mode="major", confidence=0.1, tonic_votes=TonicVotes(
+        score="E", pair="E", mix="E", decided_by="set", set_tonic="G", set_share_best=0.82,
+        set_share_decided=0.82,
+    ))
+    assert _key_line(key).endswith("votes score E pair E mix E set G best 0.82 decided 0.82 (set))")
 
 
 def test_comparison_cell_shows_p_and_riff_and_flags_a_change(tmp_path):
@@ -970,3 +991,111 @@ def test_compare_counts_rest_changes_and_names_the_rule(tmp_path):
 def test_ranges():
     assert _ranges([0, 1, 2, 3, 10, 11]) == "0-3, 10, 11" and _ranges([]) == ""
     assert _ranges([5]) == "5" and _ranges([4, 5]) == "4, 5" and _ranges([4, 5, 6]) == "4-6"
+
+
+HEARD = list("D-DU-UDU")  # the example fixture's figure for bars 0-2
+
+
+def _truth_run(path: Path) -> Path:
+    """The example clip with eight-slot strums: bars 0-1 print the heard figure, bar 2 a
+    wrong one, both certain; bar 3 rests. The source carries the credits with upload tags."""
+    bars = [
+        BarStrums(index=i, member=0, strokes=[], pattern=slots, uncertain=False, rests=i == 3)
+        for i, slots in enumerate([HEARD, HEARD, list("D-D-D-DU"), list("--------")])
+    ]
+    pattern = _pattern(0, HEARD, voted_bars=[0, 1, 2], dropped_bars=[3], top2_margin=0.12)
+    strums = Strums(
+        slots_per_bar=8, source="mix", source_ratio=1.0, grid_fit=0.9, uncertain=False,
+        patterns=[pattern], bar_onsets=[HEARD] * 4,
+        plan=[PlannedSection(start_bar=0, end_bar=4, label="verse", members=[0])], bars=bars,
+    )
+    run = _run_with(path, strums=strums)
+    (run / "00_ingest").mkdir()
+    save_model(run / "00_ingest" / "source.json", SourceInfo(
+        url=None, path=None, video_id=None, title="Example Song (Official Video)",
+        artist="THE EXAMPLE BAND", duration=8.0, sample_rate=44100, channels=2,
+        fetched_at=datetime(2026, 10, 9, tzinfo=timezone.utc), title_source="credited",
+        artist_source="channel",
+    ))
+    return run
+
+
+def test_evaluate_with_truth_prints_the_five_blocks_and_na_for_missing_files(tmp_path, capsys):
+    _truth_run(tmp_path / "runs" / "demo")
+    code = main(["evaluate", "demo", "--truth", str(EXAMPLE), "--runs-dir", str(tmp_path / "runs")])
+    out = capsys.readouterr().out.splitlines()
+    assert code == 0
+    start = out.index("Chord triads: 100.0%") + 1
+    assert out[start:] == [
+        "Patterns:",
+        "  bars 0-2 YES: printed D-DU-UDU, heard D-DU-UDU, jaccard 1.00, swap 0, voted 2, margin 0.12, certain",
+        "  bars 2-3 NO: printed D-D-D-DU, heard n/a, jaccard n/a, swap n/a, voted 1, margin 0.12, certain",
+        "  false certain 1, false grey 0, discontinuity 0.50",
+        "Riffs: precision n/a, recall n/a; baseline not-riff 100.0%, riff 0.0%",
+        "Rests: precision 100.0%, recall 100.0%, false rests 0, false holds 0, event F 100.0%",
+        "Key vs truth: 100.0% (same), hedge none",
+        "Credits: title yes (credited), artist yes (channel)",
+    ]
+    report = evaluate_run(tmp_path / "runs" / "demo", EXAMPLE)
+    assert report.false_certain == 1 and report.false_grey == 0 and report.discontinuity == 0.5
+    assert report.riff_scores == (None, None, 1.0, 0.0)
+    assert report.rest_scores == (1.0, 1.0, 0, 0, 1.0)
+    assert report.key_score == (1.0, "same", None) and report.credits_match == (True, True)
+
+    # a missing file and a file with no record line both print n/a
+    truth = tmp_path / "truth"
+    shutil.copytree(EXAMPLE, truth)
+    (truth / "rests.txt").unlink()
+    (truth / "key.txt").write_text("# the sources settle no key\n")
+    (truth / "patterns.txt").write_text("\n# nothing judged\n")
+    report = evaluate_run(tmp_path / "runs" / "demo", truth)
+    assert report.rest_scores is None and report.key_score is None
+    assert report.pattern_scores is None and report.false_certain is None
+    lines = format_report(report).splitlines()
+    assert "Rests: n/a" in lines and "Key vs truth: n/a" in lines and "Patterns: n/a" in lines
+    assert "Credits: title yes (credited), artist yes (channel)" in lines
+    # without truth no truth block prints at all
+    plain = format_report(evaluate_run(tmp_path / "runs" / "demo"))
+    assert "Patterns" not in plain and "Credits" not in plain
+
+
+def test_section_line_prints_voted_rival_all_bars_and_bass_gate(tmp_path):
+    fields = dict(
+        voted_bars=list(range(8)), dropped_bars=[8, 9], top2_margin=0.08,
+        runner_up_vector=list("S-S-S-SS"), confidence_all_bars=0.61, chance_p_all_bars=0.004,
+        low_mix_share_bass=0.01, low_mix_share_source=0.82, low_own_share=0.55,
+        bass_stem_ratio=0.0012,
+    )
+    fired = evaluate_run(_wide_run(tmp_path / "fired", _wide_strums(bass_on_stem=True, **fields)))
+    diag = fired.sections[0]
+    assert diag.voted_bars == list(range(8)) and diag.dropped_bars == [8, 9]
+    assert diag.runner_up_vector == list("S-S-S-SS") and diag.bass_on_stem
+    assert (diag.low_own_share, diag.bass_stem_ratio) == (0.55, 0.0012)
+    line = format_report(fired)
+    assert ", voted 8 (dropped 2), rival S-S-S-SS margin 0.08, all-bars conf 0.61 p 0.004" in line
+    assert ", bass-on-stem mix-bass 0.010 mix-source 0.820 own 0.550 ratio 0.0012" in line
+    held = format_report(evaluate_run(_wide_run(tmp_path / "held", _wide_strums(**fields))))
+    assert ", bass gate off mix-bass 0.010 mix-source 0.820 own 0.550 ratio 0.0012" in held
+    # a 1.7 run: the fields default and its line prints as 1.7's did
+    old = format_report(evaluate_run(_wide_run(tmp_path / "old", _wide_strums())))
+    assert "rings n/a\n" in old or old.endswith("rings n/a")
+    assert not any(word in old for word in ("voted", "rival", "all-bars", "bass"))
+
+
+def test_compare_reports_voted_bars_and_bass_gate_changes(tmp_path):
+    a = _wide_run(tmp_path / "a", _wide_strums(voted_bars=list(range(8))))
+    b = _wide_run(tmp_path / "b", _wide_strums(
+        voted_bars=list(range(6)), dropped_bars=[6, 7], bass_on_stem=True, uncertain=True,
+    ))
+    c = compare_runs(a, b)
+    (delta,) = c.deltas
+    assert delta.voted_bars_changed and delta.bass_gate_changed and delta.changed
+    assert delta.certainty_changed and delta.certainty_readings == (True, False)
+    text = format_comparison(c)
+    assert "certainty changed (certain -> grey)" in text
+    assert "voted bars changed" in text and "bass gate changed (off -> on)" in text
+    same = compare_runs(a, a)
+    (delta,) = same.deltas
+    assert not (delta.voted_bars_changed or delta.bass_gate_changed or delta.changed)
+    assert delta.certainty_readings == (True, True)
+    assert "voted bars" not in format_comparison(same) and "bass gate" not in format_comparison(same)

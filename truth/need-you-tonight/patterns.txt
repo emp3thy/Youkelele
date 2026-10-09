@@ -1,0 +1,6 @@
+# INXS "Need You Tonight": judged strum-pattern ranges. Grid bars, 0-based, end exclusive.
+# 1.6 clips 7, 8 and 9 judged damping only: no line.
+8 13 MOSTLY    # 1.8 clip 19 changed_nyt_intro_8-13 (bars 8-12), on the 1.8 row D-D-D-DUD--UD--U: "it almost has it - it is D D D DUDUDUDUD." The owner's figure is kept here in his words, not as a figure field: it gives no slot positions on the sixteenth grid. The later verdict; 1.7 clip 10 judged the 1.7 two-bar row "no, it's one, two, three (all single cut off notes) and then 9 notes twice as fast following"
+13 24 YES      # pattern review C regression set; 1.6 clips 34 and 35: the printed tab is the riff, "that is the pattern. That's the riff." (notes and rhythm right)
+24 31 NO       # 1.6 clip 23 changed_chorus_24-31: "you're using syncopation when it does not exist. it goes 3 1 beat notes, all cut off, and then 9 fast notes"
+79 86 MOSTLY   # 1.6 clip 24 changed_outro_79-86: "clicks mostly fit"; also in the pattern review C regression set
