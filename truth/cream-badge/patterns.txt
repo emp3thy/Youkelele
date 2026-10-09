@@ -1,0 +1,3 @@
+# Cream "Badge" (the 1.7 blind song): judged strum-pattern ranges. Grid bars, 0-based, end exclusive.
+4 12 NO    # 1.7 clip 15 blind_verse1_4-12 (bars 4-11): "it's confusing the bass, which has the melody"; the clicks follow bass bleed, not the guitar's background cut-off single notes
+61 70 NO   # 1.7 clip 16 blind_verse2_61-70 (bars 61-69): "the clicks do not fit"

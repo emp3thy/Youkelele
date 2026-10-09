@@ -1,0 +1,3 @@
+# David Bowie "Fame": key.
+# No key line: key review C finds no published key ("none found"); the 1.4 validation accepted the chain's F major
+#   (84 of 100 bars on F), which the review does not count as truth (score n/a).

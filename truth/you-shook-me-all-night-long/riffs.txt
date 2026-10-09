@@ -1,0 +1,10 @@
+# AC/DC "You Shook Me All Night Long": riff or strum per labelled section (the seven planned sections). Grid bars, 0-based, end exclusive.
+# 1.7 sources: "AC/DC, all seven sections": lessons describe a chordal rhythm part with licks, nearer the chain's print on 34-43 and 90-113;
+#   no source says whether two guitars play different parts throughout, so the ear verdicts below stand.
+0 16 mixed     # AC/DC clip 1: "a riff over an opening chord - it goes chord then riff then chord then riff"; riff review C (riff over chords)
+16 34 strum    # AC/DC clip 2: "this is a strum"; riff review C non-riff
+34 43 mixed    # AC/DC clip 3: "it's a riff with backing chords"; riff review C (riff over chords)
+43 57 strum    # AC/DC clip 4: "strum"; riff review C non-riff
+# 57 74 omitted: "not judged" (1.7 record, AC/DC against its ear truth); no source row settles it.
+74 90 mixed    # AC/DC clip 5: "solo over strum (strum is low notes, solo is high notes)"; riff review C
+90 113 mixed   # AC/DC clip 6: "riff over chords (though the chords are the primary)"; riff review C (riff over chords)

@@ -1,0 +1,4 @@
+# INXS "Need You Tonight": riff or strum per labelled section. Grid bars, 0-based, end exclusive.
+8 13 riff      # 1.7 sources: "Need You Tonight 0-7 rest": the riff guitar enters at tab bar 9, chain bar 8 (songsterr s9844); 1.7 clip 10 heard the riff's figure; riff review C
+13 24 riff     # 1.6 clips 34 and 35: "That's the riff."; 1.7 sources: "Need You Tonight 13-24 tab" agrees; riff review C
+24 31 riff     # 1.7 sources: "Need You Tonight 13-24 tab": the riff guitar plays single notes continuously from tab bar 9 (songsterr s9844); 1.6 clip 23 heard the same figure as 1.7 clip 10; riff review C

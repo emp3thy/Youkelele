@@ -1,0 +1,4 @@
+# The Beatles "Day Tripper" (the 1.6 blind song): judged strum-pattern ranges. Grid bars, 0-based, end exclusive.
+0 8 NO         # 1.6 clip 36 unflagged_intro_0-8: "it's playing a riff and you did not match it" (the record: the pattern does not fit either)
+# 52 58 omitted: 1.6 clip 37 unflagged_verse_52-58: "it's a riff with a strum in the background ... the clicks match the strum, not the riff";
+#   the printed pattern fits one of the two parts, so the record gives the range neither YES nor NO.

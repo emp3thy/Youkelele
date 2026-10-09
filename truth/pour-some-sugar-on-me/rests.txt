@@ -1,0 +1,11 @@
+# Def Leppard "Pour Some Sugar On Me": per-bar activity on the guitar stem. Grid bars, 0-based, end exclusive.
+# 0 omitted: 1.7 sources: "Pour Some Sugar On Me 0 and 7-10 rest": bar 0 undecided (the picked figure may start later); no ear verdict.
+7 11 tail      # 1.7 sources: same row, tab bars 7-10 have no guitar in either track, agrees; rests review A: carried tails (8, 6, 4, 7 onsets on a decaying slot profile)
+14 15 play     # 1.7 clip 3 rest_pssom_verse_14-19 (bars 14-18): bar 14 holds and carries guitar; rests review C holding neighbour
+15 19 rest     # 1.7 clip 3: "no guitar after the first 3 seconds"; 1.7 sources: "Pour Some Sugar On Me 15-18 rest" contradicts, the later ear verdict stands
+# 65 omitted: 1.7 clip 4 (bars 65-68) answered "no guitar" for the whole clip, bar 65 included, while the chain holds bar 65
+#   and rests review C lists it as a playing neighbour; the record does not say which.
+66 69 rest     # 1.7 clip 4 rest_pssom_interlude_65-69: "no guitar"; 1.7 sources: "Pour Some Sugar On Me 66 and 77-79 rest" and, for 67-68, "Pour Some Sugar On Me 67-77, fifth flag" contradict, the later ear verdict stands (the record's summary: 66-68 silent)
+76 77 play     # 1.7 clip 5 rest_pssom_verse3_76-80 (bars 76-79): bar 76 holds and carries guitar; rests review C holding neighbour
+77 78 tail     # 1.7 clip 5: the start of bar 77 carries the note 1.6 clip 6 heard ("a single note - plays through"), then nothing; 1.7 A4: only the previous stroke's tail; rests review A carried tails
+78 80 rest     # 1.7 clip 5: "no guitar after 4 seconds"; 1.7 sources contradicts (both guitars on chords), the later ear verdict stands

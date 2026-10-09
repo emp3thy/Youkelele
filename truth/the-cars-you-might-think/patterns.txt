@@ -1,0 +1,5 @@
+# The Cars "You Might Think": judged strum-pattern ranges. Grid bars, 0-based, end exclusive.
+# 1.6 clips 5 (held_chorus_68), 32 and 33 judged ring and damping only: no line.
+11 19 YES      # pattern review C regression set (ear-passed); no clip in the 1.6 or 1.7 passes
+68 72 YES      # pattern review C regression set (ear-passed); no clip in the 1.6 or 1.7 passes
+72 76 NO       # 1.6 clip 25 changed_instrumental_72-76: "not enough clicks - they don't fit"

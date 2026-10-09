@@ -1,0 +1,8 @@
+# AC/DC "You Shook Me All Night Long": judged strum-pattern ranges. Grid bars, 0-based, end exclusive.
+# The six ear-truth clips are the 1.6 prints; 1.7 left AC/DC's strokes byte-identical, so the verdicts stand (1.7 Ear clips).
+0 8 YES --DUDUDU D------U   # AC/DC clip 1 intro_0-8: "You've got the riff" (the clicks fit the riff; a chord stab opens each phrase); figure as printed from bar 0 (two-bar)
+16 24 NO       # AC/DC clip 2 chorus_16-24: "this is a strum - and the clicks don't fit"
+34 42 NO       # AC/DC clip 3 verse_34-42: "You've not got the clicks right"
+43 51 NO       # AC/DC clip 4 verse2_43-51: "strum - and the clicks are wrong"
+74 82 NO       # AC/DC clip 5 instrumental_74-82: "the clicks miss quite badly"
+90 98 NO       # AC/DC clip 6 verse3_90-98: "the clicks do not fit"

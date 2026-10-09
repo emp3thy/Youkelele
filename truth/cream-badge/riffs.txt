@@ -1,0 +1,4 @@
+# Cream "Badge": riff or strum per labelled section. Grid bars, 0-based, end exclusive.
+4 28 bleed     # 1.7 clip 15: bass bleed on the guitar stem carries the melody and the riff flag follows it; 1.7 Badge: the source has a chord guitar here; riff review C
+28 34 riff     # 1.7 Badge: Instrumental 1 falls on the bridge's single-note arpeggio figure (Songsterr s4135) and its "riff heard" agrees with the source; riff review C
+61 70 bleed    # 1.7 clip 16: "the clicks do not fit", the same bass bleed as Verse 1; riff review C

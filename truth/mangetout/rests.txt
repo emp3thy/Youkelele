@@ -1,0 +1,6 @@
+# Wet Leg "mangetout": per-bar activity on the guitar stem. Grid bars, 0-based, end exclusive.
+17 18 play     # 1.7 clip 2 rest_wetleg_verse_17-26 (bars 17-25): guitar in the first 2 seconds; rests review C holding neighbour
+18 19 tail     # 1.7 clip 2: the start of bar 18 carries the last stroke (the one 1.6 clip 4 heard "cut"), then nothing; 1.7 A4: bar 18 carries only the previous stroke's tail; rests review A carried tails
+19 26 rest     # 1.7 clip 2: "no guitar after the first 2 seconds"; 1.7 sources: "Wet Leg 18-25 rest" agrees (the rhythm guitar is silent, songsterr s507662)
+26 27 play     # rests review C holding neighbour; 1.7 clip 14 heard bars 26-32 played ("the clicks fit")
+# 109 113 omitted: rest in the silent Outro member, not printed; 1.7 sources: "Wet Leg 109-112 rest" is "undecidable from the source"; no ear verdict.

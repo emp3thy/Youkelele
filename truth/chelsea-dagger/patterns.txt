@@ -1,0 +1,4 @@
+# The Fratellis "Chelsea Dagger": judged strum-pattern ranges. Grid bars, 0-based, end exclusive.
+# 1.6 clip 3 (held_chorus_61) judged ring length and 1.6 clip 31 found no guitar: neither is a pattern verdict.
+7 19 NO              # 1.7 clip 9 changed_chelsea_intro_7-19 (bars 7-18): "the clicks do not fit"
+61 69 YES D-D---D-   # 1.6 clip 18 changed_chorus_61-69: "clicks fit"; figure is the printed medoid the clip clicked; the section 61-71 is in the pattern review C regression set

@@ -1,0 +1,4 @@
+# Bryan Adams "Summer of '69": riff or strum per labelled section. Grid bars, 0-based, end exclusive.
+0 4 riff       # 1.7 sources: "Summer of '69 0-4, new riff flag": the sources disagree with each other and the owner's ear (a3_intro_0-4, a picked single-note riff) stands; riff review C
+111 121 riff   # 1.6 clip 17: "it was playing the signature riff"; 1.7 sources: "Summer of '69 111-121" reads rhythm chords with single-note lead lines, "a two-part passage";
+               #   the later riff review C keeps it a riff (one of the test's misses), so the later record's verdict is kept

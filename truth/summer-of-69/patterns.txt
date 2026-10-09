@@ -1,0 +1,8 @@
+# Bryan Adams "Summer of '69": judged strum-pattern ranges. Grid bars, 0-based, end exclusive.
+# 1.6 clips 2 (held_verse_95) and 30 (shortsection_intro_0-4) judged ring and damping only: no line.
+4 12 YES xxxxxxD- D-DU-xxx    # 1.6 clip 12 changed_verse_4-12: "clicks fit"; figure as printed from bar 4 (bar 4 is phrase-shifted into the Intro and prints xxxxxxD-, bar 5 D-DU-xxx), the pair the clip listing writes D-DU-xxx / xxxxxxD-; Verse 1 4-19 is in the pattern review C regression set
+31 39 NO                      # 1.6 clip 13 changed_verse_31-39: "way too many clicks it's a quarter note and then the rest of the measure is a single tone"
+53 58 NO                      # 1.6 clip 14 changed_verse_53-58: "too many clicks. I think you're clicking 16th notes when it's playing 8th notes"
+75 83 YES D-DU-UD- DU-UD-D-   # 1.6 clip 15 changed_verse_75-83: "clicks fit"; figure as printed from bar 75; pattern review C regression set
+95 103 MOSTLY                 # 1.6 clip 16 changed_verse_95-103: "much better except for the very end"; the pattern review C regression set names the whole section 95-111
+111 119 NO                    # 1.6 clip 17 changed_outro_111-119: "too few notes - it was playing the signature riff"

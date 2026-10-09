@@ -1,0 +1,3 @@
+# Cream "Badge": key. The sources allow G major or its relative E minor and disagree on exactly that pair (key review K1).
+G major 1.7-validation-badge   # key review C: "G major or E minor", published; 1.7 Badge: the researcher's reading of Songsterr s4135 (an inference); the chord stream sits in G major/E minor (set share 0.995)
+E minor 1.7-validation-badge   # key review C: the relative alternative the sources allow

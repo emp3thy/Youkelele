@@ -1,0 +1,4 @@
+# Pat Benatar "All Fired Up": key.
+# No key line: key review C calls the published keys unreliable (automated tools say C major and G minor:
+#   https://songbpm.com/@pat-benatar/all-fired-up and https://www.cs.ubc.ca/~davet/music/track/PATBENTR_GH1/PATBENTR_GH1-04.html)
+#   and scores the song n/a. The sheet prints G major.

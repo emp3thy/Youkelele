@@ -1,0 +1,2 @@
+# Example clip: 4 bars, 120 bpm, C G Am F. Synthetic truth for the tests.
+3 4 rest  # the last bar (F) holds no guitar

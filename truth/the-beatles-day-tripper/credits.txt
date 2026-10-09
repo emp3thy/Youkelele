@@ -1,0 +1,3 @@
+# The Beatles "Day Tripper": expected printed title, then artist.
+Day Tripper   # key review C, Metadata: "Day Tripper" by "The Beatles" (1.7 printed "The Beatles - Day Tripper" by the uploader)
+The Beatles   # key review C, Metadata

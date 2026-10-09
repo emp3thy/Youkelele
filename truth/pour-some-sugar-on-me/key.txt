@@ -1,0 +1,4 @@
+# Def Leppard "Pour Some Sugar On Me": key.
+# The published key is C sharp minor. It is written Db here because `#` starts a comment anywhere; mir_eval and
+#   music.key.relation resolve tonics by pitch class, so Db and C sharp score the same.
+Db minor https://www.musicnotes.com/sheetmusic/def-leppard/pour-some-sugar-on-me/MN0056406   # key review C: the original published key

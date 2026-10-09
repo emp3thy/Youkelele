@@ -1,0 +1,5 @@
+# Pat Benatar "All Fired Up": per-bar activity on the guitar stem. Grid bars, 0-based, end exclusive.
+33 49 play     # 1.7 rests: the rests spike's ear-verified section All Fired Up 33-49; rests review C
+61 90 play     # 1.7 rests: the rests spike's ear-verified section All Fired Up 61-90; rests review C
+# 114 omitted: rests at ratio 0.005; 1.7 sources: "All Fired Up 114 rest" says tab bars 113-114 have guitar 1 on
+#   two-note shapes, "contradicts as notated"; no ear verdict, and the tabs' parts are often not on the stem.

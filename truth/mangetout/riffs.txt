@@ -1,0 +1,2 @@
+# Wet Leg "mangetout": riff or strum per labelled section. Grid bars, 0-based, end exclusive.
+58 65 riff     # 1.6 clip 20: the owner calls it a riff; 1.7 sources: "Wet Leg 58-65, riff member" agrees (a continuous single-note lead line, songsterr s507662); riff review C

@@ -1,0 +1,2 @@
+# Example clip: 4 bars, 120 bpm, C G Am F. Synthetic truth for the tests.
+0 3 strum  # the strummed bars before the rest

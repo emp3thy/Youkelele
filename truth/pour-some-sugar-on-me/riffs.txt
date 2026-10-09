@@ -1,0 +1,2 @@
+# Def Leppard "Pour Some Sugar On Me": riff or strum per labelled section. Grid bars, 0-based, end exclusive.
+67 77 mixed    # 1.7 clip 8: "there are power chords and then the riff", a two-part passage; 1.7 sources: "Pour Some Sugar On Me 67-77, fifth flag" says chords (one of the two parts); riff review C (two-part)
